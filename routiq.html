@@ -3012,10 +3012,22 @@ const App = {
         </div>
         <div class="form-group" style="margin:0">
           <label>Φορές/εβδ.</label>
-          <select id="st-freq">
+          <select id="st-freq" onchange="App.toggleMergeField()">
             ${[1,2,3,4,5].map(v=>`<option value="${v}" ${st?.lessonsPerWeek===v?'selected':''}>${v}x</option>`).join('')}
           </select>
         </div>
+      </div>
+      <div class="form-group" id="merge-field" style="margin-top:14px;display:${(st?.lessonsPerWeek||1)>=2?'block':'none'}">
+        <label class="settings-row" style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);margin:0">
+          <span>
+            <span class="settings-label">Ενιαίο block (δίωρο κ.λπ.)</span>
+            <div class="settings-sub">Τα μαθήματα της ίδιας μέρας γίνονται ένα συνεχόμενο block, χωρίς χρόνο μετακίνησης ανάμεσά τους</div>
+          </span>
+          <span class="toggle-switch">
+            <input type="checkbox" id="st-forcemerge" ${st?.forceMerge?'checked':''}>
+            <span class="toggle-slider"></span>
+          </span>
+        </label>
       </div>
       <div class="form-row" style="margin-top:14px">
         <div class="form-group" style="margin:0">
@@ -3054,6 +3066,12 @@ const App = {
     const type = document.getElementById('st-type')?.value;
     const gf = document.getElementById('group-field');
     if(gf) gf.style.display = type==='group'?'block':'none';
+  },
+
+  toggleMergeField(){
+    const freq = Number(document.getElementById('st-freq')?.value)||1;
+    const mf = document.getElementById('merge-field');
+    if(mf) mf.style.display = freq>=2?'block':'none';
   },
 
   _addrTimer: null,
@@ -3164,6 +3182,7 @@ const App = {
       group: document.getElementById('st-group')?.value?.trim()||'',
       pairedWith: document.getElementById('st-paired')?.value||null,
       notes: document.getElementById('st-notes')?.value?.trim()||'',
+      forceMerge: document.getElementById('st-forcemerge')?.checked||false,
       availability,
       color: state.editingStudentId
         ? (state.students.find(s=>s.id===state.editingStudentId)?.color||0)
