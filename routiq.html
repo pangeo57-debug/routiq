@@ -2202,6 +2202,21 @@ const Router = {
     }catch(e){ return null }
   },
 
+  // OSRM Route API: returns actual road-following geometry (GeoJSON coords) for a stop sequence
+  async getRouteGeometry(coords){
+    if(coords.length < 2) return null;
+    try{
+      const pts = coords.map(c=>`${c.lon},${c.lat}`).join(';');
+      const url = `${this.OSRM}/route/v1/driving/${pts}?overview=full&geometries=geojson`;
+      const r = await fetch(url);
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(d.code !== 'Ok' || !d.routes?.[0]) return null;
+      // GeoJSON is [lon,lat] — Leaflet wants [lat,lon]
+      return d.routes[0].geometry.coordinates.map(([lon,lat])=>[lat,lon]);
+    }catch(e){ return null }
+  },
+
   async getHereMatrix(coords, apiKey, departureTime){
     // HERE Matrix Routing API v8
     // coords: array of {lat, lon} objects (home first, then students)
@@ -3626,10 +3641,20 @@ const App = {
       const color = slot.color != null ? ['#6366f1','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777'][slot.color%7] : '#6366f1';
       L.marker(pt, {icon:L.divIcon({className:'',html:`<div style="width:22px;height:22px;background:${color};border:3px solid #fff;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700">${i+1}</div>`,iconSize:[22,22],iconAnchor:[11,11]})}).bindTooltip(slot.studentName, {permanent:false}).addTo(map);
     });
-    // Polyline
-    if(latlngs.length > 1) L.polyline(latlngs, {color:'#7c3aed',weight:3,opacity:0.7,dashArray:'6,4'}).addTo(map);
+    // Straight-line placeholder — replaced by real road geometry below if OSRM responds
+    let straightLine = null;
+    if(latlngs.length > 1) straightLine = L.polyline(latlngs, {color:'#7c3aed',weight:3,opacity:0.7,dashArray:'6,4'}).addTo(map);
     // Fit bounds
     try{ map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); }catch(e){}
+
+    // Fetch real road-following route from OSRM and swap in once ready
+    if(allPts.length > 1){
+      Router.getRouteGeometry(allPts).then(roadCoords=>{
+        if(!roadCoords || !el._leaflet_map) return; // map was destroyed/replaced meanwhile
+        if(straightLine) map.removeLayer(straightLine);
+        L.polyline(roadCoords, {color:'#7c3aed',weight:4,opacity:0.85}).addTo(map);
+      });
+    }
   },
 
   switchRouteDay(d){
