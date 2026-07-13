@@ -2211,13 +2211,28 @@ const Router = {
   NOMINATIM: 'https://nominatim.openstreetmap.org',
   OSRM:      'https://router.project-osrm.org',
 
+  // Bias results toward the user's actual working area (±~30km around home) so an
+  // ambiguous street name doesn't accidentally resolve to a same-named street elsewhere in Greece.
+  _viewboxParam(){
+    const home = (typeof state!=='undefined') && state.coords && state.coords['home'];
+    if(!home) return '';
+    const d = 0.3; // ~30km
+    return `&viewbox=${home.lon-d},${home.lat+d},${home.lon+d},${home.lat-d}&bounded=1`;
+  },
+
   async geocode(address){
     if(!address) return null;
     try{
       const q = encodeURIComponent(address + ', Ελλάδα');
-      const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr`;
+      const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr&addressdetails=1${this._viewboxParam()}`;
       const r = await fetch(url, {headers:{'Accept-Language':'el', 'User-Agent':'RoutePal/1.0'}});
-      const d = await r.json();
+      let d = await r.json();
+      // Bounded search found nothing (e.g. address genuinely outside the home area) — retry unbounded
+      if((!d || d.length===0) && this._viewboxParam()){
+        const url2 = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr&addressdetails=1`;
+        const r2 = await fetch(url2, {headers:{'Accept-Language':'el', 'User-Agent':'RoutePal/1.0'}});
+        d = await r2.json();
+      }
       if(d && d.length>0) return {lat:parseFloat(d[0].lat), lon:parseFloat(d[0].lon)};
     }catch(e){}
     return null;
@@ -3153,9 +3168,14 @@ const App = {
     this._addrTimer = setTimeout(async ()=>{
       try{
         const q = encodeURIComponent(val + ', Ελλάδα');
-        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=gr&addressdetails=1`;
+        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=gr&addressdetails=1${Router._viewboxParam()}`;
         const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
-        const results = await r.json();
+        let results = await r.json();
+        if((!results || results.length===0) && Router._viewboxParam()){
+          const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=gr&addressdetails=1`;
+          const r2 = await fetch(url2, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+          results = await r2.json();
+        }
         const b = document.getElementById(boxId);
         if(!b) return;
         if(!results || results.length===0){
@@ -3289,12 +3309,14 @@ const App = {
       state.coords[st.id] = pendingCoord;
       Storage.saveCoords(state.coords);
       if(state.currentScreen==='route') this.renderRoute();
+      else if(state.currentScreen==='students' && state._mapExpanded) this.initStudentsMap();
     } else if(addr) {
       Router.geocode(addr).then(c=>{
         if(c){
           state.coords[st.id]=c; Storage.saveCoords(state.coords);
           // Address changed after the map was already drawn — refresh it so the pin isn't stale
           if(state.currentScreen==='route') this.renderRoute();
+          else if(state.currentScreen==='students' && state._mapExpanded) this.initStudentsMap();
         }
       }).catch(()=>{});
     }
