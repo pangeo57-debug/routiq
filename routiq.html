@@ -3824,7 +3824,7 @@ const App = {
           <div class="stop-info">
             <div class="stop-name">${stop.studentName||'—'}</div>
             <div class="stop-addr">${stop.address||'—'}</div>
-            <div class="stop-travel"><span class="stop-travel-row">🕐 Άφιξη ${stop.start} – ${stop.end} · ${stop.subject||''}</span>${travelRow}</div>
+            <div class="stop-travel"><span class="stop-travel-row">🕐 Άφιξη ${stop._start||stop.start} – ${stop._end||stop.end} · ${stop.subject||''}</span>${travelRow}</div>
           </div>
         </div>
         ${i<stops.length-1?'<div class="stop-connector" style="margin-left:29px"></div>':''}
@@ -3887,15 +3887,27 @@ const App = {
           if(best>=0){order.push(best);visited[best]=true}
         }
         orderedSlots = order.slice(1).map(i=>slots[i-1]).filter(Boolean);
-        // Calc per-stop travel
+        // Calc per-stop travel (each leg's destination is orderedSlots[i] — every stop appears exactly once)
         const processedStops=[];
         for(let i=0;i<order.length-1;i++){
           const from=order[i], to=order[i+1];
           const tMin = Math.round((matrix.durations[from][to]||0)/60);
           const tKm  = ((matrix.distances?.[from]?.[to]||0)/1000);
           totalMin += tMin; totalKm += tKm;
-          if(i>0) processedStops.push({...orderedSlots[i-1], travelMin:tMin, travelKm:tKm.toFixed(1)});
-          else processedStops.push({...orderedSlots[0]||{}, travelMin:tMin, travelKm:tKm.toFixed(1)});
+          processedStops.push({...orderedSlots[i], travelMin:tMin, travelKm:tKm.toFixed(1)});
+        }
+        // Arrival time = previous stop's departure + real travel time + 2 min buffer
+        // (first stop keeps its originally scheduled start as the anchor)
+        for(let i=0;i<processedStops.length;i++){
+          if(i===0){
+            processedStops[i]._start = processedStops[i].start;
+            processedStops[i]._end = processedStops[i].end;
+          } else {
+            const prevEndMin = Scheduler.toMin(processedStops[i-1]._end);
+            const arrivalMin = prevEndMin + (processedStops[i].travelMin||0) + 2;
+            processedStops[i]._start = Scheduler.toTime(arrivalMin);
+            processedStops[i]._end = Scheduler.toTime(arrivalMin + processedStops[i].duration);
+          }
         }
         // Return home
         const lastIdx=order[order.length-1];
@@ -3920,6 +3932,18 @@ const App = {
           totalKm+=km; totalMin+=Math.round(km/30*60);
           ps.push({...sl,travelMin:Math.round(km/30*60),travelKm:km.toFixed(1)});
           prev=c;
+        }
+        // Arrival time = previous stop's departure + estimated travel + 2 min buffer
+        for(let i=0;i<ps.length;i++){
+          if(i===0){
+            ps[i]._start = ps[i].start;
+            ps[i]._end = ps[i].end;
+          } else {
+            const prevEndMin = Scheduler.toMin(ps[i-1]._end);
+            const arrivalMin = prevEndMin + (ps[i].travelMin||0) + 2;
+            ps[i]._start = Scheduler.toTime(arrivalMin);
+            ps[i]._end = Scheduler.toTime(arrivalMin + ps[i].duration);
+          }
         }
         totalKm+=Router.estimateKm(prev,homeC);
         const fuel=state.settings.fuelConsumption||7;
