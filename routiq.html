@@ -696,7 +696,7 @@ const Scheduler = {
   },
 
   countTotal(schedule){
-    return Object.values(schedule).reduce((a,d)=>a+d.reduce((b,s)=>b+(s.isGroup?2:(s.mergedCount||1)),0),0);
+    return Object.values(schedule).reduce((a,d)=>a+d.reduce((b,s)=>b+(s.isGroup?(s.groupMemberCount||2):(s.mergedCount||1)),0),0);
   },
 
   // ── TWO-PHASE SCHEDULER ──────────────────────────────────────────────────
@@ -763,28 +763,33 @@ const Scheduler = {
     }
     for(const [code, members] of Object.entries(groupMap)){
       if(members.length<2) continue;
-      const [a, b] = members; // support pairs (2 members)
-      // Intersect availability
+      const [a] = members;
+      // Intersect availability across ALL members (not just the first two)
       for(const day of settings.workDays){
-        const avA=a.availability[day], avB=b.availability[day];
-        if(!avA||!avA.on||!avB||!avB.on) continue;
-        const start=Math.max(this.toMin(avA.start),this.toMin(avB.start));
-        const end=Math.min(this.toMin(avA.end),this.toMin(avB.end));
-        const dur=Math.max(a.lessonDuration,b.lessonDuration);
+        let start=-Infinity, end=Infinity, allOn=true;
+        for(const m of members){
+          const av=m.availability[day];
+          if(!av||!av.on){ allOn=false; break; }
+          start=Math.max(start,this.toMin(av.start));
+          end=Math.min(end,this.toMin(av.end));
+        }
+        if(!allOn) continue;
+        const dur=Math.max(...members.map(m=>m.lessonDuration));
         if(end-start<dur) continue;
         // Make a virtual student representing the intersection
         const virtual={...a, availability:{[day]:{on:true,start:this.minToTime(start),end:this.minToTime(end)}}};
         const slot=this.findSlotFixed(virtual,day,schedule[day]||[],settings,dur);
         if(slot){
           schedule[day].push({
-            studentId:a.id, studentName:'👥 '+a.name+' & '+b.name,
-            pairedStudentId:b.id, groupCode:code,
+            studentId:a.id, studentName:'👥 '+members.map(m=>m.name).join(' & '),
+            pairedStudentId:members[1]?.id, groupCode:code, groupMemberIds:members.map(m=>m.id),
+            groupMemberCount:members.length,
             subject:a.subject||'—', address:a.address,
             color:a.color||0, start:slot.start, end:slot.end,
             duration:dur, mergedCount:1, merged:false, isGroup:true
           });
           schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          groupedIds.add(a.id); groupedIds.add(b.id);
+          members.forEach(m=>groupedIds.add(m.id));
           break;
         }
       }
@@ -3264,9 +3269,14 @@ const App = {
     if(pendingCoord){
       state.coords[st.id] = pendingCoord;
       Storage.saveCoords(state.coords);
+      if(state.currentScreen==='route') this.renderRoute();
     } else if(addr) {
       Router.geocode(addr).then(c=>{
-        if(c){ state.coords[st.id]=c; Storage.saveCoords(state.coords); }
+        if(c){
+          state.coords[st.id]=c; Storage.saveCoords(state.coords);
+          // Address changed after the map was already drawn — refresh it so the pin isn't stale
+          if(state.currentScreen==='route') this.renderRoute();
+        }
       }).catch(()=>{});
     }
     // Mark schedule as stale — don't auto-recalculate
