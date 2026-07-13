@@ -1158,6 +1158,8 @@ const Scheduler = {
             if(altDay===day) continue;
             const av=student.availability&&student.availability[altDay];
             if(!av||!av.on) continue;
+            // Never give the same student two slots on the same day (unless forceMerge)
+            if(!student.forceMerge && (schedule[altDay]||[]).some(s=>s.studentId===slot.studentId)) continue;
             const dayWithout=slots.filter((_,i)=>i!==si);
             const altWith=[...(schedule[altDay]||[]),slot];
             const altReordered=tryAssignDay(altDay,altWith);
@@ -1204,6 +1206,9 @@ const Scheduler = {
               if(!avAonB||!avAonB.on) continue;
               const avBonA=stB.availability&&stB.availability[dayA];
               if(!avBonA||!avBonA.on) continue;
+              // Never give a student two slots on the same day (unless forceMerge)
+              if(!stA.forceMerge && slotsB.some((s,i)=>i!==sj&&s.studentId===slotA.studentId)) continue;
+              if(!stB.forceMerge && slotsA.some((s,i)=>i!==si&&s.studentId===slotB.studentId)) continue;
               const newSlotsA=[...slotsA.filter((_,i)=>i!==si),slotB];
               const newSlotsB=[...slotsB.filter((_,i)=>i!==sj),slotA];
               const newA=tryAssignDay(dayA,newSlotsA);
@@ -2717,6 +2722,14 @@ const App = {
     const placedCount = Scheduler.countTotal(state.schedule);
     const allFit = totalLessons > 0 && placedCount >= totalLessons;
 
+    // Computed fresh from state.schedule so it survives page reloads
+    // (state.schedulerResult is session-only, never persisted to localStorage)
+    const placedByStudent = {};
+    Object.values(state.schedule).flat().forEach(e=>{
+      placedByStudent[e.studentId] = (placedByStudent[e.studentId]||0) + (e.mergedCount||1);
+    });
+    const unplacedStudents = state.students.filter(s => (placedByStudent[s.id]||0) < s.lessonsPerWeek);
+
     const greeting = this.getGreeting();
     const name = state.settings.teacherName||'';
     const L = getLabels();
@@ -2775,10 +2788,10 @@ const App = {
           <div style="font-weight:700;font-size:14px;color:#059669">Χώρεσαν όλοι οι μαθητές!</div>
           <div style="font-size:12px;color:var(--text2)">${placedCount}/${totalLessons} μαθήματα τοποθετήθηκαν</div>
         </div>
-      </div>` : state.schedulerResult && state.schedulerResult.unplaced.length>0 ? `
+      </div>` : unplacedStudents.length>0 ? `
       <div class="warning-banner">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <span>${state.schedulerResult.unplaced.length} μαθητής/ές δεν τοποθετήθηκε πλήρως. Δες Πρόγραμμα για λεπτομέρειες.</span>
+        <span><b>${unplacedStudents.length} μαθητής/ές δεν χωράει πλήρως</b>: ${unplacedStudents.map(s=>esc(s.name)).join(', ')}. Δες Πρόγραμμα για λεπτομέρειες.</span>
       </div>`:''}
       <div class="section-title">Σήμερα · ${DAYS_FULL[todayNum]||'—'}</div>
       ${todaySlots.length===0?`
@@ -3288,10 +3301,32 @@ const App = {
     this.renderStudents();
   },
 
+  // Rebuild the unplaced-students diagnostic list from current state
+  // (used when schedulerResult was lost, e.g. after a page reload)
+  computeUnplacedLive(){
+    const placedByStudent = {};
+    Object.values(state.schedule).flat().forEach(e=>{
+      placedByStudent[e.studentId] = (placedByStudent[e.studentId]||0) + (e.mergedCount||1);
+    });
+    const unplaced = [];
+    for(const st of state.students){
+      const cnt = placedByStudent[st.id]||0;
+      if(cnt < st.lessonsPerWeek){
+        const u = { student: st, placed: cnt, needed: st.lessonsPerWeek,
+          reason: Scheduler.diagnoseUnplaced(st, state.schedule, state.settings) };
+        Scheduler.computeSuggestion(u, state.schedule, state.settings);
+        unplaced.push(u);
+      }
+    }
+    return unplaced;
+  },
+
   // ---- SCHEDULE ----
   renderSchedule(){
     const s = document.getElementById('screen-schedule');
-    const result = state.schedulerResult || { unplaced:[] };
+    // schedulerResult is session-only (not persisted), so on a fresh page load
+    // recompute the unplaced list live from state.schedule/state.students instead
+    const result = state.schedulerResult || { unplaced: this.computeUnplacedLive() };
     const total = state.students.reduce((a,s)=>a+s.lessonsPerWeek,0);
     const placed = Scheduler.countTotal(state.schedule);
 
