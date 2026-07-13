@@ -1003,7 +1003,7 @@ const Scheduler = {
         if(!sameDay&&alreadyOn(day)) continue;
         const daySnap=[...(schedule[day]||[])];
         for(const blocker of daySnap){
-          if(blocker.merged) continue;
+          if(blocker.merged||blocker.isGroup) continue;
           // temporarily remove blocker
           schedule[day]=schedule[day].filter(e=>e!==blocker);
           const bIdx=placedDays[blocker.studentId].indexOf(day);
@@ -1198,7 +1198,7 @@ const Scheduler = {
         const slots=schedule[day]||[];
         for(let si=0;si<slots.length;si++){
           const slot=slots[si];
-          if(slot.merged) continue;
+          if(slot.merged||slot.isGroup) continue;
           const student=students.find(s=>s.id===slot.studentId);
           if(!student) continue;
           for(const altDay of settings.workDays){
@@ -1237,7 +1237,7 @@ const Scheduler = {
         const slotsA=[...(schedule[dayA]||[])];
         for(let si=0;si<slotsA.length;si++){
           const slotA=slotsA[si];
-          if(slotA.merged) continue;
+          if(slotA.merged||slotA.isGroup) continue;
           const stA=students.find(s=>s.id===slotA.studentId);
           if(!stA) continue;
           for(let dj=di+1;dj<activeDays.length;dj++){
@@ -1245,7 +1245,7 @@ const Scheduler = {
             const slotsB=[...(schedule[dayB]||[])];
             for(let sj=0;sj<slotsB.length;sj++){
               const slotB=slotsB[sj];
-              if(slotB.merged) continue;
+              if(slotB.merged||slotB.isGroup) continue;
               if(slotA.studentId===slotB.studentId) continue;
               const stB=students.find(s=>s.id===slotB.studentId);
               if(!stB) continue;
@@ -1293,16 +1293,16 @@ const Scheduler = {
             const sB=[...(schedule[dayB]||[])];
             const sC=[...(schedule[dayC]||[])];
             for(let si=0;si<sA.length;si++){
-              const slotA=sA[si]; if(slotA.merged) continue;
+              const slotA=sA[si]; if(slotA.merged||slotA.isGroup) continue;
               const stA=students.find(s=>s.id===slotA.studentId); if(!stA) continue;
               if(!(stA.availability[dayB]&&stA.availability[dayB].on)) continue;
               for(let sj=0;sj<sB.length;sj++){
-                const slotB=sB[sj]; if(slotB.merged) continue;
+                const slotB=sB[sj]; if(slotB.merged||slotB.isGroup) continue;
                 if(slotB.studentId===slotA.studentId) continue;
                 const stB=students.find(s=>s.id===slotB.studentId); if(!stB) continue;
                 if(!(stB.availability[dayC]&&stB.availability[dayC].on)) continue;
                 for(let sk=0;sk<sC.length;sk++){
-                  const slotC=sC[sk]; if(slotC.merged) continue;
+                  const slotC=sC[sk]; if(slotC.merged||slotC.isGroup) continue;
                   if(slotC.studentId===slotA.studentId||slotC.studentId===slotB.studentId) continue;
                   const stC=students.find(s=>s.id===slotC.studentId); if(!stC) continue;
                   if(!(stC.availability[dayA]&&stC.availability[dayA].on)) continue;
@@ -1349,21 +1349,21 @@ const Scheduler = {
               const sA=[...(schedule[dA]||[])], sB=[...(schedule[dB]||[])];
               const sC=[...(schedule[dC]||[])], sD=[...(schedule[dD]||[])];
               for(let si=0;si<sA.length;si++){
-                const slA=sA[si]; if(slA.merged) continue;
+                const slA=sA[si]; if(slA.merged||slA.isGroup) continue;
                 const stA=students.find(s=>s.id===slA.studentId); if(!stA) continue;
                 if(!(stA.availability[dB]&&stA.availability[dB].on)) continue;
                 for(let sj=0;sj<sB.length;sj++){
-                  const slB=sB[sj]; if(slB.merged) continue;
+                  const slB=sB[sj]; if(slB.merged||slB.isGroup) continue;
                   if(slB.studentId===slA.studentId) continue;
                   const stB=students.find(s=>s.id===slB.studentId); if(!stB) continue;
                   if(!(stB.availability[dC]&&stB.availability[dC].on)) continue;
                   for(let sk=0;sk<sC.length;sk++){
-                    const slC=sC[sk]; if(slC.merged) continue;
+                    const slC=sC[sk]; if(slC.merged||slC.isGroup) continue;
                     if(slC.studentId===slA.studentId||slC.studentId===slB.studentId) continue;
                     const stC=students.find(s=>s.id===slC.studentId); if(!stC) continue;
                     if(!(stC.availability[dD]&&stC.availability[dD].on)) continue;
                     for(let sl=0;sl<sD.length;sl++){
-                      const slD=sD[sl]; if(slD.merged) continue;
+                      const slD=sD[sl]; if(slD.merged||slD.isGroup) continue;
                       if(slD.studentId===slA.studentId||slD.studentId===slB.studentId||slD.studentId===slC.studentId) continue;
                       const stD=students.find(s=>s.id===slD.studentId); if(!stD) continue;
                       if(!(stD.availability[dA]&&stD.availability[dA].on)) continue;
@@ -1790,7 +1790,7 @@ const Scheduler = {
       if(this.placedOnDays(student.id, schedule).includes(day)) continue;
 
       for(const blocking of [...(schedule[day]||[])]){
-        if(blocking.merged) continue; // don't displace merged blocks
+        if(blocking.merged||blocking.isGroup) continue; // don't displace merged/group blocks
 
         // Try placing student without the blocking lesson
         const tempDay = (schedule[day]||[]).filter(s => s !== blocking);
@@ -1873,7 +1873,7 @@ const Scheduler = {
           for(let sj=0;sj<schedule[dayB].length;sj++){
             const slotA=schedule[dayA][si], slotB=schedule[dayB][sj];
             if(slotA.studentId===slotB.studentId) continue;
-            if(slotA.merged||slotB.merged) continue;
+            if(slotA.merged||slotB.merged||slotA.isGroup||slotB.isGroup) continue;
             // Check if swap is constraint-valid
             const studentA = {id:slotA.studentId,availability:{},lessonDuration:slotA.duration};
             const studentB = {id:slotB.studentId,availability:{},lessonDuration:slotB.duration};
@@ -2082,8 +2082,12 @@ const Scheduler = {
         d1=activeDays[Math.floor(rng()*activeDays.length)];
         d2=wdays[Math.floor(rng()*wdays.length)];
         if(d1===d2) continue;
-        const sl1=[...sc[d1]], sl2=[...sc[d2]||[]];
+        const sl1=[...sc[d1]];
         const idx=Math.floor(rng()*sl1.length);
+        // Merged/group blocks represent multiple people or sessions at once — this
+        // move only checks the primary studentId's constraints, so leave those in place.
+        if(sl1[idx].merged||sl1[idx].isGroup) continue;
+        const sl2=[...sc[d2]||[]];
         const moved=sl1.splice(idx,1)[0];
         // Don't move to a day where this student already has a slot
         if(sl2.some(s=>s.studentId===moved.studentId)) continue;
@@ -2104,6 +2108,9 @@ const Scheduler = {
         const sl1=[...sc[d1]], sl2=[...sc[d2]];
         const i1=Math.floor(rng()*sl1.length), i2=Math.floor(rng()*sl2.length);
         const a=sl1[i1], b=sl2[i2];
+        // Merged/group blocks represent multiple people or sessions at once — swapping
+        // only re-checks the primary studentId's constraints, so leave those in place.
+        if(a.merged||a.isGroup||b.merged||b.isGroup) continue;
         // Skip swap if it would put same student twice on same day
         if(sl1.some((s,i)=>i!==i1&&s.studentId===b.studentId)) continue;
         if(sl2.some((s,i)=>i!==i2&&s.studentId===a.studentId)) continue;
