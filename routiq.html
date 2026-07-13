@@ -1262,6 +1262,10 @@ const Scheduler = {
                   if(slotC.studentId===slotA.studentId||slotC.studentId===slotB.studentId) continue;
                   const stC=students.find(s=>s.id===slotC.studentId); if(!stC) continue;
                   if(!(stC.availability[dayA]&&stC.availability[dayA].on)) continue;
+                  // Never give a student two slots on the same day after rotation
+                  if(sB.some(s=>s.studentId===slotA.studentId)) continue;
+                  if(sC.some(s=>s.studentId===slotB.studentId)) continue;
+                  if(sA.some((s,i)=>i!==si&&s.studentId===slotC.studentId)) continue;
                   // Rotate: A→dayB, B→dayC, C→dayA
                   const newA=[...sA.filter((_,i)=>i!==si),slotC];
                   const newB=[...sB.filter((_,j)=>j!==sj),slotA];
@@ -1319,6 +1323,11 @@ const Scheduler = {
                       if(slD.studentId===slA.studentId||slD.studentId===slB.studentId||slD.studentId===slC.studentId) continue;
                       const stD=students.find(s=>s.id===slD.studentId); if(!stD) continue;
                       if(!(stD.availability[dA]&&stD.availability[dA].on)) continue;
+                      // Never give a student two slots on the same day after rotation
+                      if(sB.some(s=>s.studentId===slA.studentId)) continue;
+                      if(sC.some(s=>s.studentId===slB.studentId)) continue;
+                      if(sD.some(s=>s.studentId===slC.studentId)) continue;
+                      if(sA.some((s,i)=>i!==si&&s.studentId===slD.studentId)) continue;
                       // Rotate: A→dB, B→dC, C→dD, D→dA
                       const nA=[...sA.filter((_,i)=>i!==si),slD];
                       const nB=[...sB.filter((_,j)=>j!==sj),slA];
