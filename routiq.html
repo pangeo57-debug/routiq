@@ -3093,7 +3093,7 @@ const App = {
             <option value="group" ${st?.type==='group'?'selected':''}>Ομάδα</option>
           </select>
         </div>
-        <div class="form-group" style="margin:0" id="group-field" style="display:${st?.type==='group'?'block':'none'}">
+        <div class="form-group" id="group-field" style="margin:0;display:${st?.type==='group'?'block':'none'}">
           <label>Κωδικός ομάδας</label>
           <input type="text" id="st-group" placeholder="π.χ. A1" value="${st?.group||''}">
         </div>
