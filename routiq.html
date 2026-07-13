@@ -1133,6 +1133,7 @@ const Scheduler = {
         order.push(nearest); rem.splice(rem.indexOf(nearest),1); cur=getC(nearest);
       }
       let t=this.toMin(dayH.start), prev=HOME; const newSlots=[];
+      let first=true;
       for(const slot of order){
         const student=students.find(s=>s.id===slot.studentId);
         if(!student) return null;
@@ -1140,8 +1141,11 @@ const Scheduler = {
         if(!av||!av.on) return null;
         const c=getC(slot);
         const margin=(settings&&(settings.travelMargin??3))||3;
-        t=Math.max(t+trvMin(prev,c)+margin, this.toMin(av.start));
-        t=Math.ceil(t/5)*5;
+        // The very first lesson of the day always starts exactly at the window open —
+        // travel from home is the tutor's problem to leave early for, not a scheduling delay.
+        t = first ? Math.max(t, this.toMin(av.start)) : Math.max(t+trvMin(prev,c)+margin, this.toMin(av.start));
+        if(!first) t=Math.ceil(t/5)*5;
+        first=false;
         const winEnd=Math.min(this.toMin(dayH.end),this.toMin(av.end));
         if(t+slot.duration>winEnd) return null;
         newSlots.push({...slot,start:this.toTime(t),end:this.toTime(t+slot.duration)});
@@ -1999,7 +2003,9 @@ const Scheduler = {
         const sl=slots[i];
         const prevC = i===0 ? HOME : coords[out[i-1].studentId]||HOME;
         const trav = trvMin(prevC, coords[sl.studentId]||HOME);
-        cur = i===0 ? Math.max(dayStart, dayStart+trav) : this.toMin(out[i-1].end)+trav+(settings.travelMargin||2);
+        // The first lesson of the day always starts exactly at the window open — travel
+        // from home doesn't push it later, the tutor just leaves home early enough.
+        cur = i===0 ? dayStart : this.toMin(out[i-1].end)+trav+(settings.travelMargin||2);
         const end = cur+sl.duration;
         if(end>dayEnd) return null;
         out.push({...sl, start:this.toTime(cur), end:this.toTime(end)});
