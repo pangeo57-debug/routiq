@@ -3536,7 +3536,8 @@ const App = {
         </div>
         ${unplaced.map(u=>{
           const missing = u.needed - u.placed;
-          const blockMin = u.student.lessonDuration * missing;
+          // forceMergeAndReschedule combines ALL weekly lessons into one block, not just the missing ones
+          const blockMin = u.student.lessonDuration * u.needed;
           const blockH = blockMin >= 60 ? Math.floor(blockMin/60)+'ω'+(blockMin%60?blockMin%60+'λ':'') : blockMin+'λ';
           return `
           <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
@@ -3545,13 +3546,13 @@ const App = {
               <span class="chip chip-red">${u.placed}/${u.needed} μαθ.</span>
             </div>
             <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${u.reason}</div>
-            ${missing >= 2 ? `
+            ${u.needed >= 2 ? `
             <div style="background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:8px;padding:10px;margin-bottom:6px">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 <span style="font-weight:700;font-size:12px;color:#059669">Λύση Α: Συνδυαστικό μπλοκ ${blockH}</span>
               </div>
-              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${missing} × ${u.student.lessonDuration}λ → 1 × ${blockMin}λ σε μία μέρα</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${u.needed} × ${u.student.lessonDuration}λ → 1 × ${blockMin}λ σε μία μέρα</div>
               <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;width:100%" onclick="App.forceMergeAndReschedule('${u.student.id}')">
                 Εφαρμογή ως ${blockH} μπλοκ
               </button>
