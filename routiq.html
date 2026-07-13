@@ -759,9 +759,11 @@ const Scheduler = {
     }
     for(const s of students){
       if(s.type==='group' && s.group){
-        if(!groupMap[s.group]) groupMap[s.group]=[];
+        // Normalize the code so "A1", " a1 ", "a1 " etc. are treated as the same group
+        const gkey = 'grp_'+s.group.trim().toLowerCase();
+        if(!groupMap[gkey]) groupMap[gkey]=[];
         // avoid duplicating pairs already added via pairedWith
-        if(!groupMap[s.group].find(x=>x.id===s.id)) groupMap[s.group].push(s);
+        if(!groupMap[gkey].find(x=>x.id===s.id)) groupMap[gkey].push(s);
       }
     }
     for(const [code, members] of Object.entries(groupMap)){
