@@ -953,7 +953,8 @@ const Scheduler = {
         if(!sameDay&&alreadyOn(day)) continue;
         const slot=this.findSlotFixed(s,day,schedule[day]||[],settings,s.lessonDuration);
         if(slot){
-          this.pushSorted(schedule, day, makeEntry(s,slot));
+          schedule[day].push(makeEntry(s,slot));
+          schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
           if(!pd.includes(day)) pd.push(day); return true;
         }
       }
