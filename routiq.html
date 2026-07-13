@@ -1976,7 +1976,7 @@ const Scheduler = {
 
   // Phase 3: Simulated Annealing — cross-day reassignment to minimize total km
   // Operates on an already-placed schedule; never removes students.
-  saOptimize(schedule, students, settings, coords, travelMinFn, budgetMs=20000){
+  async saOptimize(schedule, students, settings, coords, travelMinFn, budgetMs=20000){
     const HOME = coords['home'] || {lat:0,lon:0};
     const wdays = settings.workDays;
     const distKm = (a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
@@ -2026,8 +2026,12 @@ const Scheduler = {
 
     const T_START=1.5, T_END=0.005;
     const t0=Date.now();
+    let iter=0;
 
     while(Date.now()-t0<budgetMs){
+      // Periodically hand control back to the browser so the UI (progress bar,
+      // shimmer) can actually repaint instead of the tab looking frozen for 25s straight.
+      if(++iter%150===0) await new Promise(r=>setTimeout(r,0));
       const elapsed=(Date.now()-t0)/budgetMs;
       const T=T_START*Math.pow(T_END/T_START,elapsed);
       const activeDays=wdays.filter(d=>(sc[d]||[]).length>0);
@@ -2596,7 +2600,7 @@ const App = {
     // Phase 3: Simulated Annealing — 25s cross-day reassignment
     schedProgress(55,'Φάση 3 — Simulated Annealing','Ελαχιστοποίηση χιλιομέτρων (25s)…','🔥');
     await new Promise(r=>setTimeout(r,30));
-    Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
+    await Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
     // Phase 4: repair pass — try to place students left out after SA freed up time
     schedProgress(88,'Φάση 4 — Τελική τοποθέτηση','Επανατοποθέτηση αδύνατων…','🔧');
     await new Promise(r=>setTimeout(r,30));
@@ -2739,7 +2743,7 @@ const App = {
     await new Promise(r=>setTimeout(r,40));
     try{
       const travelMinFn = null; // uses state.travelMatrixPeak via travelEstMin
-      Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
+      await Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
     }catch(e){}
 
     // Phase 4: repair
@@ -3019,6 +3023,11 @@ const App = {
           <div class="student-detail-row"><span class="student-detail-label">Διεύθυνση</span><span style="font-size:12px;text-align:right;max-width:200px">${st.address}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="Geocoded ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="Δεν έχει geocodαριστεί"> ○</span>`}</span></div>
           <div class="student-detail-row"><span class="student-detail-label">Διάρκεια</span><span>${st.lessonDuration} λεπτά</span></div>
           <div class="student-detail-row"><span class="student-detail-label">Τύπος</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?'Ομάδα: '+st.group:'Ατομικό'}</span></div>
+          ${st.pairedWith ? (()=>{
+            const partner = state.students.find(s=>s.id===st.pairedWith);
+            const linkedBack = partner && partner.pairedWith===st.id;
+            return `<div class="student-detail-row"><span class="student-detail-label">Ζεύγος με</span><span class="chip ${linkedBack?'chip-purple':'chip-red'}">${partner?partner.name:'⚠ άγνωστος μαθητής'}${linkedBack?'':' ⚠ μη αμφίδρομο'}</span></div>`;
+          })() : ''}
           <div class="student-detail-row"><span class="student-detail-label">Διαθεσιμότητα</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${avDays||'—'}</span></div>
           ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">Σημειώσεις</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${st.notes}</span></div>`:''}
           <div class="student-actions">
@@ -3545,11 +3554,13 @@ const App = {
         if(sameLocation){
           html += `<div class="slot-gap" style="color:var(--text-muted,#888)">📍 ίδια τοποθεσία</div>`;
         } else {
-          const rr = state.routeResults[state.scheduleDay];
-          const rrStop = rr && rr.stops && rr.stops.find(s=>s.studentId===slots[i+1].studentId);
-          const driveMin = (rrStop&&rrStop.travelMin!=null) ? Math.round(rrStop.travelMin)
-            : Scheduler.travelEstMin(slot.studentId, slot.address, slots[i+1].studentId, slots[i+1].address);
-          html += `<div class="slot-gap">🚗 ~${driveMin}λ μετακίνηση</div>`;
+          // Show the travel time actually implied by the gap between these two lessons
+          // (end of this one to start of the next), not a separately re-estimated number —
+          // otherwise the displayed minutes don't add up to the times shown above.
+          const margin = state.settings.travelMargin ?? 3;
+          const gapMin = Scheduler.toMin(slots[i+1].start) - Scheduler.toMin(slot._end||slot.end);
+          const driveMin = Math.max(0, gapMin - margin);
+          html += `<div class="slot-gap">🚗 ~${driveMin}λ μετακίνηση${margin?` + ${margin}λ ασφαλείας`:''}</div>`;
         }
       }
     }
