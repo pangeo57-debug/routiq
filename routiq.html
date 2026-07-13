@@ -4041,6 +4041,15 @@ const App = {
         </button>
       </div>
 
+      <div class="section-title">Δοκιμή αλγορίθμου</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Δοκιμάστε τον αλγόριθμο με ρεαλιστικούς τυχαίους μαθητές στην Πάτρα (πραγματικό geocoding &amp; διαδρομές).</p>
+        <button class="btn btn-secondary btn-full" onclick="App.seedTestStudents(40)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Φόρτωση 40 δοκιμαστικών μαθητών
+        </button>
+      </div>
+
       <div class="section-title">Διαχείριση δεδομένων</div>
       <div class="card">
         <button class="btn btn-danger btn-full" onclick="App.resetApp()" style="margin-bottom:10px">
@@ -4183,6 +4192,47 @@ const App = {
     this.runAndNotify();
     this.renderSettings();
     Toast.show('Μπλοκάρισμα αφαιρέθηκε','info');
+  },
+
+  // Seed N realistic test students with real Patras street names, for load-testing
+  // the scheduler end-to-end (real Nominatim geocoding + OSRM routing, run in-browser).
+  seedTestStudents(n=40){
+    this.confirm(
+      `Δοκιμαστικοί μαθητές (${n})`,
+      `Θα αντικατασταθούν όλοι οι τρέχοντες μαθητές με ${n} τυχαίους δοκιμαστικούς μαθητές στην Πάτρα, και θα τρέξει αυτόματα ο προγραμματισμός με πραγματικό geocoding. Συνέχεια;`,
+      ()=>{
+        const FIRST=['Γιώργος','Μαρία','Νίκος','Ελένη','Κώστας','Σοφία','Δημήτρης','Άννα','Παναγιώτης','Χριστίνα','Αλέξανδρος','Κατερίνα','Θανάσης','Ιωάννα','Σταύρος','Δέσποινα','Βασίλης','Αγγελική','Μιχάλης','Ευαγγελία'];
+        const LAST=['Παπαδόπουλος','Κωνσταντίνου','Αθανασίου','Δημητρίου','Οικονόμου','Γεωργίου','Λάμπρου','Μαντζώρου','Σπηλιόπουλος','Καραγιάννης','Αλεξόπουλος','Παπανικολάου','Καλογερόπουλος','Θεοδωρίδου','Κυριακόπουλος','Σταμάτης','Μπέης','Παπαχρήστου','Νικολάου','Βλάχος'];
+        const STREETS=['Κορίνθου','Γούναρη','Αγίου Ανδρέου','Μαιζώνος','Ρήγα Φεραίου','Κανακάρη','Αμαλίας','Αράτου','Παντανάσσης','Ελ. Βενιζέλου','Αθηνών','Ζαΐμη','Κολοκοτρώνη','Σαχτούρη','Ναυαρίνου','Καρόλου','Μιαούλη','28ης Οκτωβρίου','Τριών Ναυάρχων','Βότση','Αγίου Νικολάου'];
+        const SUBJ=['Μαθηματικά','Φυσική','Χημεία','Βιολογία','Αγγλικά','Ιστορία','Γεωγραφία','Λογοτεχνία','Πληροφορική','Άλγεβρα'];
+        const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+        const seeded=[];
+        for(let i=0;i<n;i++){
+          const addr=`${pick(STREETS)} ${1+Math.floor(Math.random()*140)}, Πάτρα`;
+          const lessonDuration=pick([60,60,60,90]);
+          const lessonsPerWeek=Math.random()<0.8?1:2;
+          const numDays=Math.min(6,lessonsPerWeek+3+Math.floor(Math.random()*2));
+          const days=[1,2,3,4,5,6].sort(()=>Math.random()-0.5).slice(0,numDays);
+          const availability={};
+          days.forEach(d=>{
+            const dayStart=d===6?10:15, dayEnd=d===6?18:22;
+            availability[d]={on:true,start:`${String(dayStart).padStart(2,'0')}:00`,end:`${String(dayEnd).padStart(2,'0')}:00`};
+          });
+          seeded.push({
+            id:'seed'+i+'_'+Date.now(), name:`${pick(FIRST)} ${pick(LAST)}`, address:addr,
+            subject:pick(SUBJ), lessonDuration, lessonsPerWeek, color:i%10, notes:'',
+            availability
+          });
+        }
+        state.students = seeded;
+        Storage.saveStudents(state.students);
+        state.coords = {};
+        Storage.saveCoords(state.coords);
+        Toast.show(`Φορτώθηκαν ${n} δοκιμαστικοί μαθητές — υπολογισμός...`,'info');
+        this.runAndNotify();
+        this.nav('schedule');
+      }
+    );
   },
 
   resetApp(){
