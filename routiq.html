@@ -766,11 +766,38 @@ const Scheduler = {
         if(!groupMap[gkey].find(x=>x.id===s.id)) groupMap[gkey].push(s);
       }
     }
+    // Merge any groupMap entries that share a member — e.g. a student set up via BOTH
+    // "Ζεύγος με" and "Τύπος: Ομάδα" with the same partner would otherwise get scheduled
+    // together twice (two separate blocks), eating into their weekly lesson count.
+    {
+      let mergedAny = true;
+      while(mergedAny){
+        mergedAny = false;
+        const keys = Object.keys(groupMap);
+        outerMerge:
+        for(let i=0;i<keys.length;i++){
+          for(let j=i+1;j<keys.length;j++){
+            const ga=groupMap[keys[i]], gb=groupMap[keys[j]];
+            if(ga.some(m=>gb.find(x=>x.id===m.id))){
+              for(const m of gb) if(!ga.find(x=>x.id===m.id)) ga.push(m);
+              delete groupMap[keys[j]];
+              mergedAny = true;
+              break outerMerge;
+            }
+          }
+        }
+      }
+    }
     for(const [code, members] of Object.entries(groupMap)){
       if(members.length<2) continue;
       const [a] = members;
-      // Intersect availability across ALL members (not just the first two)
+      // A group needs as many SHARED sessions per week as its most demanding member —
+      // place one per eligible day, up to that count (not just a single session total).
+      const neededSessions = Math.max(...members.map(m=>m.lessonsPerWeek||1));
+      const dur=Math.max(...members.map(m=>m.lessonDuration));
+      let placedSessions = 0;
       for(const day of settings.workDays){
+        if(placedSessions>=neededSessions) break;
         let start=-Infinity, end=Infinity, allOn=true;
         for(const m of members){
           const av=m.availability[day];
@@ -779,7 +806,6 @@ const Scheduler = {
           end=Math.min(end,this.toMin(av.end));
         }
         if(!allOn) continue;
-        const dur=Math.max(...members.map(m=>m.lessonDuration));
         if(end-start<dur) continue;
         // Make a virtual student representing the intersection
         const virtual={...a, availability:{[day]:{on:true,start:this.minToTime(start),end:this.minToTime(end)}}};
@@ -794,10 +820,10 @@ const Scheduler = {
             duration:dur, mergedCount:1, merged:false, isGroup:true
           });
           schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          members.forEach(m=>groupedIds.add(m.id));
-          break;
+          placedSessions++;
         }
       }
+      if(placedSessions>0) members.forEach(m=>groupedIds.add(m.id));
     }
 
     // Group members must ALWAYS be scheduled together or not at all — never fall through
