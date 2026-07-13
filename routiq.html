@@ -798,7 +798,10 @@ const Scheduler = {
       }
     }
 
-    const normal = students.filter(s => !s.forceMerge && !groupedIds.has(s.id));
+    // Group members must ALWAYS be scheduled together or not at all — never fall through
+    // to solo scheduling just because the group itself failed to find a common slot.
+    const allGroupMemberIds = new Set(Object.values(groupMap).flat().map(m=>m.id));
+    const normal = students.filter(s => !s.forceMerge && !allGroupMemberIds.has(s.id));
     // MCV: most-constrained first — fewer available hours → placed first
     const availHours = s => settings.workDays.reduce((sum,d)=>{
       const av=s.availability[d];
@@ -1009,6 +1012,7 @@ const Scheduler = {
     // Re-sort by MRV on the updated schedule, try depth=6
     const stillUnplaced=[];
     for(const s of students){
+      if(allGroupMemberIds.has(s.id)) continue; // never repair-place group members solo
       if(this.countPlaced(s.id,schedule)<s.lessonsPerWeek) stillUnplaced.push(s);
     }
     if(stillUnplaced.length>0 && Date.now()<repairDeadline){
@@ -2107,9 +2111,11 @@ const Scheduler = {
   // Phase 5: LNS — destroy 2-4 slots blocking an unplaced student, re-place everyone
   lnsRepair(schedule, students, settings, budgetMs=10000){
     const wdays = settings.workDays;
+    // Group members must only ever be placed together — never solo-repair one half of a group
+    const isGroupMember = s => !!(s.pairedWith || (s.type==='group' && s.group));
     const copyS = s=>{const o={};for(const d of wdays)o[d]=[...(s[d]||[])];return o;};
     const countM = sch=>{const m={};Object.values(sch).flat().forEach(e=>{m[e.studentId]=(m[e.studentId]||0)+1;});return m;};
-    const getUnpl = sch=>{const m=countM(sch);return students.filter(s=>(m[s.id]||0)<s.lessonsPerWeek);};
+    const getUnpl = sch=>{const m=countM(sch);return students.filter(s=>!isGroupMember(s)&&(m[s.id]||0)<s.lessonsPerWeek);};
     let best=copyS(schedule), bestU=getUnpl(best).length;
     if(!bestU) return;
     let ss=31337;
@@ -2165,10 +2171,12 @@ const Scheduler = {
 
   // Phase 4: after SA, try to slot in students that weren't placed
   saRepair(schedule, students, settings, schedulerResult){
+    // Group members must only ever be placed together — never solo-repair one half of a group
+    const isGroupMember = s => !!(s.pairedWith || (s.type==='group' && s.group));
     const placed = new Set(
       Object.values(schedule).flat().map(e=>e.studentId)
     );
-    const unplaced = students.filter(s=>!placed.has(s.id));
+    const unplaced = students.filter(s=>!isGroupMember(s)&&!placed.has(s.id));
     if(!unplaced.length) return;
 
     for(const s of unplaced){
