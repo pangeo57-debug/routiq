@@ -481,7 +481,7 @@ input[type=time]{color-scheme:light}
   <nav>
     <button class="nav-btn active" data-screen="home" onclick="App.nav('home')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Home
+      <span id="nav-home-label">Home</span>
     </button>
     <button class="nav-btn" data-screen="students" onclick="App.nav('students')" id="nav-students-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
@@ -489,15 +489,15 @@ input[type=time]{color-scheme:light}
     </button>
     <button class="nav-btn" data-screen="schedule" onclick="App.nav('schedule')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Πρόγραμμα
+      <span id="nav-schedule-label">Πρόγραμμα</span>
     </button>
     <button class="nav-btn" data-screen="route" onclick="App.nav('route')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-      Διαδρομή
+      <span id="nav-route-label">Διαδρομή</span>
     </button>
     <button class="nav-btn" data-screen="settings" onclick="App.nav('settings')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      Ρυθμίσεις
+      <span id="nav-settings-label">Ρυθμίσεις</span>
     </button>
   </nav>
 </div>
@@ -592,13 +592,137 @@ function defaultSettings(){
     lunchBreak:0,
     avgCitySpeedKmh:25,
     hereApiKey:'',
+    language:'el',
   };
+}
+
+// ============================================================
+// I18N — translation dictionary + language-aware helpers
+// ============================================================
+const I18N = {
+  el: {
+    days:['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'],
+    daysFull:['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'],
+    nav_home:'Home', nav_students:'Μαθητές', nav_schedule:'Πρόγραμμα', nav_route:'Διαδρομή', nav_settings:'Ρυθμίσεις',
+    home_title:'Εβδομαδιαίο Πρόγραμμα', home_today:'Σήμερα', home_no_lessons_today:'Δεν υπάρχουν μαθήματα σήμερα',
+    home_not_working_today:'Σήμερα δεν εργάζεστε', home_all_fit:'Χώρεσαν όλοι οι μαθητές!',
+    home_lessons_placed:'μαθήματα τοποθετήθηκαν', home_unplaced_warning:'δεν χωράει πλήρως',
+    home_see_schedule:'Δες Πρόγραμμα για λεπτομέρειες', home_sessions:'Εβδομάδα', home_hours_week:'Ώρες/εβδ',
+    students_title:'Μαθητές', students_registered:'εγγεγραμμένοι', students_new:'Νέος', students_map:'Χάρτης',
+    students_placed:'τοποθ.', students_edit:'Επεξεργασία', students_delete:'Διαγραφή',
+    schedule_title:'Εβδομαδιαίο Πρόγραμμα', schedule_refresh:'Ανανέωση', schedule_placed:'Τοποθετημένα μαθήματα',
+    schedule_no_lessons_day:'Δεν υπάρχουν μαθήματα αυτή την ημέρα', schedule_optimize:'Βελτιστοποίηση με χάρτη (OpenStreetMap)',
+    schedule_optimized_done:'Βελτιστοποίηση ολοκληρώθηκε', schedule_unplaced_students:'μαθητής/ές χωρίς πλήρες πρόγραμμα',
+    route_title:'Διαδρομή', route_calc:'Υπολογισμός', route_no_route:'Καμία διαδρομή',
+    route_no_lessons_day:'Δεν υπάρχουν μαθήματα αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή',
+    route_distance:'απόσταση', route_travel:'Ταξίδι', route_fuel:'Καύσιμα', route_stops:'Σειρά στάσεων',
+    route_real:'Πραγματική', route_estimated:'Εκτιμώμενη', route_arrival:'Άφιξη',
+    settings_title:'Ρυθμίσεις', settings_profession:'Επάγγελμα', settings_personal:'Προσωπικά', settings_name:'Όνομα',
+    settings_home_address:'Διεύθυνση σπιτιού', settings_workdays:'Εργάσιμες Ημέρες', settings_hours_per_day:'Ώρες εργασίας ανά ημέρα',
+    settings_travel_fuel:'Μεταφορά & Καύσιμα', settings_blocked:'Μπλοκαρισμένες Ώρες', settings_maps:'Χάρτες & Δρομολόγηση',
+    settings_save:'Αποθήκευση ρυθμίσεων', settings_install:'Εγκατάσταση εφαρμογής', settings_data:'Διαχείριση δεδομένων',
+    settings_reset:'Επαναφορά demo δεδομένων', settings_export:'Εξαγωγή', settings_import:'Εισαγωγή',
+    settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
+    btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...',
+  },
+  en: {
+    days:['','Mon','Tue','Wed','Thu','Fri','Sat'],
+    daysFull:['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+    nav_home:'Home', nav_students:'Students', nav_schedule:'Schedule', nav_route:'Route', nav_settings:'Settings',
+    home_title:'Weekly Schedule', home_today:'Today', home_no_lessons_today:'No lessons today',
+    home_not_working_today:'Not working today', home_all_fit:'Everyone fits!',
+    home_lessons_placed:'lessons scheduled', home_unplaced_warning:"doesn't fully fit",
+    home_see_schedule:'See Schedule for details', home_sessions:'Week', home_hours_week:'Hours/wk',
+    students_title:'Students', students_registered:'registered', students_new:'New', students_map:'Map',
+    students_placed:'placed', students_edit:'Edit', students_delete:'Delete',
+    schedule_title:'Weekly Schedule', schedule_refresh:'Refresh', schedule_placed:'Lessons placed',
+    schedule_no_lessons_day:'No lessons this day', schedule_optimize:'Optimize with map (OpenStreetMap)',
+    schedule_optimized_done:'Optimization complete', schedule_unplaced_students:"student(s) without a full schedule",
+    route_title:'Route', route_calc:'Calculate', route_no_route:'No route',
+    route_no_lessons_day:'No lessons this day', route_start:'Start', route_return:'Return',
+    route_distance:'distance', route_travel:'Travel', route_fuel:'Fuel', route_stops:'Stop order',
+    route_real:'Real', route_estimated:'Estimated', route_arrival:'Arrival',
+    settings_title:'Settings', settings_profession:'Profession', settings_personal:'Personal', settings_name:'Name',
+    settings_home_address:'Home address', settings_workdays:'Working Days', settings_hours_per_day:'Working hours per day',
+    settings_travel_fuel:'Travel & Fuel', settings_blocked:'Blocked Times', settings_maps:'Maps & Routing',
+    settings_save:'Save settings', settings_install:'Install app', settings_data:'Data Management',
+    settings_reset:'Reset to demo data', settings_export:'Export', settings_import:'Import',
+    settings_test_algo:'Algorithm Test', settings_language:'Language',
+    btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...',
+  },
+  fr: {
+    days:['','Lun','Mar','Mer','Jeu','Ven','Sam'],
+    daysFull:['','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'],
+    nav_home:'Accueil', nav_students:'Élèves', nav_schedule:'Programme', nav_route:'Itinéraire', nav_settings:'Réglages',
+    home_title:'Programme Hebdomadaire', home_today:"Aujourd'hui", home_no_lessons_today:"Pas de cours aujourd'hui",
+    home_not_working_today:"Pas de travail aujourd'hui", home_all_fit:'Tout le monde est casé !',
+    home_lessons_placed:'cours programmés', home_unplaced_warning:'ne rentre pas complètement',
+    home_see_schedule:'Voir le Programme pour les détails', home_sessions:'Semaine', home_hours_week:'Heures/sem',
+    students_title:'Élèves', students_registered:'inscrits', students_new:'Nouveau', students_map:'Carte',
+    students_placed:'placé', students_edit:'Modifier', students_delete:'Supprimer',
+    schedule_title:'Programme Hebdomadaire', schedule_refresh:'Actualiser', schedule_placed:'Cours placés',
+    schedule_no_lessons_day:'Aucun cours ce jour', schedule_optimize:'Optimiser avec carte (OpenStreetMap)',
+    schedule_optimized_done:'Optimisation terminée', schedule_unplaced_students:"élève(s) sans programme complet",
+    route_title:'Itinéraire', route_calc:'Calculer', route_no_route:'Aucun itinéraire',
+    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour',
+    route_distance:'distance', route_travel:'Trajet', route_fuel:'Carburant', route_stops:'Ordre des arrêts',
+    route_real:'Réelle', route_estimated:'Estimée', route_arrival:'Arrivée',
+    settings_title:'Réglages', settings_profession:'Profession', settings_personal:'Personnel', settings_name:'Nom',
+    settings_home_address:'Adresse du domicile', settings_workdays:'Jours de travail', settings_hours_per_day:"Heures de travail par jour",
+    settings_travel_fuel:'Trajet & Carburant', settings_blocked:'Heures bloquées', settings_maps:'Cartes & Itinéraires',
+    settings_save:'Enregistrer', settings_install:"Installer l'application", settings_data:'Gestion des données',
+    settings_reset:'Réinitialiser aux données de démo', settings_export:'Exporter', settings_import:'Importer',
+    settings_test_algo:'Test algorithme', settings_language:'Langue',
+    btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...',
+  },
+  de: {
+    days:['','Mo','Di','Mi','Do','Fr','Sa'],
+    daysFull:['','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],
+    nav_home:'Start', nav_students:'Schüler', nav_schedule:'Stundenplan', nav_route:'Route', nav_settings:'Einstellungen',
+    home_title:'Wochenplan', home_today:'Heute', home_no_lessons_today:'Heute keine Stunden',
+    home_not_working_today:'Heute arbeitsfrei', home_all_fit:'Alle passen rein!',
+    home_lessons_placed:'Stunden geplant', home_unplaced_warning:'passt nicht vollständig',
+    home_see_schedule:'Details im Stundenplan', home_sessions:'Woche', home_hours_week:'Std/Wo',
+    students_title:'Schüler', students_registered:'registriert', students_new:'Neu', students_map:'Karte',
+    students_placed:'platziert', students_edit:'Bearbeiten', students_delete:'Löschen',
+    schedule_title:'Wochenplan', schedule_refresh:'Aktualisieren', schedule_placed:'Geplante Stunden',
+    schedule_no_lessons_day:'Keine Stunden an diesem Tag', schedule_optimize:'Mit Karte optimieren (OpenStreetMap)',
+    schedule_optimized_done:'Optimierung abgeschlossen', schedule_unplaced_students:'Schüler ohne vollständigen Plan',
+    route_title:'Route', route_calc:'Berechnen', route_no_route:'Keine Route',
+    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr',
+    route_distance:'Entfernung', route_travel:'Fahrt', route_fuel:'Kraftstoff', route_stops:'Reihenfolge der Stopps',
+    route_real:'Tatsächliche', route_estimated:'Geschätzte', route_arrival:'Ankunft',
+    settings_title:'Einstellungen', settings_profession:'Beruf', settings_personal:'Persönlich', settings_name:'Name',
+    settings_home_address:'Heimadresse', settings_workdays:'Arbeitstage', settings_hours_per_day:'Arbeitszeiten pro Tag',
+    settings_travel_fuel:'Fahrt & Kraftstoff', settings_blocked:'Blockierte Zeiten', settings_maps:'Karten & Routing',
+    settings_save:'Einstellungen speichern', settings_install:'App installieren', settings_data:'Datenverwaltung',
+    settings_reset:'Auf Demo-Daten zurücksetzen', settings_export:'Exportieren', settings_import:'Importieren',
+    settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
+    btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...',
+  },
+};
+function t(key){
+  const lang = (typeof state!=='undefined' && state.settings && state.settings.language) || 'el';
+  return (I18N[lang] && I18N[lang][key]) ?? (I18N.el[key] ?? key);
+}
+function curLang(){
+  return (typeof state!=='undefined' && state.settings && state.settings.language) || 'el';
 }
 
 const DAYS = ['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'];
 const DAYS_FULL = ['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'];
 const COLORS = ['color-0','color-1','color-2','color-3','color-4','color-5','color-6','color-7','color-8','color-9'];
 const SUBJECTS = ['Μαθηματικά','Φυσική','Χημεία','Βιολογία','Αγγλικά','Ιστορία','Γεωγραφία','Λογοτεχνία','Πληροφορική','Άλγεβρα','Γεωμετρία','Άλλο'];
+
+// Mutate DAYS/DAYS_FULL in place (they're `const` arrays referenced by index
+// throughout the app) so every existing DAYS[d] call site picks up the current
+// language without having to be rewritten.
+function applyLanguageArrays(){
+  const lang = curLang();
+  const d = (I18N[lang]&&I18N[lang].days) || I18N.el.days;
+  const df = (I18N[lang]&&I18N[lang].daysFull) || I18N.el.daysFull;
+  for(let i=0;i<7;i++){ DAYS[i]=d[i]; DAYS_FULL[i]=df[i]; }
+}
 
 // ============================================================
 // DEMO DATA
@@ -2570,6 +2694,8 @@ const App = {
 
     // Ensure workDays is always an array
     if(!Array.isArray(state.settings.workDays)) state.settings.workDays = [1,2,3,4,5];
+    if(!state.settings.language) state.settings.language = 'el';
+    applyLanguageArrays();
 
     // First run: clean slate + onboarding
     if(!localStorage.getItem('rp_init_v24')){
@@ -2608,6 +2734,11 @@ const App = {
     const L = getLabels();
     const el = document.getElementById('nav-clients-label');
     if(el) el.textContent = L.clients;
+    const map = {'nav-home-label':'nav_home','nav-schedule-label':'nav_schedule','nav-route-label':'nav_route','nav-settings-label':'nav_settings'};
+    for(const [id,key] of Object.entries(map)){
+      const e = document.getElementById(id);
+      if(e) e.textContent = t(key);
+    }
   },
 
   // ---- SCHEDULER ----
@@ -4313,6 +4444,16 @@ const App = {
         </button>
       </div>
 
+      <div class="section-title">${t('settings_language')}</div>
+      <div class="card">
+        <select id="set-language" onchange="App.setLanguage(this.value)">
+          <option value="el" ${curLang()==='el'?'selected':''}>🇬🇷 Ελληνικά</option>
+          <option value="en" ${curLang()==='en'?'selected':''}>🇬🇧 English</option>
+          <option value="fr" ${curLang()==='fr'?'selected':''}>🇫🇷 Français</option>
+          <option value="de" ${curLang()==='de'?'selected':''}>🇩🇪 Deutsch</option>
+        </select>
+      </div>
+
       <div class="section-title">Δοκιμή αλγορίθμου</div>
       <div class="card">
         <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Δοκιμάστε τον αλγόριθμο με ρεαλιστικούς τυχαίους μαθητές στην Πάτρα (πραγματικό geocoding &amp; διαδρομές).</p>
@@ -4376,6 +4517,15 @@ const App = {
     Storage.saveSettings(state.settings);
     this.updateNavLabels();
     this.renderSettings();
+  },
+
+  setLanguage(lang){
+    state.settings.language = lang;
+    Storage.saveSettings(state.settings);
+    applyLanguageArrays();
+    this.updateNavLabels();
+    this.renderSettings();
+    Toast.show(t('settings_save'),'success');
   },
 
   saveSettings(){
