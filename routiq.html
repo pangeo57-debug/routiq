@@ -903,7 +903,11 @@ const Scheduler = {
 
     // Phase 0: forceMerge students — split into blocks of at most maxMergeSessions
     // (defaults to all of them, i.e. one block) so "δίωρο" doesn't silently become a 4ωρο.
-    for(const s of students.filter(s => s.forceMerge)){
+    // Group membership takes priority: a student who is ALSO paired/grouped must not
+    // ALSO get a separate solo forceMerge block — that double-counts their lessonsPerWeek
+    // and produces extra sessions nobody asked for. Group phase (0b, below) handles them.
+    const isGroupOrPaired = s => !!(s.pairedWith || (s.type==='group' && s.group));
+    for(const s of students.filter(s => s.forceMerge && !isGroupOrPaired(s))){
       const blockSize = Math.max(1, Math.min(s.maxMergeSessions||s.lessonsPerWeek, s.lessonsPerWeek));
       let remaining = s.lessonsPerWeek;
       const usedDays = new Set();
