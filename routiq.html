@@ -634,7 +634,7 @@ const I18N = {
     settings_save:'Αποθήκευση ρυθμίσεων', settings_install:'Εγκατάσταση εφαρμογής', settings_data:'Διαχείριση δεδομένων',
     settings_reset:'Επαναφορά demo δεδομένων', settings_export:'Εξαγωγή', settings_import:'Εισαγωγή',
     settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
-    btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...', common_please_wait:'Παρακαλώ περιμένετε', unit_min:'λ', unit_hr:'ω',
+    btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...', common_please_wait:'Παρακαλώ περιμένετε', unit_min:'λ', unit_hr:'ω', unit_meter:'μ', unit_km:'χλμ',
     btn_delete:'Διαγραφή', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
     confirm_title:'Επιβεβαίωση', block_drawer_title:'Μπλοκαρισμένη Ώρα',
     greeting_morning:'Καλημέρα', greeting_afternoon:'Καλό απόγευμα', greeting_evening:'Καλησπέρα',
@@ -770,7 +770,7 @@ const I18N = {
     settings_save:'Save settings', settings_install:'Install app', settings_data:'Data Management',
     settings_reset:'Reset to demo data', settings_export:'Export', settings_import:'Import',
     settings_test_algo:'Algorithm Test', settings_language:'Language',
-    btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...', common_please_wait:'Please wait', unit_min:'min', unit_hr:'h',
+    btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...', common_please_wait:'Please wait', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
     btn_delete:'Delete', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
     confirm_title:'Confirm', block_drawer_title:'Blocked Time',
     greeting_morning:'Good morning', greeting_afternoon:'Good afternoon', greeting_evening:'Good evening',
@@ -906,7 +906,7 @@ const I18N = {
     settings_save:'Enregistrer', settings_install:"Installer l'application", settings_data:'Gestion des données',
     settings_reset:'Réinitialiser aux données de démo', settings_export:'Exporter', settings_import:'Importer',
     settings_test_algo:'Test algorithme', settings_language:'Langue',
-    btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...', common_please_wait:'Veuillez patienter', unit_min:'min', unit_hr:'h',
+    btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...', common_please_wait:'Veuillez patienter', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
     btn_delete:'Supprimer', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
     confirm_title:'Confirmation', block_drawer_title:'Heure bloquée',
     greeting_morning:'Bonjour', greeting_afternoon:'Bon après-midi', greeting_evening:'Bonsoir',
@@ -1042,7 +1042,7 @@ const I18N = {
     settings_save:'Einstellungen speichern', settings_install:'App installieren', settings_data:'Datenverwaltung',
     settings_reset:'Auf Demo-Daten zurücksetzen', settings_export:'Exportieren', settings_import:'Importieren',
     settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
-    btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...', common_please_wait:'Bitte warten', unit_min:'Min', unit_hr:'Std',
+    btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...', common_please_wait:'Bitte warten', unit_min:'Min', unit_hr:'Std', unit_meter:'m', unit_km:'km',
     btn_delete:'Löschen', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
     confirm_title:'Bestätigung', block_drawer_title:'Blockierte Zeit',
     greeting_morning:'Guten Morgen', greeting_afternoon:'Guten Tag', greeting_evening:'Guten Abend',
@@ -4009,7 +4009,7 @@ const App = {
         b.innerHTML = results.map((res,i)=>{
           const name = res.display_name;
           const short = name.split(',').slice(0,3).join(',');
-          const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+'μ':res._distKm.toFixed(1)+'χλμ'}</span> · ` : '';
+          const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
           return `<div class="addr-suggest-item" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4"
             onmousedown="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')"
             ontouchstart="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')">
