@@ -794,6 +794,8 @@ const Scheduler = {
 
     // Phase 0b: group lessons — students sharing same group code OR pairedWith placed as one slot
     const groupedIds = new Set();
+    const leftoverMembers = [];
+    const groupDaysUsed = {}; // memberId -> [days already used by their group sessions]
     // Build pairMap from pairedWith (avoid duplicates)
     const groupMap = {};
     const seenPairs = new Set();
@@ -842,11 +844,12 @@ const Scheduler = {
     for(const [code, members] of Object.entries(groupMap)){
       if(members.length<2) continue;
       const [a] = members;
-      // A group needs as many SHARED sessions per week as its most demanding member —
-      // place one per eligible day, up to that count (not just a single session total).
-      const neededSessions = Math.max(...members.map(m=>m.lessonsPerWeek||1));
+      // A group's SHARED sessions = what its LEAST demanding member needs — never force
+      // someone who only wants 2x/week into a 3rd session just because their partner wants 3.
+      const neededSessions = Math.min(...members.map(m=>m.lessonsPerWeek||1));
       const dur=Math.max(...members.map(m=>m.lessonDuration));
       let placedSessions = 0;
+      const usedDays = [];
       for(const day of settings.workDays){
         if(placedSessions>=neededSessions) break;
         let start=-Infinity, end=Infinity, allOn=true;
@@ -872,15 +875,26 @@ const Scheduler = {
           });
           schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
           placedSessions++;
+          usedDays.push(day);
         }
       }
-      if(placedSessions>0) members.forEach(m=>groupedIds.add(m.id));
+      if(placedSessions>0){
+        members.forEach(m=>{ groupedIds.add(m.id); groupDaysUsed[m.id]=(groupDaysUsed[m.id]||[]).concat(usedDays); });
+        // Whoever needs MORE sessions than the group shares gets the rest scheduled
+        // solo, just for them — never forced onto (or skipped for) the other member.
+        for(const m of members){
+          const leftover = (m.lessonsPerWeek||1) - placedSessions;
+          if(leftover>0) leftoverMembers.push({...m, lessonsPerWeek:leftover});
+        }
+      }
     }
 
     // Group members must ALWAYS be scheduled together or not at all — never fall through
     // to solo scheduling just because the group itself failed to find a common slot.
+    // Exception: leftoverMembers (members whose personal need exceeds the shared count)
+    // get their remaining lessons scheduled solo, on top of their group sessions.
     const allGroupMemberIds = new Set(Object.values(groupMap).flat().map(m=>m.id));
-    const normal = students.filter(s => !s.forceMerge && !allGroupMemberIds.has(s.id));
+    const normal = students.filter(s => !s.forceMerge && !allGroupMemberIds.has(s.id)).concat(leftoverMembers);
     // MCV: most-constrained first — fewer available hours → placed first
     const availHours = s => settings.workDays.reduce((sum,d)=>{
       const av=s.availability[d];
@@ -893,7 +907,9 @@ const Scheduler = {
     for(const s of normal) for(let i=0;i<s.lessonsPerWeek;i++) tasks.push({student:s,lessonIdx:i});
 
     const placedDays = {};
-    for(const s of normal) placedDays[s.id] = [];
+    // Leftover-member clones start with the days their group session already used,
+    // so their solo lessons never land on the same day as their shared session.
+    for(const s of normal) placedDays[s.id] = [...(groupDaysUsed[s.id]||[])];
 
     const availDayCount = (s) => settings.workDays.filter(d=>{const av=s.availability[d];return av&&av.on;}).length;
     const canSameDay    = (s) => false; // never place same student twice on same day
@@ -2845,7 +2861,10 @@ const App = {
 
     if(r){
       state.scheduleKmBefore = this._estimateTotalKm(state.schedule);
-      state.scheduleAttempts[0] = { ...r, schedule: state.schedule };
+      // Phases 2-5 (geoOptimize/SA/repairs) can place students that were still
+      // unplaced after Phase 1 — recompute the unplaced list from the FINAL
+      // schedule instead of reusing Phase 1's now-stale snapshot.
+      state.scheduleAttempts[0] = { ...r, schedule: state.schedule, unplaced: this.computeUnplacedLive() };
       state.schedulerResult = state.scheduleAttempts[0];
       Storage.saveSchedule(state.schedule);
     }
