@@ -517,8 +517,8 @@ input[type=time]{color-scheme:light}
     </div>
     <div class="drawer-body" id="drawer-student-body"></div>
     <div class="drawer-footer">
-      <button class="btn btn-secondary" onclick="App.closeStudentDrawer()" style="flex:1">Άκυρο</button>
-      <button class="btn btn-primary" onclick="App.saveStudent()" style="flex:2">Αποθήκευση</button>
+      <button class="btn btn-secondary" id="drawer-student-cancel-btn" onclick="App.closeStudentDrawer()" style="flex:1">Άκυρο</button>
+      <button class="btn btn-primary" id="drawer-student-save-btn" onclick="App.saveStudent()" style="flex:2">Αποθήκευση</button>
     </div>
   </div>
 </div>
@@ -527,15 +527,15 @@ input[type=time]{color-scheme:light}
   <div class="drawer" id="drawer-block">
     <div class="drawer-handle"></div>
     <div class="drawer-header">
-      <span class="drawer-title">Μπλοκαρισμένη Ώρα</span>
+      <span class="drawer-title" id="drawer-block-title">Μπλοκαρισμένη Ώρα</span>
       <button class="btn-icon" onclick="App.closeBlockDrawer()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="drawer-body" id="drawer-block-body"></div>
     <div class="drawer-footer">
-      <button class="btn btn-secondary" onclick="App.closeBlockDrawer()" style="flex:1">Άκυρο</button>
-      <button class="btn btn-primary" onclick="App.saveBlock()" style="flex:2">Αποθήκευση</button>
+      <button class="btn btn-secondary" id="drawer-block-cancel-btn" onclick="App.closeBlockDrawer()" style="flex:1">Άκυρο</button>
+      <button class="btn btn-primary" id="drawer-block-save-btn" onclick="App.saveBlock()" style="flex:2">Αποθήκευση</button>
     </div>
   </div>
 </div>
@@ -546,7 +546,7 @@ input[type=time]{color-scheme:light}
     <div class="confirm-title" id="confirm-title">Επιβεβαίωση</div>
     <div class="confirm-text" id="confirm-text"></div>
     <div class="confirm-actions">
-      <button class="btn btn-secondary" style="flex:1" onclick="App.confirmReject()">Άκυρο</button>
+      <button class="btn btn-secondary" style="flex:1" id="confirm-cancel-btn" onclick="App.confirmReject()">Άκυρο</button>
       <button class="btn btn-danger" style="flex:1" id="confirm-ok-btn" onclick="App.confirmAccept()">Διαγραφή</button>
     </div>
   </div>
@@ -731,6 +731,9 @@ const I18N = {
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
     toast_popup_blocked:'Ο browser μπλόκαρε το παράθυρο εκτύπωσης — επιτρέψτε pop-ups', print_no_lessons:'Κανένα μάθημα',
     print_lessons_suffix:'μαθήματα', merge_badge_label:'ΜΠΛΟΚ',
+    btn_optimize_short:'Βελτιστοποίηση με χάρτη',
+    diag_no_common_days:'Δεν υπάρχουν κοινές διαθέσιμες μέρες', diag_placed_count:'Τοποθετήθηκε {c}/{t}', diag_no_free_slot:'Δεν βρέθηκε ελεύθερη θέση στο παράθυρο',
+    print_title:'Πρόγραμμα', print_h1_sub:'Εβδομαδιαίο Πρόγραμμα', print_export_pdf:'Εξαγωγή ως PDF',
   },
   en: {
     days:['','Mon','Tue','Wed','Thu','Fri','Sat'],
@@ -852,6 +855,9 @@ const I18N = {
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
     toast_popup_blocked:'The browser blocked the print window — please allow pop-ups', print_no_lessons:'No lesson',
     print_lessons_suffix:'lessons', merge_badge_label:'BLOCK',
+    btn_optimize_short:'Optimize with map',
+    diag_no_common_days:'No common available days', diag_placed_count:'Placed {c}/{t}', diag_no_free_slot:'No free slot found in the window',
+    print_title:'Schedule', print_h1_sub:'Weekly Schedule', print_export_pdf:'Export as PDF',
   },
   fr: {
     days:['','Lun','Mar','Mer','Jeu','Ven','Sam'],
@@ -973,6 +979,9 @@ const I18N = {
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
     toast_popup_blocked:"Le navigateur a bloqué la fenêtre d'impression — autorisez les pop-ups", print_no_lessons:'Aucun cours',
     print_lessons_suffix:'cours', merge_badge_label:'BLOC',
+    btn_optimize_short:'Optimiser avec carte',
+    diag_no_common_days:"Aucun jour disponible commun", diag_placed_count:'Placé {c}/{t}', diag_no_free_slot:'Aucun créneau libre trouvé dans la plage',
+    print_title:'Programme', print_h1_sub:'Programme Hebdomadaire', print_export_pdf:'Exporter en PDF',
   },
   de: {
     days:['','Mo','Di','Mi','Do','Fr','Sa'],
@@ -1094,6 +1103,9 @@ const I18N = {
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
     toast_popup_blocked:'Der Browser hat das Druckfenster blockiert — bitte Pop-ups erlauben', print_no_lessons:'Keine Stunde',
     print_lessons_suffix:'Stunden', merge_badge_label:'BLOCK',
+    btn_optimize_short:'Mit Karte optimieren',
+    diag_no_common_days:'Keine gemeinsamen verfügbaren Tage', diag_placed_count:'Platziert {c}/{t}', diag_no_free_slot:'Kein freier Platz im Zeitfenster gefunden',
+    print_title:'Stundenplan', print_h1_sub:'Wochenplan', print_export_pdf:'Als PDF exportieren',
   },
 };
 function t(key){
@@ -1102,12 +1114,6 @@ function t(key){
 }
 function curLang(){
   return (typeof state!=='undefined' && state.settings && state.settings.language) || 'el';
-}
-// t() with {placeholder} substitution, e.g. tf('toast_placed_summary',{placed:3,total:5,attempts:''})
-function tf(key, vars){
-  let str = t(key);
-  if(vars) for(const k in vars) str = str.split('{'+k+'}').join(vars[k]);
-  return str;
 }
 // t() with {placeholder} substitution, e.g. tf('confirm_delete_client_text',{name:'Maria'})
 function tf(key, params){
@@ -2606,10 +2612,10 @@ const Scheduler = {
 
   diagnoseUnplaced(student, schedule, settings){
     const workDaysAvail = settings.workDays.filter(d => { const av=student.availability[d]; return av&&av.on; });
-    if(workDaysAvail.length === 0) return 'Δεν υπάρχουν κοινές διαθέσιμες μέρες';
+    if(workDaysAvail.length === 0) return t('diag_no_common_days');
     const cnt = this.countPlaced(student.id, schedule);
-    if(cnt > 0) return `Τοποθετήθηκε ${cnt}/${student.lessonsPerWeek}`;
-    return 'Δεν βρέθηκε ελεύθερη θέση στο παράθυρο';
+    if(cnt > 0) return t('diag_placed_count').replace('{c}',cnt).replace('{t}',student.lessonsPerWeek);
+    return t('diag_no_free_slot');
   },
 
   // Phase 3: Simulated Annealing — cross-day reassignment to minimize total km
@@ -3184,7 +3190,7 @@ const App = {
 
   async optimizeSchedule(){
     const btn = document.getElementById('optimize-btn');
-    if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Υπολογισμός...'; }
+    if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> '+t('debug_calc_prefix'); }
 
     // Estimate km BEFORE optimization using pseudo-coords
     const kmBefore = this._estimateTotalKm(state.schedule);
@@ -3253,19 +3259,19 @@ const App = {
     }
 
     // Phase 2: geo-optimize (nearest-neighbor TSP, cross-day swaps, 3-way/4-way cycles)
-    schedProgress(45,'Φάση 2 — Γεωγραφική βελτιστοποίηση','Ταξινόμηση κατά απόσταση…','🗺️');
+    schedProgress(45,t('phase2_title'),t('phase2_sub'),'🗺️');
     await new Promise(r=>setTimeout(r,30));
     Scheduler.geoOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn);
     // Phase 3: Simulated Annealing — 25s cross-day reassignment
-    schedProgress(55,'Φάση 3 — Simulated Annealing','Ελαχιστοποίηση χιλιομέτρων (25s)…','🔥');
+    schedProgress(55,t('phase3_title'),t('phase3_sub'),'🔥');
     await new Promise(r=>setTimeout(r,30));
     await Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
     // Phase 4: repair pass — try to place students left out after SA freed up time
-    schedProgress(88,'Φάση 4 — Τελική τοποθέτηση','Επανατοποθέτηση αδύνατων…','🔧');
+    schedProgress(88,t('phase4_title'),t('phase4_sub'),'🔧');
     await new Promise(r=>setTimeout(r,30));
     Scheduler.saRepair(state.schedule, state.students, state.settings, state.schedulerResult);
     // Phase 5: LNS — destroy/repair to place remaining students (10s)
-    schedProgress(95,'Φάση 5 — LNS','Επανατοποθέτηση με destroy-repair (10s)…','🔍');
+    schedProgress(95,t('phase5_title'),t('phase5_sub'),'🔍');
     await new Promise(r=>setTimeout(r,30));
     Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000);
     // Verify constraints
@@ -3285,7 +3291,7 @@ const App = {
 
     schedProgress(null,null,null,null);
     this.renderSchedule();
-    if(btn){ btn.disabled=false; btn.innerHTML='Βελτιστοποίηση με χάρτη'; }
+    if(btn){ btn.disabled=false; btn.innerHTML=t('btn_optimize_short'); }
   },
 
   _estimateTotalKm(schedule){
@@ -3516,27 +3522,27 @@ const App = {
     s.innerHTML = `
       <div class="hero">
         <div class="hero-greeting">${greeting}</div>
-        <div class="hero-title">${name?name+', ':''}<span class="accent">RoutePal</span>${name?'':' — Καλώς ήρθατε'}</div>
+        <div class="hero-title">${name?name+', ':''}<span class="accent">RoutePal</span>${name?'':t('home_welcome')}</div>
       </div>
       ${state._scheduleStale && state.students.length>0 ? `
         <div style="margin:0 16px 12px;background:rgba(217,119,6,.1);border:1.5px solid rgba(217,119,6,.35);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           <div style="flex:1">
-            <div style="font-weight:700;font-size:13px;color:#d97706">Πρόγραμμα μη ενημερωμένο</div>
-            <div style="font-size:12px;color:var(--text2)">Έχουν αλλάξει μαθητές — πατήστε Υπολογισμός</div>
+            <div style="font-weight:700;font-size:13px;color:#d97706">${t('home_schedule_stale_title')}</div>
+            <div style="font-size:12px;color:var(--text2)">${t('home_schedule_stale_sub')}</div>
           </div>
-          <button onclick="App.runAndNotify()" style="padding:8px 14px;background:#d97706;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Υπολογισμός</button>
+          <button onclick="App.runAndNotify()" style="padding:8px 14px;background:#d97706;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">${t('btn_calculate')}</button>
         </div>
       `:''}
       <div class="stats-grid">
         <div class="stat-card accent-green">
-          <div class="stat-val">${todaySlots.length}<span> σήμερα</span></div>
+          <div class="stat-val">${todaySlots.length}<span> ${t('home_today_suffix')}</span></div>
           <div class="stat-label">${L.sessions} ${DAYS_FULL[todayNum]||''}</div>
           <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,todaySlots.length/5*100)}%"></div></div>
         </div>
         <div class="stat-card accent-blue">
           <div class="stat-val">${placedCount}<span>/${totalLessons}</span></div>
-          <div class="stat-label">Εβδομάδα</div>
+          <div class="stat-label">${t('home_week')}</div>
           <div class="progress-bar"><div class="progress-fill" style="width:${totalLessons?placedCount/totalLessons*100:0}%;background:var(--blue)"></div></div>
         </div>
       </div>
@@ -3547,54 +3553,54 @@ const App = {
         </div>
         <div class="stat-card">
           <div class="stat-val">${state.settings.travelMargin??3}<span>λ</span></div>
-          <div class="stat-label">Margin ασφαλείας</div>
+          <div class="stat-label">${t('home_margin_safety')}</div>
         </div>
       </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-val">${(state.schedule ? Object.values(state.schedule).flat().reduce((a,s)=>a+s.duration,0)/60 : 0).toFixed(1)}<span>ω</span></div>
-          <div class="stat-label">Ώρες/εβδ</div>
+          <div class="stat-label">${t('home_hours_wk_short')}</div>
         </div>
         <div class="stat-card">
           <div class="stat-val">${state.scheduleKmAfter != null ? state.scheduleKmAfter.toFixed(1) : (state.scheduleKmBefore != null ? state.scheduleKmBefore.toFixed(1) : '—')}<span>km</span></div>
-          <div class="stat-label">${state.scheduleKmAfter != null ? 'Km εβδ (βελτ.)' : 'Km εβδ (εκτίμ.)'}</div>
+          <div class="stat-label">${state.scheduleKmAfter != null ? t('home_km_optimized') : t('home_km_estimated')}</div>
         </div>
       </div>
       ${allFit ? `
       <div style="margin:0 16px 12px;background:rgba(5,150,105,.08);border:1.5px solid rgba(5,150,105,.3);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>
         <div>
-          <div style="font-weight:700;font-size:14px;color:#059669">Χώρεσαν όλοι οι μαθητές!</div>
-          <div style="font-size:12px;color:var(--text2)">${placedCount}/${totalLessons} μαθήματα τοποθετήθηκαν</div>
+          <div style="font-weight:700;font-size:14px;color:#059669">${t('home_all_fit')}</div>
+          <div style="font-size:12px;color:var(--text2)">${placedCount}/${totalLessons} ${t('home_lessons_suffix')}</div>
         </div>
       </div>` : unplacedStudents.length>0 ? `
       <div class="warning-banner">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <span><b>${unplacedStudents.length} μαθητής/ές δεν χωράει πλήρως</b>: ${unplacedStudents.map(s=>esc(s.name)).join(', ')}. Δες Πρόγραμμα για λεπτομέρειες.</span>
+        <span><b>${unplacedStudents.length} ${t('home_unplaced_suffix')}</b>: ${unplacedStudents.map(s=>esc(s.name)).join(', ')}. ${t('home_see_schedule')}.</span>
       </div>`:''}
-      <div class="section-title">Σήμερα · ${DAYS_FULL[todayNum]||'—'}</div>
+      <div class="section-title">${t('home_today_label')} · ${DAYS_FULL[todayNum]||'—'}</div>
       ${todaySlots.length===0?`
         <div style="padding:16px 16px 0">
           <div class="card-sm" style="text-align:center;color:var(--text2);font-size:14px;padding:20px">
-            ${(state.settings.workDays||[]).includes(todayNum)?'Δεν υπάρχουν μαθήματα σήμερα':'Σήμερα δεν εργάζεστε'}
+            ${(state.settings.workDays||[]).includes(todayNum)?t('home_no_lessons_today'):t('home_not_working_today')}
           </div>
         </div>`
       : todaySlots.map((slot,i)=>this.miniSlot(slot,i)).join('')}
       <div style="padding:16px 16px 0;display:flex;gap:10px">
         <button class="btn btn-secondary" style="flex:1" onclick="App.nav('schedule')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Πρόγραμμα
+          ${t('nav_schedule')}
         </button>
         <button class="btn btn-primary" style="flex:1" onclick="App.nav('route')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-          Διαδρομή
+          ${t('nav_route')}
         </button>
       </div>
     `;
   },
 
   miniSlot(slot, idx){
-    const mergeTag = slot.merged ? `<span class="merge-badge">ΜΠΛΟΚ ${slot.mergedCount}×${slot.originalDuration}λ</span>` : '';
+    const mergeTag = slot.merged ? `<span class="merge-badge">${t('merge_badge_label')} ${slot.mergedCount}×${slot.originalDuration}λ</span>` : '';
     return `
       <div class="slot-block ${COLORS[slot.color||0]}${slot.merged?' merged':''}${slot.isGroup?' group-slot':''}" style="margin-bottom:8px">
         <div class="slot-time">${slot.start} – ${slot.end}</div>
@@ -3608,9 +3614,9 @@ const App = {
 
   getGreeting(){
     const h = new Date().getHours();
-    if(h<12) return 'Καλημέρα';
-    if(h<17) return 'Καλό απόγευμα';
-    return 'Καλησπέρα';
+    if(h<12) return t('greeting_morning');
+    if(h<17) return t('greeting_afternoon');
+    return t('greeting_evening');
   },
 
   // ---- STUDENTS ----
@@ -3623,16 +3629,16 @@ const App = {
         <div class="topbar-inner">
           <div>
             <div class="logo">Route<span>Pal</span></div>
-            <div class="topbar-sub">${L.clients} · ${students.length} εγγεγραμμένοι</div>
+            <div class="topbar-sub">${L.clients} · ${students.length} ${t('students_registered_suffix')}</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             ${students.length>0?`<button class="btn btn-secondary" onclick="App.geocodeAllStudents()" id="btn-geocode-all" style="padding:8px 12px;font-size:12px">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-              Χάρτης
+              ${t('students_map_btn')}
             </button>`:''}
             <button class="btn btn-primary" onclick="App.openStudentDrawer(null)" style="padding:8px 14px">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Νέος
+              ${t('students_new_btn')}
             </button>
           </div>
         </div>
@@ -3640,17 +3646,17 @@ const App = {
       ${students.length===0?`
         <div class="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          <h3>Δεν υπάρχουν ${L.clients.toLowerCase()}</h3>
-          <p>Προσθέστε τον πρώτο σας ${L.client.toLowerCase()} για να ξεκινήσει η χρήση του RoutePal</p>
-          <button class="btn btn-primary" onclick="App.openStudentDrawer(null)">Προσθήκη ${L.client}</button>
+          <h3>${tf('students_empty_title',{clients:L.clients.toLowerCase()})}</h3>
+          <p>${tf('students_empty_sub',{client:L.client.toLowerCase()})}</p>
+          <button class="btn btn-primary" onclick="App.openStudentDrawer(null)">${tf('students_add_btn',{client:L.client})}</button>
         </div>
       `:`
         ${Object.keys(state.coords).filter(k=>k!=='home').length>0?`
           <div style="margin:0 0 8px;background:var(--bg2);border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;cursor:pointer" onclick="App.toggleStudentsMap()">
-              <span style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em">ΧΑΡΤΗΣ ΤΟΠΟΘΕΣΙΩΝ</span>
+              <span style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em">${t('students_map_locations_label')}</span>
               <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-size:11px;color:var(--text3)">${Object.keys(state.coords).filter(k=>k!=='home').length} τοποθεσίες</span>
+                <span style="font-size:11px;color:var(--text3)">${Object.keys(state.coords).filter(k=>k!=='home').length} ${t('students_map_locations_count')}</span>
                 <svg id="map-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3);transition:transform .2s;transform:rotate(${state._mapExpanded?'180':'0'}deg)"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
@@ -3679,7 +3685,7 @@ const App = {
     if(!el || typeof L === 'undefined') return;
     if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
     const geocodedStudents = state.students.filter(s => state.coords[s.id]);
-    if(geocodedStudents.length === 0){ el.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">Δεν υπάρχουν geocoded τοποθεσίες</div>'; return; }
+    if(geocodedStudents.length === 0){ el.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">${t('students_map_no_geocoded')}</div>`; return; }
     const homeC = state.coords['home'];
     const pts = geocodedStudents.map(s=>state.coords[s.id]);
     const allPts = homeC ? [homeC,...pts] : pts;
@@ -3692,7 +3698,7 @@ const App = {
     el._leaflet_map = map;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
     if(homeC){
-      L.marker([homeC.lat,homeC.lon],{icon:L.divIcon({className:'',html:'<div style="width:18px;height:18px;background:#7c3aed;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[18,18],iconAnchor:[9,9]})}).bindTooltip('🏠 Σπίτι',{permanent:false}).addTo(map);
+      L.marker([homeC.lat,homeC.lon],{icon:L.divIcon({className:'',html:'<div style="width:18px;height:18px;background:#7c3aed;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[18,18],iconAnchor:[9,9]})}).bindTooltip(t('home_marker_tooltip'),{permanent:false}).addTo(map);
     }
     const avatarColors=['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
     geocodedStudents.forEach(s=>{
@@ -3719,29 +3725,29 @@ const App = {
           <div class="student-avatar" style="background:${bg}20;color:${bg};border:1px solid ${bg}40">${initials}</div>
           <div class="student-info">
             <div class="student-name">${esc(st.name)}</div>
-            <div class="student-sub">${esc(st.subject)} · ${st.lessonsPerWeek}x/εβδ · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} τοποθ.</span></div>
+            <div class="student-sub">${esc(st.subject)} · ${st.lessonsPerWeek}${t('student_per_week_suffix')} · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="student-body" id="sb-${st.id}">
-          <div class="student-detail-row"><span class="student-detail-label">Διεύθυνση</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="Geocoded ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="Δεν έχει geocodαριστεί"> ○</span>`}</span></div>
-          <div class="student-detail-row"><span class="student-detail-label">Διάρκεια</span><span>${st.lessonDuration} λεπτά</span></div>
-          <div class="student-detail-row"><span class="student-detail-label">Τύπος</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?'Ομάδα: '+esc(st.group):'Ατομικό'}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">${t('student_address_label')}</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="${t('student_geocoded_title')} ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="${t('student_not_geocoded_title')}"> ○</span>`}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">${t('student_duration_label')}</span><span>${st.lessonDuration} ${t('student_minutes_suffix')}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">${t('student_type_label')}</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?t('student_type_group_prefix')+': '+esc(st.group):t('student_type_solo')}</span></div>
           ${st.pairedWith ? (()=>{
             const partner = state.students.find(s=>s.id===st.pairedWith);
             const linkedBack = partner && partner.pairedWith===st.id;
-            return `<div class="student-detail-row"><span class="student-detail-label">Ζεύγος με</span><span class="chip ${linkedBack?'chip-purple':'chip-red'}">${partner?esc(partner.name):'⚠ άγνωστος μαθητής'}${linkedBack?'':' ⚠ μη αμφίδρομο'}</span></div>`;
+            return `<div class="student-detail-row"><span class="student-detail-label">${t('student_paired_label')}</span><span class="chip ${linkedBack?'chip-purple':'chip-red'}">${partner?esc(partner.name):t('student_unknown_partner')}${linkedBack?'':' '+t('student_not_mutual')}</span></div>`;
           })() : ''}
-          <div class="student-detail-row"><span class="student-detail-label">Διαθεσιμότητα</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${avDays||'—'}</span></div>
-          ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">Σημειώσεις</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${esc(st.notes)}</span></div>`:''}
+          <div class="student-detail-row"><span class="student-detail-label">${t('student_availability_label')}</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${avDays||'—'}</span></div>
+          ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">${t('student_notes_label')}</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${esc(st.notes)}</span></div>`:''}
           <div class="student-actions">
             <button class="btn btn-secondary" style="flex:1" onclick="App.openStudentDrawer('${st.id}')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Επεξεργασία
+              ${t('btn_edit')}
             </button>
             <button class="btn btn-danger" style="flex:1" onclick="App.deleteStudent('${st.id}')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-              Διαγραφή
+              ${t('btn_delete')}
             </button>
           </div>
         </div>
@@ -3762,7 +3768,7 @@ const App = {
     const isNew = !id;
     const st = id ? state.students.find(s=>s.id===id) : null;
     const L = getLabels();
-    document.getElementById('drawer-student-title').textContent = isNew?`Νέος ${L.client}`:`Επεξεργασία ${L.client}`;
+    document.getElementById('drawer-student-title').textContent = isNew?`${t('drawer_new_prefix')} ${L.client}`:`${t('drawer_edit_prefix')} ${L.client}`;
     document.getElementById('drawer-student-body').innerHTML = this.buildStudentForm(st);
     this.initStudentFormEvents();
     document.getElementById('drawer-student-overlay').classList.add('open');
@@ -3772,7 +3778,7 @@ const App = {
     document.getElementById('drawer-student-overlay').classList.remove('open');
     state.editingStudentId = null;
     const saveBtn = document.querySelector('#drawer-student .drawer-footer .btn-primary');
-    if(saveBtn){ saveBtn.disabled=false; saveBtn.style.opacity=''; saveBtn.textContent='Αποθήκευση'; }
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.style.opacity=''; saveBtn.textContent=t('btn_save'); }
   },
 
   buildStudentForm(st){
@@ -3792,7 +3798,7 @@ const App = {
           </div>
           <div class="avail-time-row" id="avtime-${d}" style="display:${on?'flex':'none'}">
             <input type="time" id="avstart-${d}" value="${av?.start||'15:00'}">
-            <span class="avail-sep">έως</span>
+            <span class="avail-sep">${t('form_to')}</span>
             <input type="time" id="avend-${d}" value="${av?.end||'21:30'}">
           </div>
         </div>`;
