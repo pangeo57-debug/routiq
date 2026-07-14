@@ -633,6 +633,7 @@ const I18N = {
     settings_travel_fuel:'Μεταφορά & Καύσιμα', settings_blocked:'Μπλοκαρισμένες Ώρες', settings_maps:'Χάρτες & Δρομολόγηση',
     settings_save:'Αποθήκευση ρυθμίσεων', settings_install:'Εγκατάσταση εφαρμογής', settings_data:'Διαχείριση δεδομένων',
     settings_reset:'Επαναφορά demo δεδομένων', settings_export:'Εξαγωγή', settings_import:'Εισαγωγή',
+    settings_full_wipe:'Πλήρης καθαρισμός δεδομένων',
     settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
     btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...', common_please_wait:'Παρακαλώ περιμένετε', unit_min:'λ', unit_hr:'ω', unit_meter:'μ', unit_km:'χλμ',
     btn_delete:'Διαγραφή', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
@@ -720,6 +721,8 @@ const I18N = {
     confirm_test_students_text:'Θα αντικατασταθούν όλοι οι τρέχοντες μαθητές με {n} τυχαίους δοκιμαστικούς μαθητές στην Πάτρα, και θα τρέξει αυτόματα ο προγραμματισμός με πραγματικό geocoding. Συνέχεια;',
     toast_test_students_loaded:'Φορτώθηκαν {n} δοκιμαστικοί μαθητές — υπολογισμός...',
     confirm_reset_title:'Επαναφορά δεδομένων', confirm_reset_text:'Όλα τα δεδομένα θα διαγραφούν και θα φορτωθούν ξανά τα demo δεδομένα.',
+    confirm_full_wipe_title:'Πλήρης καθαρισμός δεδομένων',
+    confirm_full_wipe_text:'Θα διαγραφούν ΟΛΑ τα δεδομένα — μαθητές, πρόγραμμα, ρυθμίσεις, γλώσσα — χωρίς επαναφορά demo δεδομένων. Η εφαρμογή θα ξεκινήσει από την αρχή, σαν να την ανοίγεις για πρώτη φορά. Αυτή η ενέργεια δεν αναιρείται.',
     toast_invalid_file:'Μη έγκυρο αρχείο', toast_import_success:'Δεδομένα εισήχθησαν επιτυχώς', toast_error_prefix:'Σφάλμα',
     toast_export_success:'Δεδομένα εξήχθησαν', onboarding_welcome:'Καλώς ήρθατε! Ας ρυθμίσουμε μερικά βασικά.',
     onboarding_profession_label:'ΕΠΑΓΓΕΛΜΑ', onboarding_duration_label:'ΔΙΑΡΚΕΙΑ ΜΑΘΗΜΑΤΟΣ', onboarding_address_label:'ΔΙΕΥΘΥΝΣΗ ΣΠΙΤΙΟΥ',
@@ -777,6 +780,7 @@ const I18N = {
     settings_travel_fuel:'Travel & Fuel', settings_blocked:'Blocked Times', settings_maps:'Maps & Routing',
     settings_save:'Save settings', settings_install:'Install app', settings_data:'Data Management',
     settings_reset:'Reset to demo data', settings_export:'Export', settings_import:'Import',
+    settings_full_wipe:'Wipe all data completely',
     settings_test_algo:'Algorithm Test', settings_language:'Language',
     btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...', common_please_wait:'Please wait', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
     btn_delete:'Delete', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
@@ -864,6 +868,8 @@ const I18N = {
     confirm_test_students_text:'All current students will be replaced with {n} random test students in Patras, and scheduling will run automatically with real geocoding. Continue?',
     toast_test_students_loaded:'Loaded {n} test students — calculating...',
     confirm_reset_title:'Reset data', confirm_reset_text:'All data will be deleted and demo data will be loaded again.',
+    confirm_full_wipe_title:'Wipe all data completely',
+    confirm_full_wipe_text:"ALL data will be deleted — students, schedule, settings, language — with no demo data reload. The app will restart as if opened for the first time. This action can't be undone.",
     toast_invalid_file:'Invalid file', toast_import_success:'Data imported successfully', toast_error_prefix:'Error',
     toast_export_success:'Data exported', onboarding_welcome:"Welcome! Let's set up a few basics.",
     onboarding_profession_label:'PROFESSION', onboarding_duration_label:'LESSON DURATION', onboarding_address_label:'HOME ADDRESS',
@@ -921,6 +927,7 @@ const I18N = {
     settings_travel_fuel:'Trajet & Carburant', settings_blocked:'Heures bloquées', settings_maps:'Cartes & Itinéraires',
     settings_save:'Enregistrer', settings_install:"Installer l'application", settings_data:'Gestion des données',
     settings_reset:'Réinitialiser aux données de démo', settings_export:'Exporter', settings_import:'Importer',
+    settings_full_wipe:'Effacer complètement toutes les données',
     settings_test_algo:'Test algorithme', settings_language:'Langue',
     btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...', common_please_wait:'Veuillez patienter', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
     btn_delete:'Supprimer', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
@@ -1008,6 +1015,8 @@ const I18N = {
     confirm_test_students_text:'Tous les élèves actuels seront remplacés par {n} élèves de test aléatoires à Patras, et la planification s\'exécutera automatiquement avec un géocodage réel. Continuer ?',
     toast_test_students_loaded:'{n} élèves de test chargés — calcul en cours...',
     confirm_reset_title:'Réinitialiser les données', confirm_reset_text:'Toutes les données seront supprimées et les données de démo seront rechargées.',
+    confirm_full_wipe_title:'Effacer complètement toutes les données',
+    confirm_full_wipe_text:"TOUTES les données seront supprimées — élèves, programme, réglages, langue — sans recharger les données de démo. L'application redémarrera comme à la première ouverture. Cette action est irréversible.",
     toast_invalid_file:'Fichier invalide', toast_import_success:'Données importées avec succès', toast_error_prefix:'Erreur',
     toast_export_success:'Données exportées', onboarding_welcome:'Bienvenue ! Configurons quelques éléments de base.',
     onboarding_profession_label:'PROFESSION', onboarding_duration_label:'DURÉE DU COURS', onboarding_address_label:'ADRESSE DU DOMICILE',
@@ -1065,6 +1074,7 @@ const I18N = {
     settings_travel_fuel:'Fahrt & Kraftstoff', settings_blocked:'Blockierte Zeiten', settings_maps:'Karten & Routing',
     settings_save:'Einstellungen speichern', settings_install:'App installieren', settings_data:'Datenverwaltung',
     settings_reset:'Auf Demo-Daten zurücksetzen', settings_export:'Exportieren', settings_import:'Importieren',
+    settings_full_wipe:'Alle Daten vollständig löschen',
     settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
     btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...', common_please_wait:'Bitte warten', unit_min:'Min', unit_hr:'Std', unit_meter:'m', unit_km:'km',
     btn_delete:'Löschen', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
@@ -1152,6 +1162,8 @@ const I18N = {
     confirm_test_students_text:'Alle aktuellen Schüler werden durch {n} zufällige Testschüler in Patras ersetzt, und die Planung läuft automatisch mit echtem Geocoding. Fortfahren?',
     toast_test_students_loaded:'{n} Testschüler geladen — Berechnung läuft...',
     confirm_reset_title:'Daten zurücksetzen', confirm_reset_text:'Alle Daten werden gelöscht und die Demo-Daten erneut geladen.',
+    confirm_full_wipe_title:'Alle Daten vollständig löschen',
+    confirm_full_wipe_text:'ALLE Daten werden gelöscht — Schüler, Stundenplan, Einstellungen, Sprache — ohne erneutes Laden der Demo-Daten. Die App startet neu, als würde sie zum ersten Mal geöffnet. Diese Aktion kann nicht rückgängig gemacht werden.',
     toast_invalid_file:'Ungültige Datei', toast_import_success:'Daten erfolgreich importiert', toast_error_prefix:'Fehler',
     toast_export_success:'Daten exportiert', onboarding_welcome:'Willkommen! Lass uns ein paar Grundlagen einrichten.',
     onboarding_profession_label:'BERUF', onboarding_duration_label:'STUNDENDAUER', onboarding_address_label:'HEIMADRESSE',
@@ -5157,6 +5169,10 @@ const App = {
             ${t('settings_import')}
           </button>
         </div>
+        <button class="btn btn-danger btn-full" onclick="App.fullWipe()" style="margin-top:10px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          ${t('settings_full_wipe')}
+        </button>
       </div>
       <div style="height:16px"></div>
     `;
@@ -5349,6 +5365,20 @@ const App = {
         Storage.clear();
         location.reload();
       }
+    );
+  },
+
+  // Nukes EVERY localStorage key for this origin (not just the app's known Storage.KEYS),
+  // including the onboarding flag — so the app truly restarts from a blank first-run state.
+  fullWipe(){
+    this.confirm(
+      t('confirm_full_wipe_title'),
+      t('confirm_full_wipe_text'),
+      ()=>{
+        localStorage.clear();
+        location.reload();
+      },
+      t('settings_full_wipe')
     );
   },
 
