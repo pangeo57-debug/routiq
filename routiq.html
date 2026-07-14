@@ -724,19 +724,27 @@ const Scheduler = {
     const schedule = {};
     settings.workDays.forEach(d => schedule[d] = []);
 
-    // Phase 0: forceMerge students (single merged block per student)
+    // Phase 0: forceMerge students — split into blocks of at most maxMergeSessions
+    // (defaults to all of them, i.e. one block) so "δίωρο" doesn't silently become a 4ωρο.
     for(const s of students.filter(s => s.forceMerge)){
-      const dur = s.lessonsPerWeek * s.lessonDuration;
+      const blockSize = Math.max(1, Math.min(s.maxMergeSessions||s.lessonsPerWeek, s.lessonsPerWeek));
+      let remaining = s.lessonsPerWeek;
+      const usedDays = new Set();
       for(const day of settings.workDays){
+        if(remaining<=0) break;
+        if(usedDays.has(day)) continue;
         const av = s.availability[day];
         if(!av || !av.on) continue;
+        const sessionsThisBlock = Math.min(blockSize, remaining);
+        const dur = sessionsThisBlock * s.lessonDuration;
         const slot = this.findSlotFixed(s, day, schedule[day]||[], settings, dur);
         if(slot){
           schedule[day].push({ studentId:s.id, studentName:s.name, subject:s.subject||'—',
             address:s.address, color:s.color||0, start:slot.start, end:slot.end,
-            duration:dur, mergedCount:s.lessonsPerWeek, merged:true, originalDuration:s.lessonDuration });
+            duration:dur, mergedCount:sessionsThisBlock, merged:true, originalDuration:s.lessonDuration });
           schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          break;
+          usedDays.add(day);
+          remaining -= sessionsThisBlock;
         }
       }
     }
@@ -3165,10 +3173,17 @@ const App = {
             <div class="settings-sub">Τα μαθήματα της ίδιας μέρας γίνονται ένα συνεχόμενο block, χωρίς χρόνο μετακίνησης ανάμεσά τους</div>
           </span>
           <span class="toggle-switch">
-            <input type="checkbox" id="st-forcemerge" ${st?.forceMerge?'checked':''}>
+            <input type="checkbox" id="st-forcemerge" ${st?.forceMerge?'checked':''} onchange="App.toggleMergeSizeField()">
             <span class="toggle-slider"></span>
           </span>
         </label>
+        <div id="merge-size-field" style="margin-top:8px;display:${st?.forceMerge?'block':'none'}">
+          <label style="font-size:12px">Μέγιστα μαθήματα ανά block — <span id="st-mergesize-val">${st?.maxMergeSessions||st?.lessonsPerWeek||2}</span>× (${((st?.maxMergeSessions||st?.lessonsPerWeek||2)*(st?.lessonDuration??(state.settings.defaultLessonDuration||60)))}λ)</label>
+          <input type="range" id="st-mergesize" min="2" max="${st?.lessonsPerWeek||5}" step="1" value="${st?.maxMergeSessions||st?.lessonsPerWeek||2}"
+            style="width:100%;accent-color:var(--primary)"
+            oninput="document.getElementById('st-mergesize-val').textContent=this.value; App._updateMergeSizeLabel()">
+          <div class="settings-sub" style="margin-top:2px">Αν χρειάζονται περισσότερα, θα φτιαχτούν ξεχωριστά blocks αυτού του μεγέθους σε διαφορετικές μέρες</div>
+        </div>
       </div>
       <div class="form-row" style="margin-top:14px">
         <div class="form-group" style="margin:0">
@@ -3213,6 +3228,21 @@ const App = {
     const freq = Number(document.getElementById('st-freq')?.value)||1;
     const mf = document.getElementById('merge-field');
     if(mf) mf.style.display = freq>=2?'block':'none';
+    const range = document.getElementById('st-mergesize');
+    if(range) range.max = freq;
+  },
+
+  toggleMergeSizeField(){
+    const on = document.getElementById('st-forcemerge')?.checked;
+    const mf = document.getElementById('merge-size-field');
+    if(mf) mf.style.display = on?'block':'none';
+  },
+
+  _updateMergeSizeLabel(){
+    const n = Number(document.getElementById('st-mergesize')?.value)||2;
+    const dur = Number(document.getElementById('st-dur')?.value)||60;
+    const lbl = document.querySelector('#merge-size-field label');
+    if(lbl) lbl.innerHTML = `Μέγιστα μαθήματα ανά block — <span id="st-mergesize-val">${n}</span>× (${n*dur}λ)`;
   },
 
   _addrTimer: null,
@@ -3329,6 +3359,7 @@ const App = {
       pairedWith: document.getElementById('st-paired')?.value||null,
       notes: document.getElementById('st-notes')?.value?.trim()||'',
       forceMerge: document.getElementById('st-forcemerge')?.checked||false,
+      maxMergeSessions: Number(document.getElementById('st-mergesize')?.value)||undefined,
       availability,
       color: state.editingStudentId
         ? (state.students.find(s=>s.id===state.editingStudentId)?.color||0)
