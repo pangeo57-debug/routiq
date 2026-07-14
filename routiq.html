@@ -686,7 +686,7 @@ const I18N = {
     toast_placed_as_block:'{name}: τοποθετήθηκε ως συνδυαστικό μπλοκ',
     route_real_distance:'πραγματικές αποστάσεις', route_map_unavailable:'Χάρτης μη διαθέσιμος',
     route_no_lessons_text:'Δεν υπάρχουν μαθήματα αυτή την ημέρα.', route_travel_estimated_suffix:' (εκτ.)',
-    route_home_label:'Σπίτι', route_arrival_label:'Άφιξη', toast_calc_error:'Σφάλμα κατά τον υπολογισμό',
+    route_home_label:'Σπίτι', route_arrival_label:'Άφιξη', toast_calc_error:'Σφάλμα κατά τον υπολογισμό', route_driving_suffix:'οδήγηση',
     no_blocked_times:'Δεν υπάρχουν μπλοκαρισμένες ώρες', settings_workday_hint:'Επιλέξτε τουλάχιστον μία εργάσιμη ημέρα',
     settings_name_placeholder:'Το όνομά σας', settings_home_geocoded:'✓ γεωκωδικοποιήθηκε', settings_home_not_geocoded:'⚠ Δεν έχει γίνει geocoding',
     settings_home_placeholder:'Οδός αρ., Πόλη', settings_travel_mode_label:'Μέσο μεταφοράς',
@@ -717,6 +717,18 @@ const I18N = {
     onboarding_profession_label:'ΕΠΑΓΓΕΛΜΑ', onboarding_duration_label:'ΔΙΑΡΚΕΙΑ ΜΑΘΗΜΑΤΟΣ', onboarding_address_label:'ΔΙΕΥΘΥΝΣΗ ΣΠΙΤΙΟΥ',
     onboarding_start_btn:'Ξεκινήστε →', onboarding_role_tutor:'Καθηγητής', onboarding_role_physio:'Φυσιοθεραπευτής',
     onboarding_role_beautician:'Αισθητικός', onboarding_role_trainer:'Personal Trainer',
+    profession_tutor_label:'Εκπαιδευτής / Καθηγητής', profession_tutor_client:'Μαθητής', profession_tutor_clients:'Μαθητές', profession_tutor_session:'Μάθημα', profession_tutor_sessions:'Μαθήματα',
+    profession_physiotherapy_label:'Φυσιοθεραπευτής', profession_physiotherapy_client:'Ασθενής', profession_physiotherapy_clients:'Ασθενείς', profession_physiotherapy_session:'Συνεδρία', profession_physiotherapy_sessions:'Συνεδρίες',
+    profession_massage_label:'Μασέρ / Θεραπευτής σώματος', profession_massage_client:'Πελάτης', profession_massage_clients:'Πελάτες', profession_massage_session:'Ραντεβού', profession_massage_sessions:'Ραντεβού',
+    profession_beauty_label:'Αισθητικός / Nail artist', profession_beauty_client:'Πελάτης', profession_beauty_clients:'Πελάτες', profession_beauty_session:'Ραντεβού', profession_beauty_sessions:'Ραντεβού',
+    profession_personal_training_label:'Personal Trainer', profession_personal_training_client:'Αθλητής', profession_personal_training_clients:'Αθλητές', profession_personal_training_session:'Προπόνηση', profession_personal_training_sessions:'Προπονήσεις',
+    profession_music_label:'Μουσικός δάσκαλος', profession_music_client:'Μαθητής', profession_music_clients:'Μαθητές', profession_music_session:'Μάθημα', profession_music_sessions:'Μαθήματα',
+    profession_speech_label:'Λογοθεραπευτής', profession_speech_client:'Ασθενής', profession_speech_clients:'Ασθενείς', profession_speech_session:'Συνεδρία', profession_speech_sessions:'Συνεδρίες',
+    profession_psychologist_label:'Ψυχολόγος / Σύμβουλος', profession_psychologist_client:'Πελάτης', profession_psychologist_clients:'Πελάτες', profession_psychologist_session:'Συνεδρία', profession_psychologist_sessions:'Συνεδρίες',
+    profession_cleaning_label:'Οικιακός καθαρισμός', profession_cleaning_client:'Πελάτης', profession_cleaning_clients:'Πελάτες', profession_cleaning_session:'Επίσκεψη', profession_cleaning_sessions:'Επισκέψεις',
+    profession_pet_label:'Εκπαιδευτής / Groomer κατοικιδίων', profession_pet_client:'Ιδιοκτήτης', profession_pet_clients:'Ιδιοκτήτες', profession_pet_session:'Ραντεβού', profession_pet_sessions:'Ραντεβού',
+    profession_repair_label:'Τεχνικός / Επισκευαστής', profession_repair_client:'Πελάτης', profession_repair_clients:'Πελάτες', profession_repair_session:'Επίσκεψη', profession_repair_sessions:'Επισκέψεις',
+    profession_other_label:'Άλλο (ελεύθερος επαγγελματίας)', profession_other_client:'Πελάτης', profession_other_clients:'Πελάτες', profession_other_session:'Ραντεβού', profession_other_sessions:'Ραντεβού',
     debug_calc_prefix:'Υπολογισμός...', debug_geocoding:'Geocoding...',
     phase1_title:'Φάση 1 — Τοποθέτηση μαθητών', phase1_sub:'Backtracking (20s)…',
     phase1b_title:'Φάση 1 — Τοποθέτηση', phase1b_sub:'Δοκιμή {n} τυχαίων σειρών…',
@@ -810,7 +822,7 @@ const I18N = {
     toast_placed_as_block:'{name}: placed as a combined block',
     route_real_distance:'real distances', route_map_unavailable:'Map unavailable',
     route_no_lessons_text:'No lessons this day.', route_travel_estimated_suffix:' (est.)',
-    route_home_label:'Home', route_arrival_label:'Arrival', toast_calc_error:'Error during calculation',
+    route_home_label:'Home', route_arrival_label:'Arrival', toast_calc_error:'Error during calculation', route_driving_suffix:'driving',
     no_blocked_times:'No blocked times', settings_workday_hint:'Select at least one working day',
     settings_name_placeholder:'Your name', settings_home_geocoded:'✓ geocoded', settings_home_not_geocoded:'⚠ Not geocoded yet',
     settings_home_placeholder:'Street no., City', settings_travel_mode_label:'Mode of transport',
@@ -841,6 +853,18 @@ const I18N = {
     onboarding_profession_label:'PROFESSION', onboarding_duration_label:'LESSON DURATION', onboarding_address_label:'HOME ADDRESS',
     onboarding_start_btn:'Get started →', onboarding_role_tutor:'Tutor', onboarding_role_physio:'Physiotherapist',
     onboarding_role_beautician:'Beautician', onboarding_role_trainer:'Personal Trainer',
+    profession_tutor_label:'Tutor / Teacher', profession_tutor_client:'Student', profession_tutor_clients:'Students', profession_tutor_session:'Lesson', profession_tutor_sessions:'Lessons',
+    profession_physiotherapy_label:'Physiotherapist', profession_physiotherapy_client:'Patient', profession_physiotherapy_clients:'Patients', profession_physiotherapy_session:'Session', profession_physiotherapy_sessions:'Sessions',
+    profession_massage_label:'Massage Therapist / Bodyworker', profession_massage_client:'Client', profession_massage_clients:'Clients', profession_massage_session:'Appointment', profession_massage_sessions:'Appointments',
+    profession_beauty_label:'Beautician / Nail Artist', profession_beauty_client:'Client', profession_beauty_clients:'Clients', profession_beauty_session:'Appointment', profession_beauty_sessions:'Appointments',
+    profession_personal_training_label:'Personal Trainer', profession_personal_training_client:'Athlete', profession_personal_training_clients:'Athletes', profession_personal_training_session:'Workout', profession_personal_training_sessions:'Workouts',
+    profession_music_label:'Music Teacher', profession_music_client:'Student', profession_music_clients:'Students', profession_music_session:'Lesson', profession_music_sessions:'Lessons',
+    profession_speech_label:'Speech Therapist', profession_speech_client:'Patient', profession_speech_clients:'Patients', profession_speech_session:'Session', profession_speech_sessions:'Sessions',
+    profession_psychologist_label:'Psychologist / Counselor', profession_psychologist_client:'Client', profession_psychologist_clients:'Clients', profession_psychologist_session:'Session', profession_psychologist_sessions:'Sessions',
+    profession_cleaning_label:'House Cleaning', profession_cleaning_client:'Client', profession_cleaning_clients:'Clients', profession_cleaning_session:'Visit', profession_cleaning_sessions:'Visits',
+    profession_pet_label:'Pet Trainer / Groomer', profession_pet_client:'Owner', profession_pet_clients:'Owners', profession_pet_session:'Appointment', profession_pet_sessions:'Appointments',
+    profession_repair_label:'Technician / Repair Person', profession_repair_client:'Client', profession_repair_clients:'Clients', profession_repair_session:'Visit', profession_repair_sessions:'Visits',
+    profession_other_label:'Other (freelancer)', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Appointment', profession_other_sessions:'Appointments',
     debug_calc_prefix:'Calculating...', debug_geocoding:'Geocoding...',
     phase1_title:'Phase 1 — Placing students', phase1_sub:'Backtracking (20s)…',
     phase1b_title:'Phase 1 — Placement', phase1b_sub:'Trying {n} random orders…',
@@ -934,7 +958,7 @@ const I18N = {
     toast_placed_as_block:'{name} : placé comme bloc combiné',
     route_real_distance:'distances réelles', route_map_unavailable:'Carte indisponible',
     route_no_lessons_text:'Aucun cours ce jour.', route_travel_estimated_suffix:' (est.)',
-    route_home_label:'Domicile', route_arrival_label:'Arrivée', toast_calc_error:'Erreur lors du calcul',
+    route_home_label:'Domicile', route_arrival_label:'Arrivée', toast_calc_error:'Erreur lors du calcul', route_driving_suffix:'trajet',
     no_blocked_times:'Aucune heure bloquée', settings_workday_hint:'Sélectionnez au moins un jour de travail',
     settings_name_placeholder:'Votre nom', settings_home_geocoded:'✓ géocodé', settings_home_not_geocoded:'⚠ Pas encore géocodé',
     settings_home_placeholder:'Rue n°, Ville', settings_travel_mode_label:'Moyen de transport',
@@ -965,6 +989,18 @@ const I18N = {
     onboarding_profession_label:'PROFESSION', onboarding_duration_label:'DURÉE DU COURS', onboarding_address_label:'ADRESSE DU DOMICILE',
     onboarding_start_btn:'Commencer →', onboarding_role_tutor:'Professeur', onboarding_role_physio:'Kinésithérapeute',
     onboarding_role_beautician:'Esthéticienne', onboarding_role_trainer:'Personal Trainer',
+    profession_tutor_label:'Enseignant / Professeur', profession_tutor_client:'Élève', profession_tutor_clients:'Élèves', profession_tutor_session:'Cours', profession_tutor_sessions:'Cours',
+    profession_physiotherapy_label:'Kinésithérapeute', profession_physiotherapy_client:'Patient', profession_physiotherapy_clients:'Patients', profession_physiotherapy_session:'Séance', profession_physiotherapy_sessions:'Séances',
+    profession_massage_label:'Masseur / Thérapeute corporel', profession_massage_client:'Client', profession_massage_clients:'Clients', profession_massage_session:'Rendez-vous', profession_massage_sessions:'Rendez-vous',
+    profession_beauty_label:'Esthéticienne / Nail artist', profession_beauty_client:'Client', profession_beauty_clients:'Clients', profession_beauty_session:'Rendez-vous', profession_beauty_sessions:'Rendez-vous',
+    profession_personal_training_label:'Personal Trainer', profession_personal_training_client:'Athlète', profession_personal_training_clients:'Athlètes', profession_personal_training_session:'Séance', profession_personal_training_sessions:'Séances',
+    profession_music_label:'Professeur de musique', profession_music_client:'Élève', profession_music_clients:'Élèves', profession_music_session:'Cours', profession_music_sessions:'Cours',
+    profession_speech_label:'Orthophoniste', profession_speech_client:'Patient', profession_speech_clients:'Patients', profession_speech_session:'Séance', profession_speech_sessions:'Séances',
+    profession_psychologist_label:'Psychologue / Conseiller', profession_psychologist_client:'Client', profession_psychologist_clients:'Clients', profession_psychologist_session:'Séance', profession_psychologist_sessions:'Séances',
+    profession_cleaning_label:'Ménage à domicile', profession_cleaning_client:'Client', profession_cleaning_clients:'Clients', profession_cleaning_session:'Visite', profession_cleaning_sessions:'Visites',
+    profession_pet_label:'Éducateur / Toiletteur canin', profession_pet_client:'Propriétaire', profession_pet_clients:'Propriétaires', profession_pet_session:'Rendez-vous', profession_pet_sessions:'Rendez-vous',
+    profession_repair_label:'Technicien / Réparateur', profession_repair_client:'Client', profession_repair_clients:'Clients', profession_repair_session:'Visite', profession_repair_sessions:'Visites',
+    profession_other_label:'Autre (indépendant)', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Rendez-vous', profession_other_sessions:'Rendez-vous',
     debug_calc_prefix:'Calcul en cours...', debug_geocoding:'Géocodage...',
     phase1_title:'Phase 1 — Placement des élèves', phase1_sub:'Backtracking (20s)…',
     phase1b_title:'Phase 1 — Placement', phase1b_sub:'Essai de {n} ordres aléatoires…',
@@ -1058,7 +1094,7 @@ const I18N = {
     toast_placed_as_block:'{name}: als kombinierter Block platziert',
     route_real_distance:'reale Entfernungen', route_map_unavailable:'Karte nicht verfügbar',
     route_no_lessons_text:'Keine Stunden an diesem Tag.', route_travel_estimated_suffix:' (gesch.)',
-    route_home_label:'Zuhause', route_arrival_label:'Ankunft', toast_calc_error:'Fehler bei der Berechnung',
+    route_home_label:'Zuhause', route_arrival_label:'Ankunft', toast_calc_error:'Fehler bei der Berechnung', route_driving_suffix:'Fahrt',
     no_blocked_times:'Keine blockierten Zeiten', settings_workday_hint:'Wählen Sie mindestens einen Arbeitstag',
     settings_name_placeholder:'Ihr Name', settings_home_geocoded:'✓ geocodiert', settings_home_not_geocoded:'⚠ Noch nicht geocodiert',
     settings_home_placeholder:'Straße Nr., Stadt', settings_travel_mode_label:'Verkehrsmittel',
@@ -1089,6 +1125,18 @@ const I18N = {
     onboarding_profession_label:'BERUF', onboarding_duration_label:'STUNDENDAUER', onboarding_address_label:'HEIMADRESSE',
     onboarding_start_btn:'Loslegen →', onboarding_role_tutor:'Lehrer', onboarding_role_physio:'Physiotherapeut',
     onboarding_role_beautician:'Kosmetiker', onboarding_role_trainer:'Personal Trainer',
+    profession_tutor_label:'Nachhilfelehrer / Lehrer', profession_tutor_client:'Schüler', profession_tutor_clients:'Schüler', profession_tutor_session:'Stunde', profession_tutor_sessions:'Stunden',
+    profession_physiotherapy_label:'Physiotherapeut', profession_physiotherapy_client:'Patient', profession_physiotherapy_clients:'Patienten', profession_physiotherapy_session:'Sitzung', profession_physiotherapy_sessions:'Sitzungen',
+    profession_massage_label:'Masseur / Körpertherapeut', profession_massage_client:'Kunde', profession_massage_clients:'Kunden', profession_massage_session:'Termin', profession_massage_sessions:'Termine',
+    profession_beauty_label:'Kosmetiker / Nagelstudio', profession_beauty_client:'Kunde', profession_beauty_clients:'Kunden', profession_beauty_session:'Termin', profession_beauty_sessions:'Termine',
+    profession_personal_training_label:'Personal Trainer', profession_personal_training_client:'Sportler', profession_personal_training_clients:'Sportler', profession_personal_training_session:'Training', profession_personal_training_sessions:'Trainings',
+    profession_music_label:'Musiklehrer', profession_music_client:'Schüler', profession_music_clients:'Schüler', profession_music_session:'Stunde', profession_music_sessions:'Stunden',
+    profession_speech_label:'Logopäde', profession_speech_client:'Patient', profession_speech_clients:'Patienten', profession_speech_session:'Sitzung', profession_speech_sessions:'Sitzungen',
+    profession_psychologist_label:'Psychologe / Berater', profession_psychologist_client:'Klient', profession_psychologist_clients:'Klienten', profession_psychologist_session:'Sitzung', profession_psychologist_sessions:'Sitzungen',
+    profession_cleaning_label:'Hausreinigung', profession_cleaning_client:'Kunde', profession_cleaning_clients:'Kunden', profession_cleaning_session:'Besuch', profession_cleaning_sessions:'Besuche',
+    profession_pet_label:'Haustiertrainer / Groomer', profession_pet_client:'Besitzer', profession_pet_clients:'Besitzer', profession_pet_session:'Termin', profession_pet_sessions:'Termine',
+    profession_repair_label:'Techniker / Reparaturdienst', profession_repair_client:'Kunde', profession_repair_clients:'Kunden', profession_repair_session:'Besuch', profession_repair_sessions:'Besuche',
+    profession_other_label:'Sonstiges (Freiberufler)', profession_other_client:'Kunde', profession_other_clients:'Kunden', profession_other_session:'Termin', profession_other_sessions:'Termine',
     debug_calc_prefix:'Berechnung läuft...', debug_geocoding:'Geocoding...',
     phase1_title:'Phase 1 — Schüler platzieren', phase1_sub:'Backtracking (20s)…',
     phase1b_title:'Phase 1 — Platzierung', phase1b_sub:'{n} zufällige Reihenfolgen werden getestet…',
@@ -3009,22 +3057,22 @@ const Router = {
 // ============================================================
 // LABELS (profession-aware)
 // ============================================================
-const PROFESSIONS = [
-  { value:'tutor',        label:'Εκπαιδευτής / Καθηγητής',        client:'Μαθητής',  clients:'Μαθητές',  session:'Μάθημα',    sessions:'Μαθήματα' },
-  { value:'physiotherapy',label:'Φυσιοθεραπευτής',                 client:'Ασθενής',  clients:'Ασθενείς', session:'Συνεδρία',  sessions:'Συνεδρίες' },
-  { value:'massage',      label:'Μασέρ / Θεραπευτής σώματος',      client:'Πελάτης',  clients:'Πελάτες',  session:'Ραντεβού',  sessions:'Ραντεβού' },
-  { value:'beauty',       label:'Αισθητικός / Nail artist',         client:'Πελάτης',  clients:'Πελάτες',  session:'Ραντεβού',  sessions:'Ραντεβού' },
-  { value:'personal_training', label:'Personal Trainer',           client:'Αθλητής',  clients:'Αθλητές',  session:'Προπόνηση', sessions:'Προπονήσεις' },
-  { value:'music',        label:'Μουσικός δάσκαλος',               client:'Μαθητής',  clients:'Μαθητές',  session:'Μάθημα',    sessions:'Μαθήματα' },
-  { value:'speech',       label:'Λογοθεραπευτής',                  client:'Ασθενής',  clients:'Ασθενείς', session:'Συνεδρία',  sessions:'Συνεδρίες' },
-  { value:'psychologist', label:'Ψυχολόγος / Σύμβουλος',           client:'Πελάτης',  clients:'Πελάτες',  session:'Συνεδρία',  sessions:'Συνεδρίες' },
-  { value:'cleaning',     label:'Οικιακός καθαρισμός',             client:'Πελάτης',  clients:'Πελάτες',  session:'Επίσκεψη',  sessions:'Επισκέψεις' },
-  { value:'pet',          label:'Εκπαιδευτής / Groomer κατοικιδίων',client:'Ιδιοκτήτης',clients:'Ιδιοκτήτες',session:'Ραντεβού',sessions:'Ραντεβού' },
-  { value:'repair',       label:'Τεχνικός / Επισκευαστής',         client:'Πελάτης',  clients:'Πελάτες',  session:'Επίσκεψη',  sessions:'Επισκέψεις' },
-  { value:'other',        label:'Άλλο (ελεύθερος επαγγελματίας)',  client:'Πελάτης',  clients:'Πελάτες',  session:'Ραντεβού',  sessions:'Ραντεβού' },
-];
-const LABELS = Object.fromEntries(PROFESSIONS.map(p=>([p.value, {client:p.client,clients:p.clients,session:p.session,sessions:p.sessions}])));
-function getLabels(){ return LABELS[(typeof state!=='undefined'&&state.settings?.profession)||'tutor'] || LABELS.tutor; }
+const PROFESSION_VALUES = ['tutor','physiotherapy','massage','beauty','personal_training','music','speech','psychologist','cleaning','pet','repair','other'];
+function getProfessions(){
+  return PROFESSION_VALUES.map(value=>({
+    value,
+    label:t('profession_'+value+'_label'),
+    client:t('profession_'+value+'_client'),
+    clients:t('profession_'+value+'_clients'),
+    session:t('profession_'+value+'_session'),
+    sessions:t('profession_'+value+'_sessions'),
+  }));
+}
+function getLabels(){
+  const val=(typeof state!=='undefined'&&state.settings?.profession)||'tutor';
+  const p=getProfessions().find(p=>p.value===val);
+  return p ? {client:p.client,clients:p.clients,session:p.session,sessions:p.sessions} : getProfessions()[0];
+}
 
 let _schedCreepTimer=null;
 function schedProgress(pct, phase, sub, icon){
@@ -4386,7 +4434,7 @@ const App = {
       <div style="margin:0 16px 12px;background:rgba(220,38,38,.07);border:1.5px solid rgba(220,38,38,.25);border-radius:12px;padding:14px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span style="font-weight:700;font-size:14px;color:#dc2626">${unplaced.length} μαθητής/ές χωρίς πλήρες πρόγραμμα</span>
+          <span style="font-weight:700;font-size:14px;color:#dc2626">${unplaced.length} ${t('schedule_unplaced_students')}</span>
         </div>
         ${unplaced.map(u=>{
           const missing = u.needed - u.placed;
@@ -4397,34 +4445,34 @@ const App = {
           <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
               <span style="font-weight:600;font-size:14px">${u.student.name}</span>
-              <span class="chip chip-red">${u.placed}/${u.needed} μαθ.</span>
+              <span class="chip chip-red">${u.placed}/${u.needed} ${t('unplaced_group_badge')}</span>
             </div>
             <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${u.reason}</div>
             ${u.needed >= 2 ? `
             <div style="background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:8px;padding:10px;margin-bottom:6px">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                <span style="font-weight:700;font-size:12px;color:#059669">Λύση Α: Συνδυαστικό μπλοκ ${blockH}</span>
+                <span style="font-weight:700;font-size:12px;color:#059669">${tf('unplaced_solution_combo',{block:blockH})}</span>
               </div>
-              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${u.needed} × ${u.student.lessonDuration}λ → 1 × ${blockMin}λ σε μία μέρα</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_combo_detail',{needed:u.needed,dur:u.student.lessonDuration,total:blockMin})}</div>
               <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;width:100%" onclick="App.forceMergeAndReschedule('${u.student.id}')">
-                Εφαρμογή ως ${blockH} μπλοκ
+                ${tf('unplaced_apply_block',{block:blockH})}
               </button>
             </div>` : ''}
             ${u.suggestionTeacher ? `
             <div style="background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:10px;margin-bottom:6px">
-              <div style="font-weight:700;font-size:12px;color:#7c3aed;margin-bottom:4px">Λύση ${missing>=2?'Β':'Α'}: Παράταση ωραρίου σου</div>
-              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Αν παρατείνεις το ωράριό σου τη <strong>${DAYS_FULL[u.suggestionTeacher.day]}</strong> κατά <strong>+${u.suggestionTeacher.extensionMin} λεπτά</strong>, χωράει κανονικά.</div>
+              <div style="font-weight:700;font-size:12px;color:#7c3aed;margin-bottom:4px">${tf('unplaced_solution_extend_hours',{letter:missing>=2?'B':'A'})}</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_extend_hours_detail',{day:`<strong>${DAYS_FULL[u.suggestionTeacher.day]}</strong>`,min:`<strong>${u.suggestionTeacher.extensionMin}</strong>`})}</div>
               <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;width:100%;border-color:rgba(124,58,237,.3)" onclick="App.applyTeacherExtension(${u.suggestionTeacher.day},${u.suggestionTeacher.extensionMin})">
-                Παράταση +${u.suggestionTeacher.extensionMin}λ (${DAYS_FULL[u.suggestionTeacher.day]})
+                ${tf('unplaced_extend_hours_btn',{min:u.suggestionTeacher.extensionMin,day:DAYS_FULL[u.suggestionTeacher.day]})}
               </button>
             </div>` : ''}
             ${u.suggestionStudent ? `
             <div style="background:rgba(217,119,6,.07);border:1px solid rgba(217,119,6,.2);border-radius:8px;padding:10px">
-              <div style="font-weight:700;font-size:12px;color:var(--orange);margin-bottom:4px">Λύση ${missing>=2?(u.suggestionTeacher?'Γ':'Β'):(u.suggestionTeacher?'Β':'Α')}: Διεύρυνση παραθύρου μαθητή</div>
-              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Αν ο/η ${u.student.name} παραμείνει +${u.suggestionStudent.extensionMin}λ τη <strong>${DAYS_FULL[u.suggestionStudent.day]}</strong>, χωράει.</div>
+              <div style="font-weight:700;font-size:12px;color:var(--orange);margin-bottom:4px">${tf('unplaced_solution_extend_window',{letter:missing>=2?(u.suggestionTeacher?'C':'B'):(u.suggestionTeacher?'B':'A')})}</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_extend_window_detail',{name:u.student.name,day:`<strong>${DAYS_FULL[u.suggestionStudent.day]}</strong>`,min:u.suggestionStudent.extensionMin})}</div>
               <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;width:100%" onclick="App.applyWindowExtension('${u.student.id}',${u.suggestionStudent.day},${u.suggestionStudent.extensionMin})">
-                +${u.suggestionStudent.extensionMin}λ για ${u.student.name} (${DAYS_FULL[u.suggestionStudent.day]})
+                ${tf('unplaced_extend_window_btn',{min:u.suggestionStudent.extensionMin,name:u.student.name,day:DAYS_FULL[u.suggestionStudent.day]})}
               </button>
             </div>` : ''}
           </div>`;
@@ -4458,7 +4506,7 @@ const App = {
     const blockMin = student.lessonsPerWeek * student.lessonDuration;
     if(blockMin > 120){
       const blockH = blockMin >= 60 ? `${Math.floor(blockMin/60)}ω${blockMin%60?(' '+blockMin%60+'λ'):''}` : `${blockMin}λ`;
-      if(!confirm(`Το συνδυαστικό μπλοκ θα είναι ${blockH} — πάνω από 2 ώρες συνεχόμενα. Συνέχεια;`)) return;
+      if(!confirm(tf('confirm_merge_block',{block:blockH}))) return;
     }
     student.forceMerge = true;
     Storage.saveStudents(state.students);
@@ -4477,11 +4525,11 @@ const App = {
         <div class="topbar-inner">
           <div>
             <div class="logo">Route<span>Pal</span></div>
-            <div class="topbar-sub">Διαδρομή</div>
+            <div class="topbar-sub">${t('route_title')}</div>
           </div>
           <button class="btn btn-primary" onclick="App.calcRoute()" id="calc-route-btn" style="padding:8px 12px;font-size:13px">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-            Υπολογισμός
+            ${t('route_calc')}
           </button>
         </div>
       </div>
@@ -4496,7 +4544,7 @@ const App = {
       ${state.routeResults[state.routeDay]?`
         <div style="margin:0 16px 8px;background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          <span style="font-size:13px;color:#059669;font-weight:600">OpenStreetMap — πραγματικές αποστάσεις</span>
+          <span style="font-size:13px;color:#059669;font-weight:600">OpenStreetMap — ${t('route_real_distance')}</span>
         </div>`:''}
       <div id="route-map" style="height:220px;border-radius:12px;margin:0 16px 8px;overflow:hidden;background:var(--bg2)"></div>
       <div id="route-content">
@@ -4510,7 +4558,7 @@ const App = {
     const el = document.getElementById('route-map');
     if(!el) return;
     if(typeof L === 'undefined'){
-      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">Χάρτης μη διαθέσιμος</div>';
+      el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">${t('route_map_unavailable')}</div>`;
       return;
     }
     // Destroy previous instance
@@ -4556,8 +4604,8 @@ const App = {
     if(slots.length===0){
       return `<div class="empty-state" style="padding:32px 24px">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-        <h3>Καμία διαδρομή</h3>
-        <p>Δεν υπάρχουν μαθήματα αυτή την ημέρα.</p>
+        <h3>${t('route_no_route')}</h3>
+        <p>${t('route_no_lessons_text')}</p>
       </div>`;
     }
 
@@ -4594,18 +4642,18 @@ const App = {
       <div class="route-stats-row">
         <div class="route-stat">
           <div class="route-stat-val" style="color:var(--green)">${totalKm}<span style="font-size:14px;color:var(--text2)">km</span></div>
-          <div class="route-stat-label">${hasReal?'Πραγματική':'Εκτιμώμενη'} απόσταση</div>
+          <div class="route-stat-label">${hasReal?t('route_real'):t('route_estimated')} ${t('route_distance')}</div>
         </div>
         <div class="route-stat">
           <div class="route-stat-val" style="color:var(--blue)">${totalMin}<span style="font-size:14px;color:var(--text2)">λ</span></div>
-          <div class="route-stat-label">Ταξίδι${hasReal?'':' (εκτ.)'}</div>
+          <div class="route-stat-label">${t('route_travel')}${hasReal?'':t('route_travel_estimated_suffix')}</div>
         </div>
         <div class="route-stat">
           <div class="route-stat-val" style="color:var(--orange)">€${totalFuel}</div>
-          <div class="route-stat-label">Καύσιμα${hasReal?'':' (εκτ.)'}</div>
+          <div class="route-stat-label">${t('route_fuel')}${hasReal?'':t('route_travel_estimated_suffix')}</div>
         </div>
       </div>
-      <div class="section-title">Σειρά στάσεων · ${DAYS_FULL[state.routeDay]||'—'}</div>
+      <div class="section-title">${t('route_stops')} · ${DAYS_FULL[state.routeDay]||'—'}</div>
       <div style="padding:0 0 8px">
         ${this.buildStopList(stopsToShow, hasReal)}
       </div>
@@ -4617,22 +4665,22 @@ const App = {
       <div class="stop-item">
         <div class="stop-num home">🏠</div>
         <div class="stop-info">
-          <div class="stop-name">Αφετηρία</div>
-          <div class="stop-addr">${state.settings.homeAddress||'Σπίτι'}</div>
+          <div class="stop-name">${t('route_start')}</div>
+          <div class="stop-addr">${state.settings.homeAddress||t('route_home_label')}</div>
         </div>
       </div>
       <div class="stop-connector" style="margin-left:29px"></div>
     `;
     stops.forEach((stop, i) => {
       const travelRow = hasReal && stop.travelMin
-        ? `<span class="stop-travel-row" style="color:var(--blue)">${stop.travelMin}λ οδήγηση · ${Number(stop.travelKm||0).toFixed(1)}km</span>` : '';
+        ? `<span class="stop-travel-row" style="color:var(--blue)">${stop.travelMin}λ ${t('route_driving_suffix')} · ${Number(stop.travelKm||0).toFixed(1)}km</span>` : '';
       html += `
         <div class="stop-item">
           <div class="stop-num">${i+1}</div>
           <div class="stop-info">
             <div class="stop-name">${stop.studentName||'—'}</div>
             <div class="stop-addr">${stop.address||'—'}</div>
-            <div class="stop-travel"><span class="stop-travel-row">🕐 Άφιξη ${stop._start||stop.start} – ${stop._end||stop.end} · ${stop.subject||''}</span>${travelRow}</div>
+            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${stop._end||stop.end} · ${stop.subject||''}</span>${travelRow}</div>
           </div>
         </div>
         ${i<stops.length-1?'<div class="stop-connector" style="margin-left:29px"></div>':''}
@@ -4643,8 +4691,8 @@ const App = {
       <div class="stop-item">
         <div class="stop-num home">🏠</div>
         <div class="stop-info">
-          <div class="stop-name">Επιστροφή</div>
-          <div class="stop-addr">${state.settings.homeAddress||'Σπίτι'}</div>
+          <div class="stop-name">${t('route_return')}</div>
+          <div class="stop-addr">${state.settings.homeAddress||t('route_home_label')}</div>
         </div>
       </div>
     `;
@@ -4761,7 +4809,7 @@ const App = {
       Toast.show(t('toast_calc_error'),'error');
     }
 
-    if(btn){ btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg> Υπολογισμός'; btn.disabled=false }
+    if(btn){ btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg> ${t('route_calc')}`; btn.disabled=false }
     this.renderRoute();
   },
 
@@ -4772,7 +4820,7 @@ const App = {
     const allDays = [1,2,3,4,5,6];
 
     const blockedHtml = (st.blockedSlots||[]).length===0
-      ? '<p style="font-size:13px;color:var(--text3);padding:8px 0">Δεν υπάρχουν μπλοκαρισμένες ώρες</p>'
+      ? `<p style="font-size:13px;color:var(--text3);padding:8px 0">${t('no_blocked_times')}</p>`
       : (st.blockedSlots||[]).map((b,i)=>`
           <div class="blocked-slot">
             <div class="blocked-slot-info">
@@ -4789,37 +4837,37 @@ const App = {
         <div class="topbar-inner">
           <div>
             <div class="logo">Route<span>Pal</span></div>
-            <div class="topbar-sub">Ρυθμίσεις</div>
+            <div class="topbar-sub">${t('settings_title')}</div>
           </div>
         </div>
       </div>
 
-      <div class="section-title">Επάγγελμα</div>
+      <div class="section-title">${t('settings_profession')}</div>
       <div class="card">
         <div class="form-group" style="margin:0">
           <select id="set-profession" onchange="App.setProfession(this.value)">
-            ${PROFESSIONS.map(p=>`<option value="${p.value}" ${(st.profession||'tutor')===p.value?'selected':''}>${p.label}</option>`).join('')}
+            ${getProfessions().map(p=>`<option value="${p.value}" ${(st.profession||'tutor')===p.value?'selected':''}>${p.label}</option>`).join('')}
           </select>
         </div>
       </div>
 
-      <div class="section-title">Προσωπικά</div>
+      <div class="section-title">${t('settings_personal')}</div>
       <div class="card">
         <div class="form-group" style="margin-bottom:10px">
-          <label>Όνομα</label>
-          <input type="text" id="set-name" value="${esc(st.teacherName||'')}" placeholder="Το όνομά σας">
+          <label>${t('settings_name')}</label>
+          <input type="text" id="set-name" value="${esc(st.teacherName||'')}" placeholder="${t('settings_name_placeholder')}">
         </div>
         <div class="form-group" style="margin:0">
-          <label>Διεύθυνση σπιτιού
+          <label>${t('settings_home_address')}
             ${state.coords['home']
-              ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">✓ ${state.coords['home'].lat.toFixed(4)}, ${state.coords['home'].lon.toFixed(4)}</span>`
-              : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">⚠ Δεν έχει geocodαριστεί</span>`}
+              ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_geocoded')} ${state.coords['home'].lat.toFixed(4)}, ${state.coords['home'].lon.toFixed(4)}</span>`
+              : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_not_geocoded')}</span>`}
           </label>
-          <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="Οδός αρ., Πόλη">
+          <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="${t('settings_home_placeholder')}">
         </div>
       </div>
 
-      <div class="section-title">Εργάσιμες Ημέρες</div>
+      <div class="section-title">${t('settings_workdays')}</div>
       <div class="card">
         <div class="day-toggles">
           ${allDays.map(d=>`
@@ -4828,7 +4876,7 @@ const App = {
         </div>
       </div>
 
-      <div class="section-title">Ώρες εργασίας ανά ημέρα</div>
+      <div class="section-title">${t('settings_hours_per_day')}</div>
       <div class="card">
         ${allDays.filter(d=>st.workDays.includes(d)).map(d=>`
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
@@ -4837,65 +4885,65 @@ const App = {
             <span style="font-size:12px;color:var(--text3)">–</span>
             <input type="time" id="dh-end-${d}" value="${st.dayHours?.[d]?.end||'21:30'}" style="flex:1">
           </div>`).join('')}
-        <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">Επιλέξτε τουλάχιστον μία εργάσιμη ημέρα</p>
+        <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">${t('settings_workday_hint')}</p>
       </div>
 
-      <div class="section-title">Μεταφορά & Καύσιμα</div>
+      <div class="section-title">${t('settings_travel_fuel')}</div>
       <div class="card">
         <div class="form-group">
-          <label>Μέσο μεταφοράς</label>
+          <label>${t('settings_travel_mode_label')}</label>
           <select id="set-mode">
-            <option value="car" ${st.travelMode==='car'?'selected':''}>🚗 Αυτοκίνητο</option>
-            <option value="bike" ${st.travelMode==='bike'?'selected':''}>🚲 Ποδήλατο</option>
-            <option value="walking" ${st.travelMode==='walking'?'selected':''}>🚶 Πεζός</option>
+            <option value="car" ${st.travelMode==='car'?'selected':''}>${t('settings_travel_car')}</option>
+            <option value="bike" ${st.travelMode==='bike'?'selected':''}>${t('settings_travel_bike')}</option>
+            <option value="walking" ${st.travelMode==='walking'?'selected':''}>${t('settings_travel_walk')}</option>
           </select>
         </div>
         <div class="form-row">
           <div class="form-group" style="margin:0">
-            <label>Κατανάλωση (L/100km)</label>
+            <label>${t('settings_fuel_consumption_label')}</label>
             <input type="number" id="set-fuel" value="${st.fuelConsumption||7}" min="3" max="25" step="0.5">
           </div>
           <div class="form-group" style="margin:0">
-            <label>Margin ασφαλείας (λεπτά)</label>
+            <label>${t('settings_margin_label')}</label>
             <input type="number" id="set-margin" value="${st.travelMargin??3}" min="0" max="30">
           </div>
         </div>
         <div class="form-group" style="margin:0">
-          <label>Μέση ταχύτητα πόλης (km/h)</label>
+          <label>${t('settings_avg_speed_label')}</label>
           <input type="number" id="set-speed" value="${st.avgCitySpeedKmh||25}" min="5" max="120" step="1">
         </div>
         <div class="form-group">
-          <label>HERE Maps API Key (για live traffic)</label>
-          <input type="text" id="set-here-key" placeholder="Προαιρετικό — για traffic-aware χρόνους" value="${esc(st.hereApiKey||'')}">
+          <label>${t('settings_here_key_label')}</label>
+          <input type="text" id="set-here-key" placeholder="${t('settings_here_key_placeholder')}" value="${esc(st.hereApiKey||'')}">
         </div>
         <div class="form-group" style="margin:0">
-          <label>Διάλειμμα μεσημεριού</label>
+          <label>${t('settings_lunch_label')}</label>
           <select id="set-lunch">
-            <option value="0" ${st.lunchBreak===0?'selected':''}>Κανένα</option>
-            <option value="30" ${st.lunchBreak===30?'selected':''}>30 λεπτά</option>
-            <option value="60" ${st.lunchBreak===60?'selected':''}>1 ώρα</option>
+            <option value="0" ${st.lunchBreak===0?'selected':''}>${t('settings_lunch_none')}</option>
+            <option value="30" ${st.lunchBreak===30?'selected':''}>${t('settings_lunch_30')}</option>
+            <option value="60" ${st.lunchBreak===60?'selected':''}>${t('settings_lunch_60')}</option>
           </select>
         </div>
       </div>
 
-      <div class="section-title">Μπλοκαρισμένες Ώρες</div>
+      <div class="section-title">${t('settings_blocked')}</div>
       <div class="card" id="blocked-list">
         ${blockedHtml}
       </div>
       <div style="padding:0 16px 4px">
         <button class="btn btn-secondary btn-full" onclick="App.openBlockDrawer()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Προσθήκη μπλοκαρίσματος
+          ${t('settings_add_block')}
         </button>
       </div>
 
-      <div class="section-title">Χάρτες &amp; Δρομολόγηση</div>
+      <div class="section-title">${t('settings_maps')}</div>
       <div class="card">
         <div style="display:flex;align-items:center;gap:10px;padding:4px 0">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
           <div>
-            <div style="font-weight:600;font-size:14px">OpenStreetMap · OSRM</div>
-            <div style="font-size:12px;color:var(--text2)">Geocoding &amp; διαδρομές χωρίς API key — δωρεάν</div>
+            <div style="font-weight:600;font-size:14px">${t('settings_maps_osrm')}</div>
+            <div style="font-size:12px;color:var(--text2)">${t('settings_maps_osrm_sub')}</div>
           </div>
         </div>
       </div>
@@ -4903,16 +4951,16 @@ const App = {
       <div style="padding:16px 16px 4px">
         <button class="btn btn-primary btn-full" onclick="App.saveSettings()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Αποθήκευση ρυθμίσεων
+          ${t('settings_save')}
         </button>
       </div>
 
-      <div class="section-title">Εγκατάσταση εφαρμογής</div>
+      <div class="section-title">${t('settings_install')}</div>
       <div class="card">
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Για να εγκαταστήσεις το RoutePal ως εφαρμογή στο iPhone/iPad, άνοιξέ το στο <strong>Safari</strong> και πάτα <strong>Κοινοποίηση → Προσθήκη στην Αρχική Οθόνη</strong>.</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">${t('settings_install_desc')}</p>
         <button class="btn btn-secondary btn-full" onclick="App.openInSafari()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
-          Άνοιγμα σε Safari
+          ${t('settings_open_safari')}
         </button>
       </div>
 
@@ -4926,38 +4974,38 @@ const App = {
         </select>
       </div>
 
-      <div class="section-title">Ποιότητα υπολογισμού</div>
+      <div class="section-title">${t('settings_quality_title')}</div>
       <div class="card">
         <select id="set-quality" onchange="App.setScheduleQuality(this.value)">
-          <option value="quick" ${(state.settings.scheduleQuality||'quick')==='quick'?'selected':''}>Γρήγορο — 6 προσπάθειες, ~1-2 λεπτά</option>
-          <option value="thorough" ${state.settings.scheduleQuality==='thorough'?'selected':''}>Πλήρες — 8 προσπάθειες, ~2 λεπτά (καλύτερη τοποθέτηση)</option>
+          <option value="quick" ${(state.settings.scheduleQuality||'quick')==='quick'?'selected':''}>${t('settings_quality_quick')}</option>
+          <option value="thorough" ${state.settings.scheduleQuality==='thorough'?'selected':''}>${t('settings_quality_thorough')}</option>
         </select>
-        <div class="settings-sub" style="margin-top:4px">Επηρεάζει μόνο πόσους μαθητές χωράει (Φάση 1) — η βελτιστοποίηση χιλιομέτρων μένει ίδια</div>
+        <div class="settings-sub" style="margin-top:4px">${t('settings_quality_hint')}</div>
       </div>
 
-      <div class="section-title">Δοκιμή αλγορίθμου</div>
+      <div class="section-title">${t('settings_test_algo')}</div>
       <div class="card">
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Δοκιμάστε τον αλγόριθμο με ρεαλιστικούς τυχαίους μαθητές στην Πάτρα (πραγματικό geocoding &amp; διαδρομές).</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">${t('settings_test_algo_desc')}</p>
         <button class="btn btn-secondary btn-full" onclick="App.seedTestStudents(40)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-          Φόρτωση 40 δοκιμαστικών μαθητών
+          ${t('settings_test_algo_btn')}
         </button>
       </div>
 
-      <div class="section-title">Διαχείριση δεδομένων</div>
+      <div class="section-title">${t('settings_data')}</div>
       <div class="card">
         <button class="btn btn-danger btn-full" onclick="App.resetApp()" style="margin-bottom:10px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-          Επαναφορά demo δεδομένων
+          ${t('settings_reset')}
         </button>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="btn btn-secondary" style="flex:1" onclick="App.exportData()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Εξαγωγή
+            ${t('settings_export')}
           </button>
           <button class="btn btn-secondary" style="flex:1" onclick="App.importData()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Εισαγωγή
+            ${t('settings_import')}
           </button>
         </div>
       </div>
@@ -5006,7 +5054,7 @@ const App = {
     applyLanguageArrays();
     this.updateNavLabels();
     this.renderSettings();
-    Toast.show(t('settings_save'),'success');
+    Toast.show(t('toast_settings_saved'),'success');
   },
 
   setScheduleQuality(q){
@@ -5051,24 +5099,24 @@ const App = {
   openBlockDrawer(){
     document.getElementById('drawer-block-body').innerHTML = `
       <div class="form-group">
-        <label>Ημέρα</label>
+        <label>${t('block_day_label')}</label>
         <select id="bl-day">
           ${[1,2,3,4,5,6].map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
         <div class="form-group" style="margin:0">
-          <label>Από</label>
+          <label>${t('block_from_label')}</label>
           <input type="time" id="bl-start" value="12:00">
         </div>
         <div class="form-group" style="margin:0">
-          <label>Έως</label>
+          <label>${t('block_to_label')}</label>
           <input type="time" id="bl-end" value="14:00">
         </div>
       </div>
       <div class="form-group">
-        <label>Αιτία (προαιρετικό)</label>
-        <input type="text" id="bl-reason" placeholder="π.χ. Γεύμα, Ρεπό...">
+        <label>${t('block_reason_label')}</label>
+        <input type="text" id="bl-reason" placeholder="${t('block_reason_placeholder')}">
       </div>
     `;
     document.getElementById('drawer-block-overlay').classList.add('open');
@@ -5107,8 +5155,8 @@ const App = {
   // the scheduler end-to-end (real Nominatim geocoding + OSRM routing, run in-browser).
   seedTestStudents(n=40){
     this.confirm(
-      `Δοκιμαστικοί μαθητές (${n})`,
-      `Θα αντικατασταθούν όλοι οι τρέχοντες μαθητές με ${n} τυχαίους δοκιμαστικούς μαθητές στην Πάτρα, και θα τρέξει αυτόματα ο προγραμματισμός με πραγματικό geocoding. Συνέχεια;`,
+      tf('confirm_test_students_title',{n}),
+      tf('confirm_test_students_text',{n}),
       ()=>{
         const FIRST=['Γιώργος','Μαρία','Νίκος','Ελένη','Κώστας','Σοφία','Δημήτρης','Άννα','Παναγιώτης','Χριστίνα','Αλέξανδρος','Κατερίνα','Θανάσης','Ιωάννα','Σταύρος','Δέσποινα','Βασίλης','Αγγελική','Μιχάλης','Ευαγγελία'];
         const LAST=['Παπαδόπουλος','Κωνσταντίνου','Αθανασίου','Δημητρίου','Οικονόμου','Γεωργίου','Λάμπρου','Μαντζώρου','Σπηλιόπουλος','Καραγιάννης','Αλεξόπουλος','Παπανικολάου','Καλογερόπουλος','Θεοδωρίδου','Κυριακόπουλος','Σταμάτης','Μπέης','Παπαχρήστου','Νικολάου','Βλάχος'];
@@ -5146,8 +5194,8 @@ const App = {
 
   resetApp(){
     this.confirm(
-      'Επαναφορά δεδομένων',
-      'Όλα τα δεδομένα θα διαγραφούν και θα φορτωθούν ξανά τα demo δεδομένα.',
+      t('confirm_reset_title'),
+      t('confirm_reset_text'),
       ()=>{
         Storage.clear();
         location.reload();
@@ -5164,7 +5212,7 @@ const App = {
       reader.onload=ev=>{
         try{
           const data=JSON.parse(ev.target.result);
-          if(!data.students||!data.settings) throw new Error('Μη έγκυρο αρχείο');
+          if(!data.students||!data.settings) throw new Error(t('toast_invalid_file'));
           state.students=data.students||[];
           state.settings=data.settings||defaultSettings();
           state.schedule=data.schedule||{};
@@ -5200,10 +5248,10 @@ const App = {
   },
 
   // ---- CONFIRM ----
-  confirm(title, text, cb, okLabel='Διαγραφή'){
+  confirm(title, text, cb, okLabel){
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-text').textContent = text;
-    document.getElementById('confirm-ok-btn').textContent = okLabel;
+    document.getElementById('confirm-ok-btn').textContent = okLabel || t('btn_delete');
     state.confirmCallback = cb;
     document.getElementById('confirm-overlay').classList.add('open');
   },
@@ -5225,19 +5273,19 @@ const App = {
     ov.innerHTML = `
       <div style="max-width:400px;width:100%">
         <div style="font-family:Syne,sans-serif;font-size:28px;font-weight:800;margin-bottom:6px">Route<span style="color:#7c3aed">Pal</span></div>
-        <div style="font-size:15px;color:var(--text2,#64748b);margin-bottom:32px">Καλώς ήρθατε! Ας ρυθμίσουμε μερικά βασικά.</div>
+        <div style="font-size:15px;color:var(--text2,#64748b);margin-bottom:32px">${t('onboarding_welcome')}</div>
 
         <div style="margin-bottom:20px">
-          <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">ΕΠΑΓΓΕΛΜΑ</label>
+          <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('onboarding_profession_label')}</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ob-prof-grid">
-            ${[{v:'tutor',l:'Καθηγητής'},{v:'physio',l:'Φυσιοθεραπευτής'},{v:'beautician',l:'Αισθητικός'},{v:'trainer',l:'Personal Trainer'}].map(p=>`
+            ${[{v:'tutor',l:t('onboarding_role_tutor')},{v:'physio',l:t('onboarding_role_physio')},{v:'beautician',l:t('onboarding_role_beautician')},{v:'trainer',l:t('onboarding_role_trainer')}].map(p=>`
               <button onclick="App._obSelectProf('${p.v}',this)" style="padding:12px;border:2px solid var(--border,#e2e0da);border-radius:12px;background:var(--bg2,#fff);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${p.l}</button>
             `).join('')}
           </div>
         </div>
 
         <div style="margin-bottom:20px">
-          <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">ΔΙΑΡΚΕΙΑ ΜΑΘΗΜΑΤΟΣ</label>
+          <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('onboarding_duration_label')}</label>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="ob-dur-grid">
             ${[60,90,120,180].map(d=>`
               <button onclick="App._obSelectDur(${d},this)" style="padding:12px 6px;border:2px solid var(--border,#e2e0da);border-radius:12px;background:var(--bg2,#fff);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${d===60?'1ω':d===90?'1.5ω':d===120?'2ω':'3ω'}</button>
@@ -5246,9 +5294,9 @@ const App = {
         </div>
 
         <div style="margin-bottom:28px">
-          <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">ΔΙΕΥΘΥΝΣΗ ΣΠΙΤΙΟΥ</label>
+          <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('onboarding_address_label')}</label>
           <div style="position:relative">
-            <input id="ob-addr" type="text" placeholder="Πληκτρολογήστε διεύθυνση…" autocomplete="off"
+            <input id="ob-addr" type="text" placeholder="${t('form_address_placeholder')}" autocomplete="off"
               style="width:100%;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
               oninput="App.onAddrInput(this.value,'ob-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-addr-suggest'),200)">
             <div id="ob-addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2,#fff);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
@@ -5256,7 +5304,7 @@ const App = {
         </div>
 
         <button onclick="App._obFinish()" style="width:100%;padding:16px;background:#7c3aed;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:Syne,sans-serif">
-          Ξεκινήστε →
+          ${t('onboarding_start_btn')}
         </button>
       </div>
     `;
