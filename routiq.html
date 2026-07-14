@@ -716,11 +716,54 @@ const Scheduler = {
     return result;
   },
 
+  // Run several attempts with different randomized starting orders and keep the
+  // one that places the MOST students — placement count always wins, km is only
+  // a tie-breaker. Every student matters more than a shorter drive.
+  runMultiAttempt(students, settings, coords={}, attempts=6){
+    const hasRealCoords = Object.keys(coords).length > 0;
+    const dist=(a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
+    const totalKm=(schedule)=>{
+      if(!hasRealCoords) return 0;
+      const home = coords['home']||{lat:0,lon:0};
+      let km=0;
+      for(const day of settings.workDays){
+        const slots=(schedule[day]||[]).slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+        if(!slots.length) continue;
+        let prev=home, prevId=null;
+        for(const s of slots){
+          const c=coords[s.studentId]||home;
+          if(prevId!==s.studentId) km+=dist(prev,c);
+          prev=c; prevId=s.studentId;
+        }
+        km+=dist(prev,home);
+      }
+      return km;
+    };
+    // More attempts share a smaller per-attempt time budget so total wall-clock
+    // stays bounded, instead of attempts×20s.
+    const backtrackMs = attempts<=1 ? 20000 : Math.max(4000, Math.round(20000/Math.sqrt(attempts)));
+    const repairMs = attempts<=1 ? 8000 : Math.max(2000, Math.round(8000/Math.sqrt(attempts)));
+
+    let best=null;
+    for(let i=0;i<attempts;i++){
+      const order = i===0 ? students : this.shuffle(students);
+      const result = this.scheduleAll(order, settings, backtrackMs, repairMs);
+      if(hasRealCoords) this.geoOptimize(result.schedule, order, settings, coords);
+      const placed = this.countTotal(result.schedule);
+      const km = totalKm(result.schedule);
+      if(!best || placed>best.placed || (placed===best.placed && km<best.km)){
+        best = { result, placed, km };
+      }
+    }
+    best.result._attempts = attempts;
+    return best.result;
+  },
+
   // _SCHED_BUFFER kept for backward compat; dynamic travel time is used instead
   _SCHED_BUFFER: 0,
 
   // Phase 1: constraint-satisfaction backtracking, dynamic travel buffer
-  scheduleAll(students, settings){
+  scheduleAll(students, settings, backtrackMs=20000, repairMs=8000){
     const schedule = {};
     settings.workDays.forEach(d => schedule[d] = []);
 
@@ -903,7 +946,7 @@ const Scheduler = {
       return slots;
     };
 
-    const deadline=Date.now()+20000;
+    const deadline=Date.now()+backtrackMs;
     let nodesVisited=0;
     const MAX_NODES=1000000;
     let bestSched=null, bestCount=-1;
@@ -988,7 +1031,7 @@ const Scheduler = {
       address:s.address,color:s.color||0,start:slot.start,end:slot.end,
       duration:s.lessonDuration,mergedCount:1,merged:false});
 
-    const repairDeadline=deadline+8000;
+    const repairDeadline=deadline+repairMs;
     const swapChain2=(s,depth)=>{
       if(Date.now()>repairDeadline) return false;
       const pd=placedDays[s.id]; const sameDay=canSameDay(s);
@@ -2755,14 +2798,14 @@ const App = {
       }
     }catch(e){ console.warn('Matrix pre-fetch failed, using straight-line estimates:', e); }
 
-    // Phase 1: backtracking CSP
-    schedProgress(15,'Φάση 1 — Τοποθέτηση','Backtracking CSP…','🧩');
+    // Phase 1: backtracking CSP — multiple randomized attempts, keep the one that
+    // places the most students (km is only a tie-breaker, never sacrifices a student)
+    schedProgress(15,'Φάση 1 — Τοποθέτηση','Δοκιμή 6 τυχαίων σειρών…','🧩');
     await new Promise(r=>setTimeout(r,40));
     let r;
     try{
       if(state.students.length===0){ schedProgress(null); return; }
-      const result = Scheduler.scheduleAll(state.students, state.settings);
-      result._attempts = 1;
+      const result = Scheduler.runMultiAttempt(state.students, state.settings, state.coords, 6);
       state.scheduleAttempts = [result];
       state.scheduleAttemptIdx = 0;
       state.scheduleOptimized = false;
