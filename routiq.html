@@ -2968,12 +2968,13 @@ const App = {
 
     // Phase 1: backtracking CSP — multiple randomized attempts, keep the one that
     // places the most students (km is only a tie-breaker, never sacrifices a student)
-    schedProgress(15,'Φάση 1 — Τοποθέτηση','Δοκιμή 6 τυχαίων σειρών…','🧩');
+    const attemptCount = state.settings.scheduleQuality==='thorough' ? 8 : 6;
+    schedProgress(15,'Φάση 1 — Τοποθέτηση',`Δοκιμή ${attemptCount} τυχαίων σειρών…`,'🧩');
     await new Promise(r=>setTimeout(r,40));
     let r;
     try{
       if(state.students.length===0){ schedProgress(null); return; }
-      const result = Scheduler.runMultiAttempt(state.students, state.settings, state.coords, 6);
+      const result = Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
       state.scheduleAttempts = [result];
       state.scheduleAttemptIdx = 0;
       state.scheduleOptimized = false;
@@ -4459,6 +4460,15 @@ const App = {
         </select>
       </div>
 
+      <div class="section-title">Ποιότητα υπολογισμού</div>
+      <div class="card">
+        <select id="set-quality" onchange="App.setScheduleQuality(this.value)">
+          <option value="quick" ${(state.settings.scheduleQuality||'quick')==='quick'?'selected':''}>Γρήγορο — 6 προσπάθειες, ~1-2 λεπτά</option>
+          <option value="thorough" ${state.settings.scheduleQuality==='thorough'?'selected':''}>Πλήρες — 8 προσπάθειες, ~2 λεπτά (καλύτερη τοποθέτηση)</option>
+        </select>
+        <div class="settings-sub" style="margin-top:4px">Επηρεάζει μόνο πόσους μαθητές χωράει (Φάση 1) — η βελτιστοποίηση χιλιομέτρων μένει ίδια</div>
+      </div>
+
       <div class="section-title">Δοκιμή αλγορίθμου</div>
       <div class="card">
         <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Δοκιμάστε τον αλγόριθμο με ρεαλιστικούς τυχαίους μαθητές στην Πάτρα (πραγματικό geocoding &amp; διαδρομές).</p>
@@ -4531,6 +4541,12 @@ const App = {
     this.updateNavLabels();
     this.renderSettings();
     Toast.show(t('settings_save'),'success');
+  },
+
+  setScheduleQuality(q){
+    state.settings.scheduleQuality = q;
+    Storage.saveSettings(state.settings);
+    Toast.show('Θα εφαρμοστεί στην επόμενη Ανανέωση','info');
   },
 
   saveSettings(){
