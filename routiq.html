@@ -635,6 +635,102 @@ const I18N = {
     settings_reset:'Επαναφορά demo δεδομένων', settings_export:'Εξαγωγή', settings_import:'Εισαγωγή',
     settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
     btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...',
+    btn_delete:'Διαγραφή', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
+    confirm_title:'Επιβεβαίωση', block_drawer_title:'Μπλοκαρισμένη Ώρα',
+    greeting_morning:'Καλημέρα', greeting_afternoon:'Καλό απόγευμα', greeting_evening:'Καλησπέρα',
+    home_welcome:' — Καλώς ήρθατε', home_schedule_stale_title:'Πρόγραμμα μη ενημερωμένο',
+    home_schedule_stale_sub:'Έχουν αλλάξει μαθητές — πατήστε Υπολογισμός', home_today_suffix:'σήμερα',
+    home_margin_safety:'Margin ασφαλείας', home_week:'Εβδομάδα', home_hours_wk_short:'Ώρες/εβδ',
+    home_km_optimized:'Km εβδ (βελτ.)', home_km_estimated:'Km εβδ (εκτίμ.)',
+    home_today_label:'Σήμερα', home_unplaced_suffix:'δεν χωράει πλήρως', home_lessons_suffix:'μαθήματα τοποθετήθηκαν',
+    students_registered_suffix:'εγγεγραμμένοι', students_map_btn:'Χάρτης', students_new_btn:'Νέος',
+    students_empty_title:'Δεν υπάρχουν {clients}', students_empty_sub:'Προσθέστε τον πρώτο σας {client} για να ξεκινήσει η χρήση του RoutePal',
+    students_add_btn:'Προσθήκη {client}', students_map_locations_label:'ΧΑΡΤΗΣ ΤΟΠΟΘΕΣΙΩΝ',
+    students_map_locations_count:'τοποθεσίες', students_map_no_geocoded:'Δεν υπάρχουν geocoded τοποθεσίες',
+    home_marker_tooltip:'🏠 Σπίτι', student_per_week_suffix:'x/εβδ', student_placed_suffix:'τοποθ.',
+    student_address_label:'Διεύθυνση', student_geocoded_title:'Geocoded', student_not_geocoded_title:'Δεν έχει γίνει geocoding',
+    student_duration_label:'Διάρκεια', student_minutes_suffix:'λεπτά', student_type_label:'Τύπος',
+    student_type_group_prefix:'Ομάδα', student_type_solo:'Ατομικό', student_paired_label:'Ζεύγος με',
+    student_unknown_partner:'⚠ άγνωστος μαθητής', student_not_mutual:'⚠ μη αμφίδρομο',
+    student_availability_label:'Διαθεσιμότητα', student_notes_label:'Σημειώσεις',
+    drawer_new_prefix:'Νέος', drawer_edit_prefix:'Επεξεργασία',
+    form_fullname_label:'Ονοματεπώνυμο', form_fullname_placeholder:'Πλήρες όνομα',
+    form_address_placeholder:'Πληκτρολογήστε διεύθυνση…', form_duration_label:'Διάρκεια (λ)',
+    form_times_per_week:'Φορές/εβδ.', form_merge_label:'Ενιαίο block (δίωρο κ.λπ.)',
+    form_merge_off:'Ποτέ — πάντα ξεχωριστά μαθήματα', form_merge_always:'Πάντα — ένα συνεχόμενο block',
+    form_merge_auto:'Αυτόματα — ο αλγόριθμος αποφασίζει ό,τι ταιριάζει καλύτερα',
+    form_merge_auto_hint:'Στο "Αυτόματα", δοκιμάζονται και οι δύο επιλογές και κρατιέται όποια χωράει καλύτερα με τους υπόλοιπους μαθητές',
+    form_max_per_block:'Μέγιστα μαθήματα ανά block', form_max_per_block_hint:'Αν χρειάζονται περισσότερα, θα φτιαχτούν ξεχωριστά blocks αυτού του μεγέθους σε διαφορετικές μέρες',
+    form_type_label:'Τύπος', form_type_solo:'Ατομικό', form_type_group:'Ομάδα',
+    form_group_code_label:'Κωδικός ομάδας', form_group_code_placeholder:'π.χ. A1',
+    form_availability_title:'Διαθεσιμότητα', form_paired_none:'— κανένα —',
+    form_notes_placeholder:'Προαιρετικές σημειώσεις...', form_to:'έως',
+    search_searching:'Αναζήτηση…', search_no_results:'Δεν βρέθηκαν αποτελέσματα', search_error:'Σφάλμα αναζήτησης',
+    toast_enter_fullname:'Εισάγετε ονοματεπώνυμο', toast_enter_address:'Εισάγετε διεύθυνση',
+    saving_ellipsis:'Αποθήκευση...', toast_select_day:'Επιλέξτε τουλάχιστον μία ημέρα',
+    toast_client_updated:'ενημερώθηκε', toast_client_added:'προστέθηκε', toast_client_deleted:'διαγράφηκε',
+    confirm_delete_client_title:'Διαγραφή {client}', confirm_delete_client_text:'Είστε σίγουροι ότι θέλετε να διαγράψετε τον/την {name}; Όλα τα δεδομένα θα χαθούν.',
+    toast_geocoded_count:'Τοποθεσίες', schedule_export_pdf_title:'Εξαγωγή ως PDF',
+    schedule_random_placement_label:'ΤΥΧΑΙΑ ΤΟΠΟΘΕΤΗΣΗ ΒΑΣΕΙ ΠΕΡΙΟΡΙΣΜΩΝ', schedule_attempt_label:'Δοκιμή',
+    schedule_km_before_after:'Πριν: {before}km → Μετά: {after}km · Εξοικονόμηση: {saved}km',
+    schedule_optimize_btn:'Βελτιστοποίηση με χάρτη (OpenStreetMap)', schedule_gap_same_location:'📍 ίδια τοποθεσία',
+    schedule_gap_travel:'🚗 ~{min}λ μετακίνηση', schedule_gap_safety:' + {min}λ ασφαλείας',
+    toast_no_free_time:'Δεν υπάρχει ελεύθερη ώρα', unplaced_group_badge:'μαθ.',
+    unplaced_solution_combo:'Λύση Α: Συνδυαστικό μπλοκ {block}', unplaced_combo_detail:'{needed} × {dur}λ → 1 × {total}λ σε μία μέρα',
+    unplaced_apply_block:'Εφαρμογή ως {block} μπλοκ', unplaced_solution_extend_hours:'Λύση {letter}: Παράταση ωραρίου σου',
+    unplaced_extend_hours_detail:'Αν παρατείνεις το ωράριό σου τη {day} κατά +{min} λεπτά, χωράει κανονικά.',
+    unplaced_extend_hours_btn:'Παράταση +{min}λ ({day})', unplaced_solution_extend_window:'Λύση {letter}: Διεύρυνση παραθύρου μαθητή',
+    unplaced_extend_window_detail:'Αν ο/η {name} παραμείνει +{min}λ τη {day}, χωράει.', unplaced_extend_window_btn:'+{min}λ για {name} ({day})',
+    toast_window_extended:'Παράθυρο {day} διευρύνθηκε +{min}λ', toast_hours_extended:'Ωράριο {day} παρατάθηκε +{min}λ',
+    confirm_merge_block:'Το συνδυαστικό μπλοκ θα είναι {block} — πάνω από 2 ώρες συνεχόμενα. Συνέχεια;',
+    toast_placed_as_block:'{name}: τοποθετήθηκε ως συνδυαστικό μπλοκ',
+    route_real_distance:'πραγματικές αποστάσεις', route_map_unavailable:'Χάρτης μη διαθέσιμος',
+    route_no_lessons_text:'Δεν υπάρχουν μαθήματα αυτή την ημέρα.', route_travel_estimated_suffix:' (εκτ.)',
+    route_home_label:'Σπίτι', route_arrival_label:'Άφιξη', toast_calc_error:'Σφάλμα κατά τον υπολογισμό',
+    no_blocked_times:'Δεν υπάρχουν μπλοκαρισμένες ώρες', settings_workday_hint:'Επιλέξτε τουλάχιστον μία εργάσιμη ημέρα',
+    settings_name_placeholder:'Το όνομά σας', settings_home_geocoded:'✓ γεωκωδικοποιήθηκε', settings_home_not_geocoded:'⚠ Δεν έχει γίνει geocoding',
+    settings_home_placeholder:'Οδός αρ., Πόλη', settings_travel_mode_label:'Μέσο μεταφοράς',
+    settings_travel_car:'🚗 Αυτοκίνητο', settings_travel_bike:'🚲 Ποδήλατο', settings_travel_walk:'🚶 Πεζός',
+    settings_fuel_consumption_label:'Κατανάλωση (L/100km)', settings_margin_label:'Margin ασφαλείας (λεπτά)',
+    settings_avg_speed_label:'Μέση ταχύτητα πόλης (km/h)', settings_here_key_label:'HERE Maps API Key (για live traffic)',
+    settings_here_key_placeholder:'Προαιρετικό — για traffic-aware χρόνους', settings_lunch_label:'Διάλειμμα μεσημεριού',
+    settings_lunch_none:'Κανένα', settings_lunch_30:'30 λεπτά', settings_lunch_60:'1 ώρα',
+    settings_add_block:'Προσθήκη μπλοκαρίσματος', settings_maps_title:'Χάρτες &amp; Δρομολόγηση',
+    settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Geocoding &amp; διαδρομές χωρίς API key — δωρεάν',
+    settings_install_desc:'Για να εγκαταστήσεις το RoutePal ως εφαρμογή στο iPhone/iPad, άνοιξέ το στο <strong>Safari</strong> και πάτα <strong>Κοινοποίηση → Προσθήκη στην Αρχική Οθόνη</strong>.',
+    settings_open_safari:'Άνοιγμα σε Safari', settings_quality_title:'Ποιότητα υπολογισμού',
+    settings_quality_quick:'Γρήγορο — 6 προσπάθειες, ~1-2 λεπτά', settings_quality_thorough:'Πλήρες — 8 προσπάθειες, ~2 λεπτά (καλύτερη τοποθέτηση)',
+    settings_quality_hint:'Επηρεάζει μόνο πόσους μαθητές χωράει (Φάση 1) — η βελτιστοποίηση χιλιομέτρων μένει ίδια',
+    settings_test_algo_desc:'Δοκιμάστε τον αλγόριθμο με ρεαλιστικούς τυχαίους μαθητές στην Πάτρα (πραγματικό geocoding &amp; διαδρομές).',
+    settings_test_algo_btn:'Φόρτωση 40 δοκιμαστικών μαθητών',
+    toast_link_copied:'Αντιγράφηκε ο σύνδεσμος — άνοιξέ τον στο Safari', toast_need_workday:'Χρειάζεστε τουλάχιστον μία εργάσιμη ημέρα',
+    toast_applies_next_refresh:'Θα εφαρμοστεί στην επόμενη Ανανέωση', toast_settings_saved:'Ρυθμίσεις αποθηκεύτηκαν',
+    block_day_label:'Ημέρα', block_from_label:'Από', block_to_label:'Έως',
+    block_reason_label:'Αιτία (προαιρετικό)', block_reason_placeholder:'π.χ. Γεύμα, Ρεπό...',
+    toast_end_after_start:'Η ώρα λήξης πρέπει να είναι μετά την αρχή', toast_block_added:'Μπλοκάρισμα προστέθηκε',
+    toast_block_removed:'Μπλοκάρισμα αφαιρέθηκε', confirm_test_students_title:'Δοκιμαστικοί μαθητές ({n})',
+    confirm_test_students_text:'Θα αντικατασταθούν όλοι οι τρέχοντες μαθητές με {n} τυχαίους δοκιμαστικούς μαθητές στην Πάτρα, και θα τρέξει αυτόματα ο προγραμματισμός με πραγματικό geocoding. Συνέχεια;',
+    toast_test_students_loaded:'Φορτώθηκαν {n} δοκιμαστικοί μαθητές — υπολογισμός...',
+    confirm_reset_title:'Επαναφορά δεδομένων', confirm_reset_text:'Όλα τα δεδομένα θα διαγραφούν και θα φορτωθούν ξανά τα demo δεδομένα.',
+    toast_invalid_file:'Μη έγκυρο αρχείο', toast_import_success:'Δεδομένα εισήχθησαν επιτυχώς', toast_error_prefix:'Σφάλμα',
+    toast_export_success:'Δεδομένα εξήχθησαν', onboarding_welcome:'Καλώς ήρθατε! Ας ρυθμίσουμε μερικά βασικά.',
+    onboarding_profession_label:'ΕΠΑΓΓΕΛΜΑ', onboarding_duration_label:'ΔΙΑΡΚΕΙΑ ΜΑΘΗΜΑΤΟΣ', onboarding_address_label:'ΔΙΕΥΘΥΝΣΗ ΣΠΙΤΙΟΥ',
+    onboarding_start_btn:'Ξεκινήστε →', onboarding_role_tutor:'Καθηγητής', onboarding_role_physio:'Φυσιοθεραπευτής',
+    onboarding_role_beautician:'Αισθητικός', onboarding_role_trainer:'Personal Trainer',
+    debug_calc_prefix:'Υπολογισμός...', debug_geocoding:'Geocoding...',
+    phase1_title:'Φάση 1 — Τοποθέτηση μαθητών', phase1_sub:'Backtracking (20s)…',
+    phase1b_title:'Φάση 1 — Τοποθέτηση', phase1b_sub:'Δοκιμή {n} τυχαίων σειρών…',
+    phase2_title:'Φάση 2 — Γεωγραφική βελτιστοποίηση', phase2_sub:'Ταξινόμηση κατά απόσταση…',
+    phase3_title:'Φάση 3 — Simulated Annealing', phase3_sub:'Ελαχιστοποίηση χιλιομέτρων (25s)…', phase3_sub_short:'Ελαχιστοποίηση χιλιομέτρων…',
+    phase4_title:'Φάση 4 — Τελική τοποθέτηση', phase4_sub:'Επανατοποθέτηση αδύνατων…',
+    phase4b_title:'Φάση 4 — Επανατοποθέτηση', phase4b_sub:'Τοποθέτηση αδύνατων μαθητών…',
+    phase5_title:'Φάση 5 — LNS', phase5_sub:'Επανατοποθέτηση με destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
+    phase_done_title:'Ολοκληρώθηκε', phase_done_sub:'Αποθήκευση προγράμματος…',
+    toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
+    toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
+    toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
+    toast_popup_blocked:'Ο browser μπλόκαρε το παράθυρο εκτύπωσης — επιτρέψτε pop-ups', print_no_lessons:'Κανένα μάθημα',
+    print_lessons_suffix:'μαθήματα', merge_badge_label:'ΜΠΛΟΚ',
   },
   en: {
     days:['','Mon','Tue','Wed','Thu','Fri','Sat'],
@@ -660,6 +756,102 @@ const I18N = {
     settings_reset:'Reset to demo data', settings_export:'Export', settings_import:'Import',
     settings_test_algo:'Algorithm Test', settings_language:'Language',
     btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...',
+    btn_delete:'Delete', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
+    confirm_title:'Confirm', block_drawer_title:'Blocked Time',
+    greeting_morning:'Good morning', greeting_afternoon:'Good afternoon', greeting_evening:'Good evening',
+    home_welcome:' — Welcome', home_schedule_stale_title:'Schedule out of date',
+    home_schedule_stale_sub:'Students have changed — tap Calculate', home_today_suffix:'today',
+    home_margin_safety:'Safety margin', home_week:'Week', home_hours_wk_short:'Hours/wk',
+    home_km_optimized:'Km/wk (optimized)', home_km_estimated:'Km/wk (estimated)',
+    home_today_label:'Today', home_unplaced_suffix:"doesn't fully fit", home_lessons_suffix:'lessons scheduled',
+    students_registered_suffix:'registered', students_map_btn:'Map', students_new_btn:'New',
+    students_empty_title:'No {clients} yet', students_empty_sub:'Add your first {client} to start using RoutePal',
+    students_add_btn:'Add {client}', students_map_locations_label:'LOCATIONS MAP',
+    students_map_locations_count:'locations', students_map_no_geocoded:'No geocoded locations',
+    home_marker_tooltip:'🏠 Home', student_per_week_suffix:'x/wk', student_placed_suffix:'placed',
+    student_address_label:'Address', student_geocoded_title:'Geocoded', student_not_geocoded_title:'Not geocoded yet',
+    student_duration_label:'Duration', student_minutes_suffix:'minutes', student_type_label:'Type',
+    student_type_group_prefix:'Group', student_type_solo:'Individual', student_paired_label:'Paired with',
+    student_unknown_partner:'⚠ unknown student', student_not_mutual:'⚠ not mutual',
+    student_availability_label:'Availability', student_notes_label:'Notes',
+    drawer_new_prefix:'New', drawer_edit_prefix:'Edit',
+    form_fullname_label:'Full name', form_fullname_placeholder:'Full name',
+    form_address_placeholder:'Type address…', form_duration_label:'Duration (min)',
+    form_times_per_week:'Times/wk', form_merge_label:'Single block (double lesson etc.)',
+    form_merge_off:'Never — always separate lessons', form_merge_always:'Always — one continuous block',
+    form_merge_auto:'Auto — the algorithm decides what fits best',
+    form_merge_auto_hint:'On "Auto", both options are tried and the one that fits best with the other students is kept',
+    form_max_per_block:'Max lessons per block', form_max_per_block_hint:'If more are needed, separate blocks of this size will be created on different days',
+    form_type_label:'Type', form_type_solo:'Individual', form_type_group:'Group',
+    form_group_code_label:'Group code', form_group_code_placeholder:'e.g. A1',
+    form_availability_title:'Availability', form_paired_none:'— none —',
+    form_notes_placeholder:'Optional notes...', form_to:'to',
+    search_searching:'Searching…', search_no_results:'No results found', search_error:'Search error',
+    toast_enter_fullname:'Enter full name', toast_enter_address:'Enter address',
+    saving_ellipsis:'Saving...', toast_select_day:'Select at least one day',
+    toast_client_updated:'updated', toast_client_added:'added', toast_client_deleted:'deleted',
+    confirm_delete_client_title:'Delete {client}', confirm_delete_client_text:'Are you sure you want to delete {name}? All data will be lost.',
+    toast_geocoded_count:'Locations', schedule_export_pdf_title:'Export as PDF',
+    schedule_random_placement_label:'RANDOM CONSTRAINT-BASED PLACEMENT', schedule_attempt_label:'Attempt',
+    schedule_km_before_after:'Before: {before}km → After: {after}km · Saved: {saved}km',
+    schedule_optimize_btn:'Optimize with map (OpenStreetMap)', schedule_gap_same_location:'📍 same location',
+    schedule_gap_travel:'🚗 ~{min}min travel', schedule_gap_safety:' + {min}min safety',
+    toast_no_free_time:'No free time available', unplaced_group_badge:'ls.',
+    unplaced_solution_combo:'Solution A: Combined block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min in one day',
+    unplaced_apply_block:'Apply as {block} block', unplaced_solution_extend_hours:'Solution {letter}: Extend your hours',
+    unplaced_extend_hours_detail:'If you extend your working hours on {day} by +{min} minutes, it fits normally.',
+    unplaced_extend_hours_btn:'Extend +{min}min ({day})', unplaced_solution_extend_window:'Solution {letter}: Widen student window',
+    unplaced_extend_window_detail:'If {name} stays +{min}min on {day}, it fits.', unplaced_extend_window_btn:'+{min}min for {name} ({day})',
+    toast_window_extended:'{day} window extended +{min}min', toast_hours_extended:'{day} hours extended +{min}min',
+    confirm_merge_block:'The combined block will be {block} — more than 2 hours in a row. Continue?',
+    toast_placed_as_block:'{name}: placed as a combined block',
+    route_real_distance:'real distances', route_map_unavailable:'Map unavailable',
+    route_no_lessons_text:'No lessons this day.', route_travel_estimated_suffix:' (est.)',
+    route_home_label:'Home', route_arrival_label:'Arrival', toast_calc_error:'Error during calculation',
+    no_blocked_times:'No blocked times', settings_workday_hint:'Select at least one working day',
+    settings_name_placeholder:'Your name', settings_home_geocoded:'✓ geocoded', settings_home_not_geocoded:'⚠ Not geocoded yet',
+    settings_home_placeholder:'Street no., City', settings_travel_mode_label:'Mode of transport',
+    settings_travel_car:'🚗 Car', settings_travel_bike:'🚲 Bike', settings_travel_walk:'🚶 Walking',
+    settings_fuel_consumption_label:'Consumption (L/100km)', settings_margin_label:'Safety margin (minutes)',
+    settings_avg_speed_label:'Average city speed (km/h)', settings_here_key_label:'HERE Maps API Key (for live traffic)',
+    settings_here_key_placeholder:'Optional — for traffic-aware times', settings_lunch_label:'Lunch break',
+    settings_lunch_none:'None', settings_lunch_30:'30 minutes', settings_lunch_60:'1 hour',
+    settings_add_block:'Add blocked time', settings_maps_title:'Maps &amp; Routing',
+    settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Geocoding &amp; routes with no API key — free',
+    settings_install_desc:'To install RoutePal as an app on iPhone/iPad, open it in <strong>Safari</strong> and tap <strong>Share → Add to Home Screen</strong>.',
+    settings_open_safari:'Open in Safari', settings_quality_title:'Calculation quality',
+    settings_quality_quick:'Quick — 6 attempts, ~1-2 minutes', settings_quality_thorough:'Thorough — 8 attempts, ~2 minutes (better placement)',
+    settings_quality_hint:'Only affects how many students fit (Phase 1) — distance optimization stays the same',
+    settings_test_algo_desc:'Test the algorithm with realistic random students in Patras (real geocoding &amp; routes).',
+    settings_test_algo_btn:'Load 40 test students',
+    toast_link_copied:'Link copied — open it in Safari', toast_need_workday:'You need at least one working day',
+    toast_applies_next_refresh:'Will apply on next Refresh', toast_settings_saved:'Settings saved',
+    block_day_label:'Day', block_from_label:'From', block_to_label:'To',
+    block_reason_label:'Reason (optional)', block_reason_placeholder:'e.g. Lunch, Day off...',
+    toast_end_after_start:'End time must be after start', toast_block_added:'Block added',
+    toast_block_removed:'Block removed', confirm_test_students_title:'Test students ({n})',
+    confirm_test_students_text:'All current students will be replaced with {n} random test students in Patras, and scheduling will run automatically with real geocoding. Continue?',
+    toast_test_students_loaded:'Loaded {n} test students — calculating...',
+    confirm_reset_title:'Reset data', confirm_reset_text:'All data will be deleted and demo data will be loaded again.',
+    toast_invalid_file:'Invalid file', toast_import_success:'Data imported successfully', toast_error_prefix:'Error',
+    toast_export_success:'Data exported', onboarding_welcome:"Welcome! Let's set up a few basics.",
+    onboarding_profession_label:'PROFESSION', onboarding_duration_label:'LESSON DURATION', onboarding_address_label:'HOME ADDRESS',
+    onboarding_start_btn:'Get started →', onboarding_role_tutor:'Tutor', onboarding_role_physio:'Physiotherapist',
+    onboarding_role_beautician:'Beautician', onboarding_role_trainer:'Personal Trainer',
+    debug_calc_prefix:'Calculating...', debug_geocoding:'Geocoding...',
+    phase1_title:'Phase 1 — Placing students', phase1_sub:'Backtracking (20s)…',
+    phase1b_title:'Phase 1 — Placement', phase1b_sub:'Trying {n} random orders…',
+    phase2_title:'Phase 2 — Geographic optimization', phase2_sub:'Sorting by distance…',
+    phase3_title:'Phase 3 — Simulated Annealing', phase3_sub:'Minimizing distance (25s)…', phase3_sub_short:'Minimizing distance…',
+    phase4_title:'Phase 4 — Final placement', phase4_sub:'Re-placing unfit students…',
+    phase4b_title:'Phase 4 — Re-placement', phase4b_sub:'Placing unfit students…',
+    phase5_title:'Phase 5 — LNS', phase5_sub:'Re-placing with destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
+    phase_done_title:'Complete', phase_done_sub:'Saving schedule…',
+    toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
+    toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
+    toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
+    toast_popup_blocked:'The browser blocked the print window — please allow pop-ups', print_no_lessons:'No lesson',
+    print_lessons_suffix:'lessons', merge_badge_label:'BLOCK',
   },
   fr: {
     days:['','Lun','Mar','Mer','Jeu','Ven','Sam'],
@@ -685,6 +877,102 @@ const I18N = {
     settings_reset:'Réinitialiser aux données de démo', settings_export:'Exporter', settings_import:'Importer',
     settings_test_algo:'Test algorithme', settings_language:'Langue',
     btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...',
+    btn_delete:'Supprimer', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
+    confirm_title:'Confirmation', block_drawer_title:'Heure bloquée',
+    greeting_morning:'Bonjour', greeting_afternoon:'Bon après-midi', greeting_evening:'Bonsoir',
+    home_welcome:' — Bienvenue', home_schedule_stale_title:'Programme obsolète',
+    home_schedule_stale_sub:'Les élèves ont changé — appuyez sur Calculer', home_today_suffix:"aujourd'hui",
+    home_margin_safety:'Marge de sécurité', home_week:'Semaine', home_hours_wk_short:'Heures/sem',
+    home_km_optimized:'Km/sem (optimisé)', home_km_estimated:'Km/sem (estimé)',
+    home_today_label:"Aujourd'hui", home_unplaced_suffix:'ne rentre pas complètement', home_lessons_suffix:'cours programmés',
+    students_registered_suffix:'inscrits', students_map_btn:'Carte', students_new_btn:'Nouveau',
+    students_empty_title:"Aucun {clients}", students_empty_sub:"Ajoutez votre premier {client} pour commencer à utiliser RoutePal",
+    students_add_btn:'Ajouter {client}', students_map_locations_label:'CARTE DES LIEUX',
+    students_map_locations_count:'lieux', students_map_no_geocoded:'Aucun lieu géocodé',
+    home_marker_tooltip:'🏠 Domicile', student_per_week_suffix:'x/sem', student_placed_suffix:'placé',
+    student_address_label:'Adresse', student_geocoded_title:'Géocodé', student_not_geocoded_title:'Pas encore géocodé',
+    student_duration_label:'Durée', student_minutes_suffix:'minutes', student_type_label:'Type',
+    student_type_group_prefix:'Groupe', student_type_solo:'Individuel', student_paired_label:'Associé à',
+    student_unknown_partner:'⚠ élève inconnu', student_not_mutual:'⚠ non réciproque',
+    student_availability_label:'Disponibilité', student_notes_label:'Notes',
+    drawer_new_prefix:'Nouveau', drawer_edit_prefix:'Modifier',
+    form_fullname_label:'Nom complet', form_fullname_placeholder:'Nom complet',
+    form_address_placeholder:'Saisissez une adresse…', form_duration_label:'Durée (min)',
+    form_times_per_week:'Fois/sem.', form_merge_label:'Bloc unique (double cours, etc.)',
+    form_merge_off:'Jamais — toujours des cours séparés', form_merge_always:'Toujours — un bloc continu',
+    form_merge_auto:"Auto — l'algorithme décide ce qui convient le mieux",
+    form_merge_auto_hint:'En mode "Auto", les deux options sont testées et celle qui convient le mieux avec les autres élèves est retenue',
+    form_max_per_block:'Cours maximum par bloc', form_max_per_block_hint:"S'il en faut plus, des blocs séparés de cette taille seront créés sur d'autres jours",
+    form_type_label:'Type', form_type_solo:'Individuel', form_type_group:'Groupe',
+    form_group_code_label:'Code du groupe', form_group_code_placeholder:'ex. A1',
+    form_availability_title:'Disponibilité', form_paired_none:'— aucun —',
+    form_notes_placeholder:'Notes facultatives...', form_to:'à',
+    search_searching:'Recherche…', search_no_results:'Aucun résultat trouvé', search_error:'Erreur de recherche',
+    toast_enter_fullname:'Entrez le nom complet', toast_enter_address:"Entrez l'adresse",
+    saving_ellipsis:'Enregistrement...', toast_select_day:'Sélectionnez au moins un jour',
+    toast_client_updated:'mis à jour', toast_client_added:'ajouté', toast_client_deleted:'supprimé',
+    confirm_delete_client_title:'Supprimer {client}', confirm_delete_client_text:'Voulez-vous vraiment supprimer {name} ? Toutes les données seront perdues.',
+    toast_geocoded_count:'Lieux', schedule_export_pdf_title:'Exporter en PDF',
+    schedule_random_placement_label:'PLACEMENT ALÉATOIRE SOUS CONTRAINTES', schedule_attempt_label:'Essai',
+    schedule_km_before_after:'Avant : {before}km → Après : {after}km · Économie : {saved}km',
+    schedule_optimize_btn:'Optimiser avec carte (OpenStreetMap)', schedule_gap_same_location:'📍 même lieu',
+    schedule_gap_travel:'🚗 ~{min}min trajet', schedule_gap_safety:' + {min}min sécurité',
+    toast_no_free_time:'Aucun créneau libre disponible', unplaced_group_badge:'cr.',
+    unplaced_solution_combo:'Solution A : Bloc combiné {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min en un jour',
+    unplaced_apply_block:'Appliquer comme bloc {block}', unplaced_solution_extend_hours:'Solution {letter} : Prolonger vos horaires',
+    unplaced_extend_hours_detail:'Si vous prolongez vos horaires le {day} de +{min} minutes, cela rentre normalement.',
+    unplaced_extend_hours_btn:'Prolonger +{min}min ({day})', unplaced_solution_extend_window:"Solution {letter} : Élargir la plage de l'élève",
+    unplaced_extend_window_detail:'Si {name} reste +{min}min le {day}, cela rentre.', unplaced_extend_window_btn:'+{min}min pour {name} ({day})',
+    toast_window_extended:'Plage du {day} élargie de +{min}min', toast_hours_extended:'Horaires du {day} prolongés de +{min}min',
+    confirm_merge_block:'Le bloc combiné sera de {block} — plus de 2 heures consécutives. Continuer ?',
+    toast_placed_as_block:'{name} : placé comme bloc combiné',
+    route_real_distance:'distances réelles', route_map_unavailable:'Carte indisponible',
+    route_no_lessons_text:'Aucun cours ce jour.', route_travel_estimated_suffix:' (est.)',
+    route_home_label:'Domicile', route_arrival_label:'Arrivée', toast_calc_error:'Erreur lors du calcul',
+    no_blocked_times:'Aucune heure bloquée', settings_workday_hint:'Sélectionnez au moins un jour de travail',
+    settings_name_placeholder:'Votre nom', settings_home_geocoded:'✓ géocodé', settings_home_not_geocoded:'⚠ Pas encore géocodé',
+    settings_home_placeholder:'Rue n°, Ville', settings_travel_mode_label:'Moyen de transport',
+    settings_travel_car:'🚗 Voiture', settings_travel_bike:'🚲 Vélo', settings_travel_walk:'🚶 À pied',
+    settings_fuel_consumption_label:'Consommation (L/100km)', settings_margin_label:'Marge de sécurité (minutes)',
+    settings_avg_speed_label:'Vitesse moyenne en ville (km/h)', settings_here_key_label:'Clé API HERE Maps (trafic en temps réel)',
+    settings_here_key_placeholder:'Facultatif — pour des temps tenant compte du trafic', settings_lunch_label:'Pause déjeuner',
+    settings_lunch_none:'Aucune', settings_lunch_30:'30 minutes', settings_lunch_60:'1 heure',
+    settings_add_block:'Ajouter un blocage', settings_maps_title:'Cartes &amp; Itinéraires',
+    settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Géocodage &amp; itinéraires sans clé API — gratuit',
+    settings_install_desc:'Pour installer RoutePal comme application sur iPhone/iPad, ouvrez-le dans <strong>Safari</strong> et appuyez sur <strong>Partager → Sur l\'écran d\'accueil</strong>.',
+    settings_open_safari:'Ouvrir dans Safari', settings_quality_title:'Qualité du calcul',
+    settings_quality_quick:'Rapide — 6 essais, ~1-2 minutes', settings_quality_thorough:'Complet — 8 essais, ~2 minutes (meilleur placement)',
+    settings_quality_hint:"Affecte seulement le nombre d'élèves placés (Phase 1) — l'optimisation des distances reste identique",
+    settings_test_algo_desc:"Testez l'algorithme avec des élèves aléatoires réalistes à Patras (géocodage &amp; itinéraires réels).",
+    settings_test_algo_btn:'Charger 40 élèves de test',
+    toast_link_copied:'Lien copié — ouvrez-le dans Safari', toast_need_workday:'Il vous faut au moins un jour de travail',
+    toast_applies_next_refresh:'Sera appliqué à la prochaine actualisation', toast_settings_saved:'Réglages enregistrés',
+    block_day_label:'Jour', block_from_label:'De', block_to_label:'À',
+    block_reason_label:'Raison (facultatif)', block_reason_placeholder:'ex. Déjeuner, Jour de congé...',
+    toast_end_after_start:"L'heure de fin doit être après le début", toast_block_added:'Blocage ajouté',
+    toast_block_removed:'Blocage supprimé', confirm_test_students_title:'Élèves de test ({n})',
+    confirm_test_students_text:'Tous les élèves actuels seront remplacés par {n} élèves de test aléatoires à Patras, et la planification s\'exécutera automatiquement avec un géocodage réel. Continuer ?',
+    toast_test_students_loaded:'{n} élèves de test chargés — calcul en cours...',
+    confirm_reset_title:'Réinitialiser les données', confirm_reset_text:'Toutes les données seront supprimées et les données de démo seront rechargées.',
+    toast_invalid_file:'Fichier invalide', toast_import_success:'Données importées avec succès', toast_error_prefix:'Erreur',
+    toast_export_success:'Données exportées', onboarding_welcome:'Bienvenue ! Configurons quelques éléments de base.',
+    onboarding_profession_label:'PROFESSION', onboarding_duration_label:'DURÉE DU COURS', onboarding_address_label:'ADRESSE DU DOMICILE',
+    onboarding_start_btn:'Commencer →', onboarding_role_tutor:'Professeur', onboarding_role_physio:'Kinésithérapeute',
+    onboarding_role_beautician:'Esthéticienne', onboarding_role_trainer:'Personal Trainer',
+    debug_calc_prefix:'Calcul en cours...', debug_geocoding:'Géocodage...',
+    phase1_title:'Phase 1 — Placement des élèves', phase1_sub:'Backtracking (20s)…',
+    phase1b_title:'Phase 1 — Placement', phase1b_sub:'Essai de {n} ordres aléatoires…',
+    phase2_title:'Phase 2 — Optimisation géographique', phase2_sub:'Tri par distance…',
+    phase3_title:'Phase 3 — Recuit simulé', phase3_sub:'Minimisation des kilomètres (25s)…', phase3_sub_short:'Minimisation des kilomètres…',
+    phase4_title:'Phase 4 — Placement final', phase4_sub:'Replacement des élèves non placés…',
+    phase4b_title:'Phase 4 — Replacement', phase4b_sub:'Placement des élèves non placés…',
+    phase5_title:'Phase 5 — LNS', phase5_sub:'Replacement par destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
+    phase_done_title:'Terminé', phase_done_sub:'Enregistrement du programme…',
+    toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
+    toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
+    toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
+    toast_popup_blocked:"Le navigateur a bloqué la fenêtre d'impression — autorisez les pop-ups", print_no_lessons:'Aucun cours',
+    print_lessons_suffix:'cours', merge_badge_label:'BLOC',
   },
   de: {
     days:['','Mo','Di','Mi','Do','Fr','Sa'],
@@ -710,6 +998,102 @@ const I18N = {
     settings_reset:'Auf Demo-Daten zurücksetzen', settings_export:'Exportieren', settings_import:'Importieren',
     settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
     btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...',
+    btn_delete:'Löschen', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
+    confirm_title:'Bestätigung', block_drawer_title:'Blockierte Zeit',
+    greeting_morning:'Guten Morgen', greeting_afternoon:'Guten Tag', greeting_evening:'Guten Abend',
+    home_welcome:' — Willkommen', home_schedule_stale_title:'Plan veraltet',
+    home_schedule_stale_sub:'Schüler haben sich geändert — tippe auf Berechnen', home_today_suffix:'heute',
+    home_margin_safety:'Sicherheitsmarge', home_week:'Woche', home_hours_wk_short:'Std/Wo',
+    home_km_optimized:'Km/Wo (optimiert)', home_km_estimated:'Km/Wo (geschätzt)',
+    home_today_label:'Heute', home_unplaced_suffix:'passt nicht vollständig', home_lessons_suffix:'Stunden geplant',
+    students_registered_suffix:'registriert', students_map_btn:'Karte', students_new_btn:'Neu',
+    students_empty_title:'Keine {clients}', students_empty_sub:'Fügen Sie Ihren ersten {client} hinzu, um RoutePal zu nutzen',
+    students_add_btn:'{client} hinzufügen', students_map_locations_label:'STANDORTKARTE',
+    students_map_locations_count:'Standorte', students_map_no_geocoded:'Keine geocodierten Standorte',
+    home_marker_tooltip:'🏠 Zuhause', student_per_week_suffix:'x/Wo', student_placed_suffix:'platziert',
+    student_address_label:'Adresse', student_geocoded_title:'Geocodiert', student_not_geocoded_title:'Noch nicht geocodiert',
+    student_duration_label:'Dauer', student_minutes_suffix:'Minuten', student_type_label:'Typ',
+    student_type_group_prefix:'Gruppe', student_type_solo:'Einzeln', student_paired_label:'Gepaart mit',
+    student_unknown_partner:'⚠ unbekannter Schüler', student_not_mutual:'⚠ nicht gegenseitig',
+    student_availability_label:'Verfügbarkeit', student_notes_label:'Notizen',
+    drawer_new_prefix:'Neu', drawer_edit_prefix:'Bearbeiten',
+    form_fullname_label:'Vollständiger Name', form_fullname_placeholder:'Vollständiger Name',
+    form_address_placeholder:'Adresse eingeben…', form_duration_label:'Dauer (Min)',
+    form_times_per_week:'Mal/Woche', form_merge_label:'Einzelblock (Doppelstunde usw.)',
+    form_merge_off:'Nie — immer getrennte Stunden', form_merge_always:'Immer — ein durchgehender Block',
+    form_merge_auto:'Auto — der Algorithmus entscheidet, was am besten passt',
+    form_merge_auto_hint:'Bei "Auto" werden beide Optionen ausprobiert und die am besten passende beibehalten',
+    form_max_per_block:'Maximale Stunden pro Block', form_max_per_block_hint:'Falls mehr benötigt werden, werden separate Blöcke dieser Größe an anderen Tagen erstellt',
+    form_type_label:'Typ', form_type_solo:'Einzeln', form_type_group:'Gruppe',
+    form_group_code_label:'Gruppencode', form_group_code_placeholder:'z.B. A1',
+    form_availability_title:'Verfügbarkeit', form_paired_none:'— keine —',
+    form_notes_placeholder:'Optionale Notizen...', form_to:'bis',
+    search_searching:'Suche…', search_no_results:'Keine Ergebnisse gefunden', search_error:'Suchfehler',
+    toast_enter_fullname:'Vollständigen Namen eingeben', toast_enter_address:'Adresse eingeben',
+    saving_ellipsis:'Speichern...', toast_select_day:'Wählen Sie mindestens einen Tag',
+    toast_client_updated:'aktualisiert', toast_client_added:'hinzugefügt', toast_client_deleted:'gelöscht',
+    confirm_delete_client_title:'{client} löschen', confirm_delete_client_text:'Möchten Sie {name} wirklich löschen? Alle Daten gehen verloren.',
+    toast_geocoded_count:'Standorte', schedule_export_pdf_title:'Als PDF exportieren',
+    schedule_random_placement_label:'ZUFÄLLIGE PLATZIERUNG NACH EINSCHRÄNKUNGEN', schedule_attempt_label:'Versuch',
+    schedule_km_before_after:'Vorher: {before}km → Nachher: {after}km · Ersparnis: {saved}km',
+    schedule_optimize_btn:'Mit Karte optimieren (OpenStreetMap)', schedule_gap_same_location:'📍 gleicher Ort',
+    schedule_gap_travel:'🚗 ~{min}min Fahrt', schedule_gap_safety:' + {min}min Sicherheit',
+    toast_no_free_time:'Keine freie Zeit verfügbar', unplaced_group_badge:'Std.',
+    unplaced_solution_combo:'Lösung A: Kombinierter Block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min an einem Tag',
+    unplaced_apply_block:'Als {block} Block anwenden', unplaced_solution_extend_hours:'Lösung {letter}: Arbeitszeit verlängern',
+    unplaced_extend_hours_detail:'Wenn Sie Ihre Arbeitszeit am {day} um +{min} Minuten verlängern, passt es normal.',
+    unplaced_extend_hours_btn:'+{min}min verlängern ({day})', unplaced_solution_extend_window:'Lösung {letter}: Zeitfenster des Schülers erweitern',
+    unplaced_extend_window_detail:'Wenn {name} am {day} +{min}min länger bleibt, passt es.', unplaced_extend_window_btn:'+{min}min für {name} ({day})',
+    toast_window_extended:'Zeitfenster {day} um +{min}min erweitert', toast_hours_extended:'Arbeitszeit {day} um +{min}min verlängert',
+    confirm_merge_block:'Der kombinierte Block wird {block} sein — mehr als 2 Stunden am Stück. Fortfahren?',
+    toast_placed_as_block:'{name}: als kombinierter Block platziert',
+    route_real_distance:'reale Entfernungen', route_map_unavailable:'Karte nicht verfügbar',
+    route_no_lessons_text:'Keine Stunden an diesem Tag.', route_travel_estimated_suffix:' (gesch.)',
+    route_home_label:'Zuhause', route_arrival_label:'Ankunft', toast_calc_error:'Fehler bei der Berechnung',
+    no_blocked_times:'Keine blockierten Zeiten', settings_workday_hint:'Wählen Sie mindestens einen Arbeitstag',
+    settings_name_placeholder:'Ihr Name', settings_home_geocoded:'✓ geocodiert', settings_home_not_geocoded:'⚠ Noch nicht geocodiert',
+    settings_home_placeholder:'Straße Nr., Stadt', settings_travel_mode_label:'Verkehrsmittel',
+    settings_travel_car:'🚗 Auto', settings_travel_bike:'🚲 Fahrrad', settings_travel_walk:'🚶 Zu Fuß',
+    settings_fuel_consumption_label:'Verbrauch (L/100km)', settings_margin_label:'Sicherheitsmarge (Minuten)',
+    settings_avg_speed_label:'Durchschnittliche Stadtgeschwindigkeit (km/h)', settings_here_key_label:'HERE Maps API-Schlüssel (für Live-Verkehr)',
+    settings_here_key_placeholder:'Optional — für verkehrsbasierte Zeiten', settings_lunch_label:'Mittagspause',
+    settings_lunch_none:'Keine', settings_lunch_30:'30 Minuten', settings_lunch_60:'1 Stunde',
+    settings_add_block:'Blockierung hinzufügen', settings_maps_title:'Karten &amp; Routing',
+    settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Geocoding &amp; Routen ohne API-Schlüssel — kostenlos',
+    settings_install_desc:'Um RoutePal als App auf iPhone/iPad zu installieren, öffne es in <strong>Safari</strong> und tippe auf <strong>Teilen → Zum Home-Bildschirm</strong>.',
+    settings_open_safari:'In Safari öffnen', settings_quality_title:'Berechnungsqualität',
+    settings_quality_quick:'Schnell — 6 Versuche, ~1-2 Minuten', settings_quality_thorough:'Gründlich — 8 Versuche, ~2 Minuten (bessere Platzierung)',
+    settings_quality_hint:'Beeinflusst nur, wie viele Schüler passen (Phase 1) — die Kilometeroptimierung bleibt gleich',
+    settings_test_algo_desc:'Testen Sie den Algorithmus mit realistischen zufälligen Schülern in Patras (echtes Geocoding &amp; echte Routen).',
+    settings_test_algo_btn:'40 Testschüler laden',
+    toast_link_copied:'Link kopiert — öffne ihn in Safari', toast_need_workday:'Sie benötigen mindestens einen Arbeitstag',
+    toast_applies_next_refresh:'Wird bei der nächsten Aktualisierung angewendet', toast_settings_saved:'Einstellungen gespeichert',
+    block_day_label:'Tag', block_from_label:'Von', block_to_label:'Bis',
+    block_reason_label:'Grund (optional)', block_reason_placeholder:'z.B. Mittagessen, Frei...',
+    toast_end_after_start:'Die Endzeit muss nach dem Beginn liegen', toast_block_added:'Blockierung hinzugefügt',
+    toast_block_removed:'Blockierung entfernt', confirm_test_students_title:'Testschüler ({n})',
+    confirm_test_students_text:'Alle aktuellen Schüler werden durch {n} zufällige Testschüler in Patras ersetzt, und die Planung läuft automatisch mit echtem Geocoding. Fortfahren?',
+    toast_test_students_loaded:'{n} Testschüler geladen — Berechnung läuft...',
+    confirm_reset_title:'Daten zurücksetzen', confirm_reset_text:'Alle Daten werden gelöscht und die Demo-Daten erneut geladen.',
+    toast_invalid_file:'Ungültige Datei', toast_import_success:'Daten erfolgreich importiert', toast_error_prefix:'Fehler',
+    toast_export_success:'Daten exportiert', onboarding_welcome:'Willkommen! Lass uns ein paar Grundlagen einrichten.',
+    onboarding_profession_label:'BERUF', onboarding_duration_label:'STUNDENDAUER', onboarding_address_label:'HEIMADRESSE',
+    onboarding_start_btn:'Loslegen →', onboarding_role_tutor:'Lehrer', onboarding_role_physio:'Physiotherapeut',
+    onboarding_role_beautician:'Kosmetiker', onboarding_role_trainer:'Personal Trainer',
+    debug_calc_prefix:'Berechnung läuft...', debug_geocoding:'Geocoding...',
+    phase1_title:'Phase 1 — Schüler platzieren', phase1_sub:'Backtracking (20s)…',
+    phase1b_title:'Phase 1 — Platzierung', phase1b_sub:'{n} zufällige Reihenfolgen werden getestet…',
+    phase2_title:'Phase 2 — Geografische Optimierung', phase2_sub:'Sortierung nach Entfernung…',
+    phase3_title:'Phase 3 — Simulated Annealing', phase3_sub:'Kilometer minimieren (25s)…', phase3_sub_short:'Kilometer minimieren…',
+    phase4_title:'Phase 4 — Endplatzierung', phase4_sub:'Nicht passende Schüler neu platzieren…',
+    phase4b_title:'Phase 4 — Neuplatzierung', phase4b_sub:'Nicht passende Schüler platzieren…',
+    phase5_title:'Phase 5 — LNS', phase5_sub:'Neuplatzierung mit Destroy-Repair (10s)…', phase5b_sub:'Destroy-Repair (10s)…',
+    phase_done_title:'Abgeschlossen', phase_done_sub:'Plan wird gespeichert…',
+    toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
+    toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
+    toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
+    toast_popup_blocked:'Der Browser hat das Druckfenster blockiert — bitte Pop-ups erlauben', print_no_lessons:'Keine Stunde',
+    print_lessons_suffix:'Stunden', merge_badge_label:'BLOCK',
   },
 };
 function t(key){
@@ -718,6 +1102,18 @@ function t(key){
 }
 function curLang(){
   return (typeof state!=='undefined' && state.settings && state.settings.language) || 'el';
+}
+// t() with {placeholder} substitution, e.g. tf('toast_placed_summary',{placed:3,total:5,attempts:''})
+function tf(key, vars){
+  let str = t(key);
+  if(vars) for(const k in vars) str = str.split('{'+k+'}').join(vars[k]);
+  return str;
+}
+// t() with {placeholder} substitution, e.g. tf('confirm_delete_client_text',{name:'Maria'})
+function tf(key, params){
+  let str = t(key);
+  if(params) for(const k in params) str = str.split('{'+k+'}').join(params[k]);
+  return str;
 }
 
 const DAYS = ['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'];
@@ -2819,7 +3215,7 @@ const App = {
     const hereKey = state.settings && state.settings.hereApiKey;
     if(hereKey){
       try{
-        Toast.show('Λήψη χρόνων κίνησης (HERE)…');
+        Toast.show(t('toast_here_fetching'));
         const allIds2 = ['home', ...state.students.map(s=>s.id)];
         const matCoords = allIds2.map(id=>state.coords[id]).filter(Boolean);
         const validIds = allIds2.filter(id=>state.coords[id]);
@@ -2833,9 +3229,9 @@ const App = {
         const dow = depOff.getDay(); if(dow!==6) depOff.setDate(depOff.getDate()+(6-dow+7)%7||7);
         const matOff = await Router.getHereMatrix(matCoords, hereKey, depOff.toISOString());
         state.travelMatrixOffPeak = {durations: matOff.durations, coordIds: validIds};
-        Toast.show('Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)');
+        Toast.show(t('toast_here_updated'));
       }catch(e){
-        Toast.show('HERE API απέτυχε — χρήση εκτίμησης');
+        Toast.show(t('toast_here_failed'));
         console.warn('HERE matrix error:', e);
       }
     }
@@ -2917,7 +3313,7 @@ const App = {
   // triggers the browser's print dialog — user picks "Save as PDF" there.
   printSchedule(){
     const win = window.open('', '_blank');
-    if(!win){ Toast.show('Ο browser μπλόκαρε το παράθυρο εκτύπωσης — επιτρέψτε pop-ups','error'); return; }
+    if(!win){ Toast.show(t('toast_popup_blocked'),'error'); return; }
     const teacherName = state.settings.teacherName || 'RoutePal';
     let html = `<!DOCTYPE html><html lang="el"><head><meta charset="UTF-8"><title>Πρόγραμμα — ${esc(teacherName)}</title>
       <style>
@@ -3087,7 +3483,7 @@ const App = {
     const placed = total - r.unplaced.reduce((a,u)=>a+(u.needed-u.placed),0);
     const att = r._attempts || 1;
     const attLabel = att > 1 ? ` (${att} δοκιμές)` : '';
-    Toast.show(`Πρόγραμμα: ${placed}/${total} μαθήματα τοποθετήθηκαν${attLabel}`,'success');
+    Toast.show(tf('toast_placed_summary',{placed,total,attempts:attLabel}),'success');
   },
 
   // ---- HOME ----
@@ -3602,8 +3998,8 @@ const App = {
     const saveBtn = document.querySelector('#drawer-student .drawer-footer .btn-primary');
     const name = document.getElementById('st-name')?.value?.trim();
     const addr = document.getElementById('st-addr')?.value?.trim();
-    if(!name){ Toast.show('Εισάγετε ονοματεπώνυμο','error'); return }
-    if(!addr){ Toast.show('Εισάγετε διεύθυνση','error'); return }
+    if(!name){ Toast.show(t('toast_enter_fullname'),'error'); return }
+    if(!addr){ Toast.show(t('toast_enter_address'),'error'); return }
     if(saveBtn){ saveBtn.disabled=true; saveBtn.style.opacity='0.6'; saveBtn.textContent='Αποθήκευση...'; }
 
     const availability = {};
@@ -3619,7 +4015,7 @@ const App = {
     });
 
     if(Object.keys(availability).length===0){
-      Toast.show('Επιλέξτε τουλάχιστον μία ημέρα','error'); return
+      Toast.show(t('toast_select_day'),'error'); return
     }
 
     const st = {
@@ -3647,10 +4043,10 @@ const App = {
     if(state.editingStudentId){
       const idx = state.students.findIndex(s=>s.id===state.editingStudentId);
       if(idx>=0) state.students[idx]=st;
-      Toast.show(`Ο ${L2.client.toLowerCase()} ενημερώθηκε`,'success');
+      Toast.show(`${L2.client} ${t('toast_client_updated')}`,'success');
     } else {
       state.students.push(st);
-      Toast.show(`Ο ${L2.client.toLowerCase()} προστέθηκε`,'success');
+      Toast.show(`${L2.client} ${t('toast_client_added')}`,'success');
     }
     // Bidirectional pairedWith: set partner's pairedWith = this student's id, clear old partner
     const oldSt = state.editingStudentId ? state.students.find(s=>s.id===state.editingStudentId) : null;
@@ -3711,7 +4107,7 @@ const App = {
         state._scheduleStale = true;
         this.renderStudents();
         this.renderHome();
-        Toast.show(`Ο ${L.client.toLowerCase()} διαγράφηκε`,'info');
+        Toast.show(`${L.client} ${t('toast_client_deleted')}`,'info');
       }
     );
   },
@@ -3730,7 +4126,7 @@ const App = {
       if(c){ state.coords[s.id]=c; Storage.saveCoords(state.coords); }
       await new Promise(r=>setTimeout(r,1100));
     }
-    Toast.show(`Τοποθεσίες: ${Object.keys(state.coords).filter(k=>k!=='home').length}/${state.students.length} geocoded`,'ok');
+    Toast.show(`${t('toast_geocoded_count')}: ${Object.keys(state.coords).filter(k=>k!=='home').length}/${state.students.length} geocoded`,'ok');
     this.renderStudents();
   },
 
@@ -3959,7 +4355,7 @@ const App = {
     const student = state.students.find(s=>s.id===srcSlot.studentId);
     if(!student) return;
     const newTime = Scheduler.findSlotFixed(student, targetDay, existing, state.settings, srcSlot.duration);
-    if(!newTime){ Toast.show('Δεν υπάρχει ελεύθερη ώρα','error'); return; }
+    if(!newTime){ Toast.show(t('toast_no_free_time'),'error'); return; }
     // Remove from source day
     const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
     if(srcArrIdx>=0) state.schedule[srcDay].splice(srcArrIdx,1);
@@ -4031,7 +4427,7 @@ const App = {
     student.availability[day] = {...av, end: newEnd};
     Storage.saveStudents(state.students);
     this.runAndNotify();
-    Toast.show(`Παράθυρο ${DAYS_FULL[day]} διευρύνθηκε +${extMin}λ`,'success');
+    Toast.show(tf('toast_window_extended',{day:DAYS_FULL[day],min:extMin}),'success');
   },
 
   applyTeacherExtension(day, extMin){
@@ -4040,7 +4436,7 @@ const App = {
     state.settings.dayHours[day] = {...dayH, end: Scheduler.toTime(Scheduler.toMin(dayH.end)+extMin)};
     Storage.saveSettings(state.settings);
     this.runAndNotify();
-    Toast.show(`Ωράριο ${DAYS_FULL[day]} παρατάθηκε +${extMin}λ`,'success');
+    Toast.show(tf('toast_hours_extended',{day:DAYS_FULL[day],min:extMin}),'success');
   },
 
   forceMergeAndReschedule(studentId){
@@ -4054,7 +4450,7 @@ const App = {
     student.forceMerge = true;
     Storage.saveStudents(state.students);
     this.runAndNotify();
-    Toast.show(`${student.name}: τοποθετήθηκε ως συνδυαστικό μπλοκ`,'success');
+    Toast.show(tf('toast_placed_as_block',{name:student.name}),'success');
   },
 
   // ---- ROUTE ----
@@ -4349,7 +4745,7 @@ const App = {
         state.routeResults[day]={stops:ps,totalKm,totalMinutes:totalMin,fuelCost:(totalKm/100*fuel*1.8).toFixed(2)};
       }
     }catch(e){
-      Toast.show('Σφάλμα κατά τον υπολογισμό','error');
+      Toast.show(t('toast_calc_error'),'error');
     }
 
     if(btn){ btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg> Υπολογισμός'; btn.disabled=false }
@@ -4564,7 +4960,7 @@ const App = {
     // Fallback after 800ms: copy link to clipboard
     setTimeout(()=>{
       if(navigator.clipboard){ navigator.clipboard.writeText(url).catch(()=>{}) }
-      Toast.show('Αντιγράφηκε ο σύνδεσμος — άνοιξέ τον στο Safari','info');
+      Toast.show(t('toast_link_copied'),'info');
     }, 800);
   },
 
@@ -4572,7 +4968,7 @@ const App = {
     const el = document.getElementById('wday-'+d);
     const idx = state.settings.workDays.indexOf(d);
     if(idx>=0){
-      if(state.settings.workDays.length<=1){ Toast.show('Χρειάζεστε τουλάχιστον μία εργάσιμη ημέρα','error'); return }
+      if(state.settings.workDays.length<=1){ Toast.show(t('toast_need_workday'),'error'); return }
       state.settings.workDays.splice(idx,1);
       el.classList.remove('on');
     } else {
@@ -4603,7 +4999,7 @@ const App = {
   setScheduleQuality(q){
     state.settings.scheduleQuality = q;
     Storage.saveSettings(state.settings);
-    Toast.show('Θα εφαρμοστεί στην επόμενη Ανανέωση','info');
+    Toast.show(t('toast_applies_next_refresh'),'info');
   },
 
   saveSettings(){
@@ -4636,7 +5032,7 @@ const App = {
 
     Storage.saveSettings(s);
     this.runAndNotify();
-    Toast.show('Ρυθμίσεις αποθηκεύτηκαν','success');
+    Toast.show(t('toast_settings_saved'),'success');
   },
 
   openBlockDrawer(){
@@ -4675,7 +5071,7 @@ const App = {
     const end   = document.getElementById('bl-end')?.value||'14:00';
     const reason= document.getElementById('bl-reason')?.value?.trim()||'';
     if(Scheduler.toMin(end)<=Scheduler.toMin(start)){
-      Toast.show('Η ώρα λήξης πρέπει να είναι μετά την αρχή','error'); return
+      Toast.show(t('toast_end_after_start'),'error'); return
     }
     state.settings.blockedSlots = state.settings.blockedSlots||[];
     state.settings.blockedSlots.push({day,start,end,reason});
@@ -4683,7 +5079,7 @@ const App = {
     this.closeBlockDrawer();
     this.runAndNotify();
     this.renderSettings();
-    Toast.show('Μπλοκάρισμα προστέθηκε','success');
+    Toast.show(t('toast_block_added'),'success');
   },
 
   deleteBlock(idx){
@@ -4691,7 +5087,7 @@ const App = {
     Storage.saveSettings(state.settings);
     this.runAndNotify();
     this.renderSettings();
-    Toast.show('Μπλοκάρισμα αφαιρέθηκε','info');
+    Toast.show(t('toast_block_removed'),'info');
   },
 
   // Seed N realistic test students with real Patras street names, for load-testing
@@ -4728,7 +5124,7 @@ const App = {
         Storage.saveStudents(state.students);
         state.coords = {};
         Storage.saveCoords(state.coords);
-        Toast.show(`Φορτώθηκαν ${n} δοκιμαστικοί μαθητές — υπολογισμός...`,'info');
+        Toast.show(tf('toast_test_students_loaded',{n}),'info');
         this.runAndNotify();
         this.nav('schedule');
       }
@@ -4765,8 +5161,8 @@ const App = {
           Storage.saveCoords(state.coords);
           Storage.saveSchedule(state.schedule);
           this.runAndNotify();
-          Toast.show('Δεδομένα εισήχθησαν επιτυχώς','success');
-        }catch(err){ Toast.show('Σφάλμα: '+err.message,'error'); }
+          Toast.show(t('toast_import_success'),'success');
+        }catch(err){ Toast.show(t('toast_error_prefix')+': '+err.message,'error'); }
       };
       reader.readAsText(file);
     };
@@ -4787,7 +5183,7 @@ const App = {
     a.download = `routepal-export-${new Date().toLocaleDateString('el-GR').replace(/\//g,'-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    Toast.show('Δεδομένα εξήχθησαν','success');
+    Toast.show(t('toast_export_success'),'success');
   },
 
   // ---- CONFIRM ----
