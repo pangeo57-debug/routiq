@@ -664,10 +664,18 @@ const I18N = {
     form_type_label:'Τύπος', form_type_solo:'Ατομικό', form_type_group:'Ομάδα',
     form_group_code_label:'Κωδικός ομάδας', form_group_code_placeholder:'π.χ. A1',
     form_availability_title:'Διαθεσιμότητα', form_paired_none:'— κανένα —',
+    form_avail_mode_label:'Τρόπος διαθεσιμότητας',
+    form_avail_mode_manual:'Χειροκίνητα ανά ημέρα',
+    form_avail_mode_exceptions:'Πάντα διαθέσιμος, εκτός εξαιρέσεων',
+    form_avail_mode_hint:'Θεωρείται διαθέσιμος όλες τις εργάσιμες ώρες σας — όρισε μόνο τις ώρες που ΔΕΝ μπορεί.',
+    form_avail_add_exception:'Προσθήκη εξαίρεσης',
+    form_avail_no_exceptions:'Καμία εξαίρεση — διαθέσιμος όλες τις εργάσιμες ώρες',
+    form_avail_exceptions_title:'Ώρες που ΔΕΝ μπορεί',
     form_notes_placeholder:'Προαιρετικές σημειώσεις...', form_to:'έως',
     search_searching:'Αναζήτηση…', search_no_results:'Δεν βρέθηκαν αποτελέσματα', search_error:'Σφάλμα αναζήτησης',
     toast_enter_fullname:'Εισάγετε ονοματεπώνυμο', toast_enter_address:'Εισάγετε διεύθυνση',
     saving_ellipsis:'Αποθήκευση...', toast_select_day:'Επιλέξτε τουλάχιστον μία ημέρα',
+    toast_avail_exception_invalid:'Μη έγκυρη εξαίρεση — ελέγξτε ημέρα/ώρες',
     toast_client_updated:'ενημερώθηκε', toast_client_added:'προστέθηκε', toast_client_deleted:'διαγράφηκε',
     confirm_delete_client_title:'Διαγραφή {client}', confirm_delete_client_text:'Είστε σίγουροι ότι θέλετε να διαγράψετε τον/την {name}; Όλα τα δεδομένα θα χαθούν.',
     toast_geocoded_count:'Τοποθεσίες', schedule_export_pdf_title:'Εξαγωγή ως PDF',
@@ -800,10 +808,18 @@ const I18N = {
     form_type_label:'Type', form_type_solo:'Individual', form_type_group:'Group',
     form_group_code_label:'Group code', form_group_code_placeholder:'e.g. A1',
     form_availability_title:'Availability', form_paired_none:'— none —',
+    form_avail_mode_label:'Availability mode',
+    form_avail_mode_manual:'Manual, per day',
+    form_avail_mode_exceptions:'Always available, except exceptions',
+    form_avail_mode_hint:"Assumed available during all your working hours — just mark the times they CAN'T.",
+    form_avail_add_exception:'Add exception',
+    form_avail_no_exceptions:'No exceptions — available all working hours',
+    form_avail_exceptions_title:"Times they CAN'T",
     form_notes_placeholder:'Optional notes...', form_to:'to',
     search_searching:'Searching…', search_no_results:'No results found', search_error:'Search error',
     toast_enter_fullname:'Enter full name', toast_enter_address:'Enter address',
     saving_ellipsis:'Saving...', toast_select_day:'Select at least one day',
+    toast_avail_exception_invalid:'Invalid exception — check the day/times',
     toast_client_updated:'updated', toast_client_added:'added', toast_client_deleted:'deleted',
     confirm_delete_client_title:'Delete {client}', confirm_delete_client_text:'Are you sure you want to delete {name}? All data will be lost.',
     toast_geocoded_count:'Locations', schedule_export_pdf_title:'Export as PDF',
@@ -936,10 +952,18 @@ const I18N = {
     form_type_label:'Type', form_type_solo:'Individuel', form_type_group:'Groupe',
     form_group_code_label:'Code du groupe', form_group_code_placeholder:'ex. A1',
     form_availability_title:'Disponibilité', form_paired_none:'— aucun —',
+    form_avail_mode_label:'Mode de disponibilité',
+    form_avail_mode_manual:'Manuel, par jour',
+    form_avail_mode_exceptions:'Toujours disponible, sauf exceptions',
+    form_avail_mode_hint:"Considéré disponible pendant toutes vos heures de travail — indiquez seulement les horaires où il/elle NE PEUT PAS.",
+    form_avail_add_exception:'Ajouter une exception',
+    form_avail_no_exceptions:'Aucune exception — disponible toutes les heures de travail',
+    form_avail_exceptions_title:'Horaires impossibles',
     form_notes_placeholder:'Notes facultatives...', form_to:'à',
     search_searching:'Recherche…', search_no_results:'Aucun résultat trouvé', search_error:'Erreur de recherche',
     toast_enter_fullname:'Entrez le nom complet', toast_enter_address:"Entrez l'adresse",
     saving_ellipsis:'Enregistrement...', toast_select_day:'Sélectionnez au moins un jour',
+    toast_avail_exception_invalid:'Exception invalide — vérifiez le jour/les horaires',
     toast_client_updated:'mis à jour', toast_client_added:'ajouté', toast_client_deleted:'supprimé',
     confirm_delete_client_title:'Supprimer {client}', confirm_delete_client_text:'Voulez-vous vraiment supprimer {name} ? Toutes les données seront perdues.',
     toast_geocoded_count:'Lieux', schedule_export_pdf_title:'Exporter en PDF',
@@ -1072,10 +1096,18 @@ const I18N = {
     form_type_label:'Typ', form_type_solo:'Einzeln', form_type_group:'Gruppe',
     form_group_code_label:'Gruppencode', form_group_code_placeholder:'z.B. A1',
     form_availability_title:'Verfügbarkeit', form_paired_none:'— keine —',
+    form_avail_mode_label:'Verfügbarkeitsmodus',
+    form_avail_mode_manual:'Manuell, pro Tag',
+    form_avail_mode_exceptions:'Immer verfügbar, außer Ausnahmen',
+    form_avail_mode_hint:'Gilt als verfügbar während all Ihrer Arbeitszeiten — geben Sie nur die Zeiten an, in denen er/sie NICHT kann.',
+    form_avail_add_exception:'Ausnahme hinzufügen',
+    form_avail_no_exceptions:'Keine Ausnahmen — verfügbar während aller Arbeitszeiten',
+    form_avail_exceptions_title:'Zeiten, die NICHT gehen',
     form_notes_placeholder:'Optionale Notizen...', form_to:'bis',
     search_searching:'Suche…', search_no_results:'Keine Ergebnisse gefunden', search_error:'Suchfehler',
     toast_enter_fullname:'Vollständigen Namen eingeben', toast_enter_address:'Adresse eingeben',
     saving_ellipsis:'Speichern...', toast_select_day:'Wählen Sie mindestens einen Tag',
+    toast_avail_exception_invalid:'Ungültige Ausnahme — Tag/Zeiten prüfen',
     toast_client_updated:'aktualisiert', toast_client_added:'hinzugefügt', toast_client_deleted:'gelöscht',
     confirm_delete_client_title:'{client} löschen', confirm_delete_client_text:'Möchten Sie {name} wirklich löschen? Alle Daten gehen verloren.',
     toast_geocoded_count:'Standorte', schedule_export_pdf_title:'Als PDF exportieren',
@@ -3839,6 +3871,8 @@ const App = {
   buildStudentForm(st){
     const L = getLabels();
     const days = [1,2,3,4,5,6];
+    const avMode = st?.availabilityMode==='exceptions' ? 'exceptions' : 'manual';
+    this._editingExceptions = (st?.availabilityExceptions||[]).map(e=>({...e}));
     const avRows = days.map(d=>{
       const av = st?.availability?.[d];
       const on = av?.on||false;
@@ -3920,7 +3954,35 @@ const App = {
         </div>
       </div>
       <div class="section-title" style="padding:0;margin:16px 0 8px">${t('form_availability_title')}</div>
-      ${avRows}
+      <div class="form-group" style="margin-bottom:10px">
+        <label>${t('form_avail_mode_label')}</label>
+        <select id="st-avmode" onchange="App.toggleAvMode()">
+          <option value="manual" ${avMode!=='exceptions'?'selected':''}>${t('form_avail_mode_manual')}</option>
+          <option value="exceptions" ${avMode==='exceptions'?'selected':''}>${t('form_avail_mode_exceptions')}</option>
+        </select>
+      </div>
+      <div id="avail-manual-block" style="display:${avMode!=='exceptions'?'block':'none'}">
+        ${avRows}
+      </div>
+      <div id="avail-exceptions-block" style="display:${avMode==='exceptions'?'block':'none'}">
+        <div class="settings-sub" style="margin-bottom:10px">${t('form_avail_mode_hint')}</div>
+        <div id="avail-exceptions-list">${this.renderAvExceptionsList()}</div>
+        <div class="form-row" style="margin-top:10px;align-items:flex-end">
+          <div class="form-group" style="margin:0;flex:1">
+            <label style="font-size:12px">${t('form_avail_exceptions_title')}</label>
+            <select id="avex-day">
+              ${(state.settings.workDays||[1,2,3,4,5]).map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <input type="time" id="avex-start" value="17:00">
+          </div>
+          <div class="form-group" style="margin:0">
+            <input type="time" id="avex-end" value="18:00">
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-full" style="margin-top:8px" onclick="App.addAvException()">${t('form_avail_add_exception')}</button>
+      </div>
       <div class="form-group" style="margin-top:14px">
         <label>${t('student_paired_label')}</label>
         <select id="st-paired" onchange="App.onPairedChange(this.value)">
@@ -4055,6 +4117,82 @@ const App = {
     if(time) time.style.display = cb?.checked?'flex':'none';
   },
 
+  toggleAvMode(){
+    const mode = document.getElementById('st-avmode')?.value||'manual';
+    const manual = document.getElementById('avail-manual-block');
+    const exceptions = document.getElementById('avail-exceptions-block');
+    if(manual) manual.style.display = mode==='exceptions'?'none':'block';
+    if(exceptions) exceptions.style.display = mode==='exceptions'?'block':'none';
+  },
+
+  renderAvExceptionsList(){
+    const list = this._editingExceptions||[];
+    if(list.length===0) return `<p style="font-size:13px;color:var(--text3);padding:4px 0">${t('form_avail_no_exceptions')}</p>`;
+    return list.map((e,i)=>`
+      <div class="blocked-slot">
+        <div class="blocked-slot-info">
+          <div class="blocked-slot-time">${e.start} – ${e.end}</div>
+          <div class="blocked-slot-day">${DAYS_FULL[e.day]}</div>
+        </div>
+        <button class="btn-icon" type="button" onclick="App.removeAvException(${i})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>`).join('');
+  },
+
+  addAvException(){
+    const day = Number(document.getElementById('avex-day')?.value);
+    const start = document.getElementById('avex-start')?.value;
+    const end = document.getElementById('avex-end')?.value;
+    if(!day || !start || !end || start>=end){ Toast.show(t('toast_avail_exception_invalid'),'error'); return; }
+    this._editingExceptions = this._editingExceptions||[];
+    this._editingExceptions.push({day, start, end});
+    const box = document.getElementById('avail-exceptions-list');
+    if(box) box.innerHTML = this.renderAvExceptionsList();
+  },
+
+  removeAvException(i){
+    this._editingExceptions = (this._editingExceptions||[]).filter((_,idx)=>idx!==i);
+    const box = document.getElementById('avail-exceptions-list');
+    if(box) box.innerHTML = this.renderAvExceptionsList();
+  },
+
+  // Given exceptions [{day,start,end}], returns per-day {on,start,end} availability
+  // by taking the working-hours window and keeping the largest free gap left after
+  // removing the exception blocks (single-window schema, so only one gap can win).
+  computeAvailabilityFromExceptions(exceptions){
+    const workDays = state.settings.workDays||[1,2,3,4,5];
+    const dayHours = state.settings.dayHours||{};
+    const availability = {};
+    workDays.forEach(d=>{
+      const dh = dayHours[d] || {start:'15:00', end:'21:30'};
+      const dayStart = Scheduler.toMin(dh.start), dayEnd = Scheduler.toMin(dh.end);
+      const blocks = (exceptions||[]).filter(e=>Number(e.day)===d)
+        .map(e=>[Scheduler.toMin(e.start), Scheduler.toMin(e.end)])
+        .filter(([s,e])=>e>s)
+        .sort((a,b)=>a[0]-b[0]);
+      const merged = [];
+      blocks.forEach(([s,e])=>{
+        const cs=Math.max(s,dayStart), ce=Math.min(e,dayEnd);
+        if(cs>=ce) return;
+        if(merged.length && cs<=merged[merged.length-1][1]) merged[merged.length-1][1]=Math.max(merged[merged.length-1][1],ce);
+        else merged.push([cs,ce]);
+      });
+      let cursor = dayStart;
+      const gaps = [];
+      merged.forEach(([s,e])=>{
+        if(s>cursor) gaps.push([cursor,s]);
+        cursor = Math.max(cursor,e);
+      });
+      if(cursor<dayEnd) gaps.push([cursor,dayEnd]);
+      if(gaps.length===0){ availability[d] = {on:false}; return; }
+      let best = gaps[0];
+      gaps.forEach(g=>{ if((g[1]-g[0])>(best[1]-best[0])) best=g; });
+      availability[d] = { on:true, start:Scheduler.minToTime(best[0]), end:Scheduler.minToTime(best[1]) };
+    });
+    return availability;
+  },
+
   saveStudent(){
     const saveBtn = document.querySelector('#drawer-student .drawer-footer .btn-primary');
     const name = document.getElementById('st-name')?.value?.trim();
@@ -4063,20 +4201,29 @@ const App = {
     if(!addr){ Toast.show(t('toast_enter_address'),'error'); return }
     if(saveBtn){ saveBtn.disabled=true; saveBtn.style.opacity='0.6'; saveBtn.textContent=t('saving_ellipsis'); }
 
-    const availability = {};
-    [1,2,3,4,5,6].forEach(d=>{
-      const cb = document.getElementById('avday-'+d);
-      if(cb?.checked){
-        availability[d] = {
-          on: true,
-          start: document.getElementById('avstart-'+d)?.value||'15:00',
-          end: document.getElementById('avend-'+d)?.value||'21:30'
-        };
+    const avMode = document.getElementById('st-avmode')?.value||'manual';
+    let availability = {};
+    let availabilityExceptions = [];
+    if(avMode==='exceptions'){
+      availabilityExceptions = this._editingExceptions||[];
+      availability = this.computeAvailabilityFromExceptions(availabilityExceptions);
+      if(!Object.values(availability).some(av=>av.on)){
+        Toast.show(t('toast_select_day'),'error'); return
       }
-    });
-
-    if(Object.keys(availability).length===0){
-      Toast.show(t('toast_select_day'),'error'); return
+    } else {
+      [1,2,3,4,5,6].forEach(d=>{
+        const cb = document.getElementById('avday-'+d);
+        if(cb?.checked){
+          availability[d] = {
+            on: true,
+            start: document.getElementById('avstart-'+d)?.value||'15:00',
+            end: document.getElementById('avend-'+d)?.value||'21:30'
+          };
+        }
+      });
+      if(Object.keys(availability).length===0){
+        Toast.show(t('toast_select_day'),'error'); return
+      }
     }
 
     const st = {
@@ -4095,6 +4242,8 @@ const App = {
       forceMerge: document.getElementById('st-mergemode')?.value==='always',
       maxMergeSessions: Number(document.getElementById('st-mergesize')?.value)||undefined,
       availability,
+      availabilityMode: avMode,
+      availabilityExceptions,
       color: state.editingStudentId
         ? (state.students.find(s=>s.id===state.editingStudentId)?.color||0)
         : (state.students.length % 10)
