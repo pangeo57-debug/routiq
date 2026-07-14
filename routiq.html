@@ -2223,11 +2223,14 @@ const Scheduler = {
   // Phase 5: LNS — destroy 2-4 slots blocking an unplaced student, re-place everyone
   lnsRepair(schedule, students, settings, budgetMs=10000){
     const wdays = settings.workDays;
-    // Group members must only ever be placed together — never solo-repair one half of a group
+    // Group members must only ever be placed together, and forceMerge students already
+    // got their combined block in Phase 0 — neither should be solo-repaired here.
     const isGroupMember = s => !!(s.pairedWith || (s.type==='group' && s.group));
     const copyS = s=>{const o={};for(const d of wdays)o[d]=[...(s[d]||[])];return o;};
-    const countM = sch=>{const m={};Object.values(sch).flat().forEach(e=>{m[e.studentId]=(m[e.studentId]||0)+1;});return m;};
-    const getUnpl = sch=>{const m=countM(sch);return students.filter(s=>!isGroupMember(s)&&(m[s.id]||0)<s.lessonsPerWeek);};
+    // Count by mergedCount, not raw entry count — a single 2-session merged block
+    // must count as 2, or this thinks a fully-placed student is still short one.
+    const countM = sch=>{const m={};Object.values(sch).flat().forEach(e=>{m[e.studentId]=(m[e.studentId]||0)+(e.mergedCount||1);});return m;};
+    const getUnpl = sch=>{const m=countM(sch);return students.filter(s=>!isGroupMember(s)&&!s.forceMerge&&(m[s.id]||0)<s.lessonsPerWeek);};
     let best=copyS(schedule), bestU=getUnpl(best).length;
     if(!bestU) return;
     let ss=31337;
@@ -2243,8 +2246,12 @@ const Scheduler = {
       for(let k=0;k<dc;k++){
         const d=tdays[Math.floor(rng()*tdays.length)];
         if(!sc[d]||!sc[d].length) continue;
-        const idx=Math.floor(rng()*sc[d].length);
-        destroyed.push(students.find(s=>s.id===sc[d][idx].studentId));
+        // Never destroy a merged/group block — it can't be correctly rebuilt with a
+        // single-session reinsertion below, which would silently drop the merge.
+        const candidates=sc[d].map((s,i)=>({s,i})).filter(x=>!x.s.merged&&!x.s.isGroup);
+        if(!candidates.length) continue;
+        const {s:victim,i:idx}=candidates[Math.floor(rng()*candidates.length)];
+        destroyed.push(students.find(s=>s.id===victim.studentId));
         sc[d].splice(idx,1);
       }
       if(!destroyed.length) continue;
@@ -2288,7 +2295,7 @@ const Scheduler = {
     const placed = new Set(
       Object.values(schedule).flat().map(e=>e.studentId)
     );
-    const unplaced = students.filter(s=>!isGroupMember(s)&&!placed.has(s.id));
+    const unplaced = students.filter(s=>!isGroupMember(s)&&!s.forceMerge&&!placed.has(s.id));
     if(!unplaced.length) return;
 
     for(const s of unplaced){
