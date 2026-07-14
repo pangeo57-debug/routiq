@@ -744,9 +744,18 @@ const Scheduler = {
     const backtrackMs = attempts<=1 ? 20000 : Math.max(4000, Math.round(20000/Math.sqrt(attempts)));
     const repairMs = attempts<=1 ? 8000 : Math.max(2000, Math.round(8000/Math.sqrt(attempts)));
 
+    // "Αυτόματα" students aren't forced either way — half the attempts try them
+    // merged into one block, the other half as separate sessions, and whichever
+    // actually fits better with everyone else naturally wins via placed/km below.
+    const hasAutoMerge = students.some(s=>s.mergeMode==='auto');
+
     let best=null;
     for(let i=0;i<attempts;i++){
-      const order = i===0 ? students : this.shuffle(students);
+      let order = i===0 ? students : this.shuffle(students);
+      if(hasAutoMerge){
+        const mergeOn = i%2===0;
+        order = order.map(s => s.mergeMode==='auto' ? {...s, forceMerge:mergeOn} : s);
+      }
       const result = this.scheduleAll(order, settings, backtrackMs, repairMs);
       if(hasRealCoords) this.geoOptimize(result.schedule, order, settings, coords);
       const placed = this.countTotal(result.schedule);
@@ -3236,17 +3245,14 @@ const App = {
         </div>
       </div>
       <div class="form-group" id="merge-field" style="margin-top:14px;display:${(st?.lessonsPerWeek||1)>=2?'block':'none'}">
-        <label class="settings-row" style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);margin:0">
-          <span>
-            <span class="settings-label">Ενιαίο block (δίωρο κ.λπ.)</span>
-            <div class="settings-sub">Τα μαθήματα της ίδιας μέρας γίνονται ένα συνεχόμενο block, χωρίς χρόνο μετακίνησης ανάμεσά τους</div>
-          </span>
-          <span class="toggle-switch">
-            <input type="checkbox" id="st-forcemerge" ${st?.forceMerge?'checked':''} onchange="App.toggleMergeSizeField()">
-            <span class="toggle-slider"></span>
-          </span>
-        </label>
-        <div id="merge-size-field" style="margin-top:8px;display:${st?.forceMerge?'block':'none'}">
+        <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">Ενιαίο block (δίωρο κ.λπ.)</label>
+        <select id="st-mergemode" onchange="App.toggleMergeSizeField()" style="margin-bottom:0">
+          <option value="off" ${!st?.mergeMode||st?.mergeMode==='off'?'selected':''}>Ποτέ — πάντα ξεχωριστά μαθήματα</option>
+          <option value="always" ${st?.mergeMode==='always'||(st?.forceMerge&&!st?.mergeMode)?'selected':''}>Πάντα — ένα συνεχόμενο block</option>
+          <option value="auto" ${st?.mergeMode==='auto'?'selected':''}>Αυτόματα — ο αλγόριθμος αποφασίζει ό,τι ταιριάζει καλύτερα</option>
+        </select>
+        <div class="settings-sub" style="margin-top:4px">Στο "Αυτόματα", δοκιμάζονται και οι δύο επιλογές και κρατιέται όποια χωράει καλύτερα με τους υπόλοιπους μαθητές</div>
+        <div id="merge-size-field" style="margin-top:8px;display:${(st?.mergeMode==='always'||st?.mergeMode==='auto'||(st?.forceMerge&&!st?.mergeMode))?'block':'none'}">
           <label style="font-size:12px">Μέγιστα μαθήματα ανά block — <span id="st-mergesize-val">${st?.maxMergeSessions||st?.lessonsPerWeek||2}</span>× (${((st?.maxMergeSessions||st?.lessonsPerWeek||2)*(st?.lessonDuration??(state.settings.defaultLessonDuration||60)))}λ)</label>
           <input type="range" id="st-mergesize" min="2" max="${st?.lessonsPerWeek||5}" step="1" value="${st?.maxMergeSessions||st?.lessonsPerWeek||2}"
             style="width:100%;accent-color:var(--primary)"
@@ -3302,9 +3308,9 @@ const App = {
   },
 
   toggleMergeSizeField(){
-    const on = document.getElementById('st-forcemerge')?.checked;
+    const mode = document.getElementById('st-mergemode')?.value;
     const mf = document.getElementById('merge-size-field');
-    if(mf) mf.style.display = on?'block':'none';
+    if(mf) mf.style.display = (mode==='always'||mode==='auto')?'block':'none';
   },
 
   _updateMergeSizeLabel(){
@@ -3439,7 +3445,8 @@ const App = {
       group: document.getElementById('st-group')?.value?.trim()||'',
       pairedWith: document.getElementById('st-paired')?.value||null,
       notes: document.getElementById('st-notes')?.value?.trim()||'',
-      forceMerge: document.getElementById('st-forcemerge')?.checked||false,
+      mergeMode: document.getElementById('st-mergemode')?.value||'off',
+      forceMerge: document.getElementById('st-mergemode')?.value==='always',
       maxMergeSessions: Number(document.getElementById('st-mergesize')?.value)||undefined,
       availability,
       color: state.editingStudentId
