@@ -843,7 +843,7 @@ const Scheduler = {
   // Run several attempts with different randomized starting orders and keep the
   // one that places the MOST students — placement count always wins, km is only
   // a tie-breaker. Every student matters more than a shorter drive.
-  runMultiAttempt(students, settings, coords={}, attempts=6){
+  runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false){
     const hasRealCoords = Object.keys(coords).length > 0;
     const dist=(a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
     const totalKm=(schedule)=>{
@@ -864,9 +864,10 @@ const Scheduler = {
       return km;
     };
     // More attempts share a smaller per-attempt time budget so total wall-clock
-    // stays bounded, instead of attempts×20s.
-    const backtrackMs = attempts<=1 ? 20000 : Math.max(4000, Math.round(20000/Math.sqrt(attempts)));
-    const repairMs = attempts<=1 ? 8000 : Math.max(2000, Math.round(8000/Math.sqrt(attempts)));
+    // stays bounded, instead of attempts×20s — unless fullBudget is requested
+    // (user explicitly opted into a much longer, more thorough run).
+    const backtrackMs = fullBudget ? 20000 : (attempts<=1 ? 20000 : Math.max(4000, Math.round(20000/Math.sqrt(attempts))));
+    const repairMs = fullBudget ? 8000 : (attempts<=1 ? 8000 : Math.max(2000, Math.round(8000/Math.sqrt(attempts))));
 
     // "Αυτόματα" students aren't forced either way — half the attempts try them
     // merged into one block, the other half as separate sessions, and whichever
