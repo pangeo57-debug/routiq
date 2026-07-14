@@ -3260,11 +3260,11 @@ const App = {
     this._addrTimer = setTimeout(async ()=>{
       try{
         const q = encodeURIComponent(val + ', Ελλάδα');
-        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=gr&addressdetails=1${Router._viewboxParam()}`;
+        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1${Router._viewboxParam()}`;
         const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
         let results = await r.json();
         if((!results || results.length===0) && Router._viewboxParam()){
-          const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=gr&addressdetails=1`;
+          const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1`;
           const r2 = await fetch(url2, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
           results = await r2.json();
         }
@@ -3274,14 +3274,26 @@ const App = {
           b.innerHTML='<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Δεν βρέθηκαν αποτελέσματα</div>';
           return;
         }
+        // Closest to home first — the right match is usually the nearby one, not
+        // a same-named street in another city.
+        const home = state.coords && state.coords['home'];
+        if(home){
+          results.forEach(res=>{
+            const dx=parseFloat(res.lon)-home.lon, dy=parseFloat(res.lat)-home.lat;
+            res._distKm = Math.sqrt(dx*dx+dy*dy)*111;
+          });
+          results.sort((a,b)=>a._distKm-b._distKm);
+        }
+        results = results.slice(0,5);
         b.innerHTML = results.map((res,i)=>{
           const name = res.display_name;
           const short = name.split(',').slice(0,3).join(',');
+          const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+'μ':res._distKm.toFixed(1)+'χλμ'}</span> · ` : '';
           return `<div class="addr-suggest-item" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4"
             onmousedown="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')"
             ontouchstart="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')">
             <div style="font-weight:500;color:var(--text)">${short}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${name}</div>
           </div>`;
         }).join('');
       }catch(e){
