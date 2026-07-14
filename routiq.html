@@ -3202,9 +3202,9 @@ const App = {
     return `
       <div class="slot-block ${COLORS[slot.color||0]}${slot.merged?' merged':''}${slot.isGroup?' group-slot':''}" style="margin-bottom:8px">
         <div class="slot-time">${slot.start} – ${slot.end}</div>
-        <div class="slot-name">${slot.studentName} ${mergeTag}</div>
+        <div class="slot-name">${esc(slot.studentName)} ${mergeTag}</div>
         <div class="slot-meta">
-          <span class="chip chip-gray">${slot.subject}</span>
+          <span class="chip chip-gray">${esc(slot.subject)}</span>
           <span class="chip chip-gray">${slot.duration}λ</span>
         </div>
       </div>`;
@@ -3302,8 +3302,8 @@ const App = {
     geocodedStudents.forEach(s=>{
       const c=state.coords[s.id];
       const col=avatarColors[(s.color||0)%avatarColors.length];
-      const initials=s.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-      L.marker([c.lat,c.lon],{icon:L.divIcon({className:'',html:`<div style="width:26px;height:26px;background:${col};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700">${initials}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).bindTooltip(`${s.name}<br><span style='font-size:11px;color:#aaa'>${s.address}</span>`,{permanent:false}).addTo(map);
+      const initials=esc(s.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
+      L.marker([c.lat,c.lon],{icon:L.divIcon({className:'',html:`<div style="width:26px;height:26px;background:${col};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700">${initials}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).bindTooltip(`${esc(s.name)}<br><span style='font-size:11px;color:#aaa'>${esc(s.address)}</span>`,{permanent:false}).addTo(map);
     });
     try{ map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); }catch(e){}
   },
@@ -3316,28 +3316,28 @@ const App = {
     const placed = Scheduler.countPlaced(st.id, state.schedule);
     const avatarColors = ['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
     const bg = avatarColors[st.color||0];
-    const initials = st.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const initials = esc(st.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
     return `
       <div class="student-card" id="sc-${st.id}">
         <div class="student-header" onclick="App.toggleStudent('${st.id}')">
           <div class="student-avatar" style="background:${bg}20;color:${bg};border:1px solid ${bg}40">${initials}</div>
           <div class="student-info">
-            <div class="student-name">${st.name}</div>
-            <div class="student-sub">${st.subject} · ${st.lessonsPerWeek}x/εβδ · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} τοποθ.</span></div>
+            <div class="student-name">${esc(st.name)}</div>
+            <div class="student-sub">${esc(st.subject)} · ${st.lessonsPerWeek}x/εβδ · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} τοποθ.</span></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="student-body" id="sb-${st.id}">
-          <div class="student-detail-row"><span class="student-detail-label">Διεύθυνση</span><span style="font-size:12px;text-align:right;max-width:200px">${st.address}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="Geocoded ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="Δεν έχει geocodαριστεί"> ○</span>`}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">Διεύθυνση</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="Geocoded ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="Δεν έχει geocodαριστεί"> ○</span>`}</span></div>
           <div class="student-detail-row"><span class="student-detail-label">Διάρκεια</span><span>${st.lessonDuration} λεπτά</span></div>
-          <div class="student-detail-row"><span class="student-detail-label">Τύπος</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?'Ομάδα: '+st.group:'Ατομικό'}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">Τύπος</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?'Ομάδα: '+esc(st.group):'Ατομικό'}</span></div>
           ${st.pairedWith ? (()=>{
             const partner = state.students.find(s=>s.id===st.pairedWith);
             const linkedBack = partner && partner.pairedWith===st.id;
-            return `<div class="student-detail-row"><span class="student-detail-label">Ζεύγος με</span><span class="chip ${linkedBack?'chip-purple':'chip-red'}">${partner?partner.name:'⚠ άγνωστος μαθητής'}${linkedBack?'':' ⚠ μη αμφίδρομο'}</span></div>`;
+            return `<div class="student-detail-row"><span class="student-detail-label">Ζεύγος με</span><span class="chip ${linkedBack?'chip-purple':'chip-red'}">${partner?esc(partner.name):'⚠ άγνωστος μαθητής'}${linkedBack?'':' ⚠ μη αμφίδρομο'}</span></div>`;
           })() : ''}
           <div class="student-detail-row"><span class="student-detail-label">Διαθεσιμότητα</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${avDays||'—'}</span></div>
-          ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">Σημειώσεις</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${st.notes}</span></div>`:''}
+          ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">Σημειώσεις</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${esc(st.notes)}</span></div>`:''}
           <div class="student-actions">
             <button class="btn btn-secondary" style="flex:1" onclick="App.openStudentDrawer('${st.id}')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -3405,11 +3405,11 @@ const App = {
     return `
       <div class="form-group">
         <label>Ονοματεπώνυμο</label>
-        <input type="text" id="st-name" placeholder="Πλήρες όνομα" value="${st?.name||''}">
+        <input type="text" id="st-name" placeholder="Πλήρες όνομα" value="${esc(st?.name||'')}">
       </div>
       <div class="form-group" style="position:relative">
         <label>Διεύθυνση</label>
-        <input type="text" id="st-addr" placeholder="Πληκτρολογήστε διεύθυνση…" value="${st?.address||''}" autocomplete="off"
+        <input type="text" id="st-addr" placeholder="Πληκτρολογήστε διεύθυνση…" value="${esc(st?.address||'')}" autocomplete="off"
           oninput="App.onAddrInput(this.value)" onblur="setTimeout(()=>App.hideAddrSuggest(),200)">
         <div id="addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
@@ -3459,7 +3459,7 @@ const App = {
         </div>
         <div class="form-group" id="group-field" style="margin:0;display:${st?.type==='group'?'block':'none'}">
           <label>Κωδικός ομάδας</label>
-          <input type="text" id="st-group" placeholder="π.χ. A1" value="${st?.group||''}">
+          <input type="text" id="st-group" placeholder="π.χ. A1" value="${esc(st?.group||'')}">
         </div>
       </div>
       <div class="section-title" style="padding:0;margin:16px 0 8px">Διαθεσιμότητα</div>
@@ -3468,12 +3468,12 @@ const App = {
         <label>Ζεύγος με</label>
         <select id="st-paired" onchange="App.onPairedChange(this.value)">
           <option value="">— κανένα —</option>
-          ${state.students.filter(s=>s.id!==(st?.id||'')).map(s=>`<option value="${s.id}" ${(st?.pairedWith||'')=== s.id?'selected':''}>${s.name}</option>`).join('')}
+          ${state.students.filter(s=>s.id!==(st?.id||'')).map(s=>`<option value="${s.id}" ${(st?.pairedWith||'')=== s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-top:14px">
         <label>Σημειώσεις</label>
-        <textarea id="st-notes" placeholder="Προαιρετικές σημειώσεις...">${st?.notes||''}</textarea>
+        <textarea id="st-notes" placeholder="Προαιρετικές σημειώσεις...">${esc(st?.notes||'')}</textarea>
       </div>
     `;
   },
@@ -3887,11 +3887,11 @@ const App = {
              ondragstart="App._onSlotDragStart(event,${state.scheduleDay},${i})"
              ondragover="event.preventDefault()" ondrop="App._onSlotDrop(event,${state.scheduleDay},${i})">
           <div class="slot-time">${slot.start} – ${displayEnd}</div>
-          <div class="slot-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${slot.studentName}${mergeTag}${slot.isGroup?'<span style="font-size:10px;background:rgba(139,92,246,.2);color:#a78bfa;padding:1px 6px;border-radius:10px;margin-left:4px">ομάδα</span>':''}</div>
+          <div class="slot-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(slot.studentName)}${mergeTag}${slot.isGroup?'<span style="font-size:10px;background:rgba(139,92,246,.2);color:#a78bfa;padding:1px 6px;border-radius:10px;margin-left:4px">ομάδα</span>':''}</div>
           <div class="slot-meta">
-            <span class="chip chip-gray">${slot.subject}</span>
+            <span class="chip chip-gray">${esc(slot.subject)}</span>
             <span class="chip chip-gray">${slot._totalDur}λ</span>
-            <span class="chip chip-gray" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis">${slot.address}</span>
+            <span class="chip chip-gray" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis">${esc(slot.address)}</span>
           </div>
         </div>`;
       if(i<slots.length-1){
@@ -4398,7 +4398,7 @@ const App = {
       <div class="card">
         <div class="form-group" style="margin-bottom:10px">
           <label>Όνομα</label>
-          <input type="text" id="set-name" value="${st.teacherName||''}" placeholder="Το όνομά σας">
+          <input type="text" id="set-name" value="${esc(st.teacherName||'')}" placeholder="Το όνομά σας">
         </div>
         <div class="form-group" style="margin:0">
           <label>Διεύθυνση σπιτιού
@@ -4406,7 +4406,7 @@ const App = {
               ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">✓ ${state.coords['home'].lat.toFixed(4)}, ${state.coords['home'].lon.toFixed(4)}</span>`
               : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">⚠ Δεν έχει geocodαριστεί</span>`}
           </label>
-          <input type="text" id="set-home" value="${st.homeAddress||''}" placeholder="Οδός αρ., Πόλη">
+          <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="Οδός αρ., Πόλη">
         </div>
       </div>
 
@@ -4457,7 +4457,7 @@ const App = {
         </div>
         <div class="form-group">
           <label>HERE Maps API Key (για live traffic)</label>
-          <input type="text" id="set-here-key" placeholder="Προαιρετικό — για traffic-aware χρόνους" value="${st.hereApiKey||''}">
+          <input type="text" id="set-here-key" placeholder="Προαιρετικό — για traffic-aware χρόνους" value="${esc(st.hereApiKey||'')}">
         </div>
         <div class="form-group" style="margin:0">
           <label>Διάλειμμα μεσημεριού</label>
