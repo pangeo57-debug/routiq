@@ -634,7 +634,7 @@ const I18N = {
     settings_save:'Αποθήκευση ρυθμίσεων', settings_install:'Εγκατάσταση εφαρμογής', settings_data:'Διαχείριση δεδομένων',
     settings_reset:'Επαναφορά demo δεδομένων', settings_export:'Εξαγωγή', settings_import:'Εισαγωγή',
     settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
-    btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...',
+    btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...', common_please_wait:'Παρακαλώ περιμένετε',
     btn_delete:'Διαγραφή', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
     confirm_title:'Επιβεβαίωση', block_drawer_title:'Μπλοκαρισμένη Ώρα',
     greeting_morning:'Καλημέρα', greeting_afternoon:'Καλό απόγευμα', greeting_evening:'Καλησπέρα',
@@ -758,7 +758,7 @@ const I18N = {
     settings_save:'Save settings', settings_install:'Install app', settings_data:'Data Management',
     settings_reset:'Reset to demo data', settings_export:'Export', settings_import:'Import',
     settings_test_algo:'Algorithm Test', settings_language:'Language',
-    btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...',
+    btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...', common_please_wait:'Please wait',
     btn_delete:'Delete', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
     confirm_title:'Confirm', block_drawer_title:'Blocked Time',
     greeting_morning:'Good morning', greeting_afternoon:'Good afternoon', greeting_evening:'Good evening',
@@ -882,7 +882,7 @@ const I18N = {
     settings_save:'Enregistrer', settings_install:"Installer l'application", settings_data:'Gestion des données',
     settings_reset:'Réinitialiser aux données de démo', settings_export:'Exporter', settings_import:'Importer',
     settings_test_algo:'Test algorithme', settings_language:'Langue',
-    btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...',
+    btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...', common_please_wait:'Veuillez patienter',
     btn_delete:'Supprimer', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
     confirm_title:'Confirmation', block_drawer_title:'Heure bloquée',
     greeting_morning:'Bonjour', greeting_afternoon:'Bon après-midi', greeting_evening:'Bonsoir',
@@ -1006,7 +1006,7 @@ const I18N = {
     settings_save:'Einstellungen speichern', settings_install:'App installieren', settings_data:'Datenverwaltung',
     settings_reset:'Auf Demo-Daten zurücksetzen', settings_export:'Exportieren', settings_import:'Importieren',
     settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
-    btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...',
+    btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...', common_please_wait:'Bitte warten',
     btn_delete:'Löschen', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
     confirm_title:'Bestätigung', block_drawer_title:'Blockierte Zeit',
     greeting_morning:'Guten Morgen', greeting_afternoon:'Guten Tag', greeting_evening:'Guten Abend',
@@ -2614,7 +2614,7 @@ const Scheduler = {
     const workDaysAvail = settings.workDays.filter(d => { const av=student.availability[d]; return av&&av.on; });
     if(workDaysAvail.length === 0) return t('diag_no_common_days');
     const cnt = this.countPlaced(student.id, schedule);
-    if(cnt > 0) return t('diag_placed_count').replace('{c}',cnt).replace('{t}',student.lessonsPerWeek);
+    if(cnt > 0) return tf('diag_placed_count',{c:cnt,t:student.lessonsPerWeek});
     return t('diag_no_free_slot');
   },
 
@@ -3152,7 +3152,13 @@ const App = {
     const L = getLabels();
     const el = document.getElementById('nav-clients-label');
     if(el) el.textContent = L.clients;
-    const map = {'nav-home-label':'nav_home','nav-schedule-label':'nav_schedule','nav-route-label':'nav_route','nav-settings-label':'nav_settings'};
+    const map = {
+      'nav-home-label':'nav_home','nav-schedule-label':'nav_schedule','nav-route-label':'nav_route','nav-settings-label':'nav_settings',
+      'drawer-student-title':'drawer_new_prefix','drawer-student-cancel-btn':'btn_cancel','drawer-student-save-btn':'btn_save',
+      'drawer-block-title':'block_drawer_title','drawer-block-cancel-btn':'btn_cancel','drawer-block-save-btn':'btn_save',
+      'confirm-title':'confirm_title','confirm-cancel-btn':'btn_cancel','confirm-ok-btn':'btn_delete',
+      'sched-phase':'debug_calc_prefix','sched-sub':'common_please_wait',
+    };
     for(const [id,key] of Object.entries(map)){
       const e = document.getElementById(id);
       if(e) e.textContent = t(key);
@@ -3424,7 +3430,7 @@ const App = {
     // Phase 1: backtracking CSP — multiple randomized attempts, keep the one that
     // places the most students (km is only a tie-breaker, never sacrifices a student)
     const attemptCount = state.settings.scheduleQuality==='thorough' ? 8 : 6;
-    schedProgress(15,'Φάση 1 — Τοποθέτηση',`Δοκιμή ${attemptCount} τυχαίων σειρών…`,'🧩');
+    schedProgress(15,t('phase1b_title'),tf('phase1b_sub',{n:attemptCount}),'🧩');
     await new Promise(r=>setTimeout(r,40));
     let r;
     try{
@@ -3442,12 +3448,12 @@ const App = {
     }catch(e){ console.error('Scheduler error',e); }
 
     // Phase 2: geo-optimize
-    schedProgress(35,'Φάση 2 — Γεωγραφική βελτιστοποίηση','Ταξινόμηση κατά απόσταση…','🗺️');
+    schedProgress(35,t('phase2_title'),t('phase2_sub'),'🗺️');
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.geoOptimize(state.schedule, state.students, state.settings, state.coords); }catch(e){}
 
     // Phase 3: Simulated Annealing
-    schedProgress(55,'Φάση 3 — Simulated Annealing','Ελαχιστοποίηση χιλιομέτρων…','🔥');
+    schedProgress(55,t('phase3_title'),t('phase3_sub_short'),'🔥');
     await new Promise(r=>setTimeout(r,40));
     try{
       const travelMinFn = null; // uses state.travelMatrixPeak via travelEstMin
@@ -3455,16 +3461,16 @@ const App = {
     }catch(e){}
 
     // Phase 4: repair
-    schedProgress(82,'Φάση 4 — Επανατοποθέτηση','Τοποθέτηση αδύνατων μαθητών…','🔧');
+    schedProgress(82,t('phase4b_title'),t('phase4b_sub'),'🔧');
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.saRepair(state.schedule, state.students, state.settings, state.schedulerResult); }catch(e){}
 
     // Phase 5: LNS
-    schedProgress(92,'Φάση 5 — LNS','Destroy-repair (10s)…','🔍');
+    schedProgress(92,t('phase5_title'),t('phase5b_sub'),'🔍');
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
 
-    schedProgress(100,'Ολοκληρώθηκε','Αποθήκευση προγράμματος…','✅');
+    schedProgress(100,t('phase_done_title'),t('phase_done_sub'),'✅');
     await new Promise(r=>setTimeout(r,300));
 
     if(r){
@@ -3479,7 +3485,7 @@ const App = {
 
     state._scheduleStale = false;
     schedProgress(null,null,null,null);
-    if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Ανανέωση`; }
+    if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
     // Always re-render regardless of scheduler outcome
     if(state.currentScreen==='schedule') this.renderSchedule();
     else if(state.currentScreen==='home') this.renderHome();
@@ -3489,7 +3495,7 @@ const App = {
     const total = state.students.reduce((a,s)=>a+s.lessonsPerWeek,0);
     const placed = total - r.unplaced.reduce((a,u)=>a+(u.needed-u.placed),0);
     const att = r._attempts || 1;
-    const attLabel = att > 1 ? ` (${att} δοκιμές)` : '';
+    const attLabel = att > 1 ? tf('toast_attempts_suffix',{n:att}) : '';
     Toast.show(tf('toast_placed_summary',{placed,total,attempts:attLabel}),'success');
   },
 
@@ -4104,8 +4110,8 @@ const App = {
     const st = state.students.find(s=>s.id===id);
     const L = getLabels();
     this.confirm(
-      `Διαγραφή ${L.client.toLowerCase()}`,
-      `Είστε σίγουροι ότι θέλετε να διαγράψετε τον/την ${st?.name}; Όλα τα δεδομένα θα χαθούν.`,
+      tf('confirm_delete_client_title',{client:L.client.toLowerCase()}),
+      tf('confirm_delete_client_text',{name:st?.name}),
       ()=>{
         state.students = state.students.filter(s=>s.id!==id);
         delete state.coords[id];
@@ -4176,28 +4182,28 @@ const App = {
         <div class="topbar-inner">
           <div>
             <div class="logo">Route<span>Pal</span></div>
-            <div class="topbar-sub">Εβδομαδιαίο Πρόγραμμα</div>
+            <div class="topbar-sub">${t('schedule_title')}</div>
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn-icon" onclick="App.printSchedule()" title="Εξαγωγή ως PDF">
+            <button class="btn-icon" onclick="App.printSchedule()" title="${t('schedule_export_pdf_title')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             </button>
             <button class="btn btn-secondary" onclick="App.runAndNotify()" style="padding:8px 12px;font-size:13px">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-              Ανανέωση
+              ${t('schedule_refresh')}
             </button>
           </div>
         </div>
       </div>
       ${state.scheduleAttempts.length > 0 ? `
 <div style="padding:0 16px 8px">
-  <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;letter-spacing:.5px">ΤΥΧΑΙΑ ΤΟΠΟΘΕΤΗΣΗ ΒΑΣΕΙ ΠΕΡΙΟΡΙΣΜΩΝ</div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;letter-spacing:.5px">${t('schedule_random_placement_label')}</div>
   <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px">
     ${state.scheduleAttempts.map((r,i)=>{
       const cnt = Scheduler.countTotal(r.schedule);
       const active = i===state.scheduleAttemptIdx;
       return `<button onclick="App.switchAttempt(${i})" style="flex-shrink:0;padding:5px 10px;border-radius:20px;border:1.5px solid ${active?'var(--blue)':'var(--border)'};background:${active?'rgba(124,58,237,.1)':'var(--bg2)'};color:${active?'var(--blue)':'var(--text2)'};font-size:12px;font-weight:${active?'700':'500'};cursor:pointer">
-        Δοκιμή ${i+1} <span style="opacity:.7">${cnt}</span>
+        ${t('schedule_attempt_label')} ${i+1} <span style="opacity:.7">${cnt}</span>
       </button>`;
     }).join('')}
   </div>
@@ -4205,7 +4211,7 @@ const App = {
 ` : ''}
       <div style="padding:0 16px 12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span style="font-size:14px;color:var(--text2)">Τοποθετημένα μαθήματα</span>
+          <span style="font-size:14px;color:var(--text2)">${t('schedule_placed')}</span>
           <span class="badge">${placed}/${total}</span>
         </div>
         <div class="progress-bar" style="height:6px">
@@ -4217,14 +4223,14 @@ const App = {
           <div style="display:flex;align-items:center;gap:8px;background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:10px;padding:10px 14px;margin-bottom:8px">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
             <div>
-              <div style="font-size:13px;font-weight:600;color:#059669">Βελτιστοποίηση ολοκληρώθηκε</div>
-              <div style="font-size:12px;color:var(--text2)">Πριν: ${state.scheduleKmBefore?.toFixed(1)}km → Μετά: ${state.scheduleKmAfter?.toFixed(1)}km · Εξοικονόμηση: ${((state.scheduleKmBefore||0)-(state.scheduleKmAfter||0)).toFixed(1)}km</div>
+              <div style="font-size:13px;font-weight:600;color:#059669">${t('schedule_optimized_done')}</div>
+              <div style="font-size:12px;color:var(--text2)">${tf('schedule_km_before_after',{before:state.scheduleKmBefore?.toFixed(1),after:state.scheduleKmAfter?.toFixed(1),saved:((state.scheduleKmBefore||0)-(state.scheduleKmAfter||0)).toFixed(1)})}</div>
             </div>
           </div>
         ` : `
           <button id="optimize-btn" class="btn btn-secondary btn-full" onclick="App.optimizeSchedule()" style="font-size:13px">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-            Βελτιστοποίηση με χάρτη (OpenStreetMap)
+            ${t('schedule_optimize_btn')}
           </button>
         `}
       </div>
@@ -4259,7 +4265,7 @@ const App = {
     if(!container) return;
     const rawSlots = [...(state.schedule[state.scheduleDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
     if(rawSlots.length===0){
-      container.innerHTML = `<div style="padding:16px"><div class="card-sm" style="text-align:center;color:var(--text2);font-size:14px;padding:20px">Δεν υπάρχουν μαθήματα αυτή την ημέρα</div></div>`;
+      container.innerHTML = `<div style="padding:16px"><div class="card-sm" style="text-align:center;color:var(--text2);font-size:14px;padding:20px">${t('schedule_no_lessons_day')}</div></div>`;
       return;
     }
     // Merge consecutive same-student slots into one display block
@@ -4282,7 +4288,7 @@ const App = {
       const slot = slots[i];
       const isMultiBlock = slot._blockCount > 1;
       const displayEnd = slot._end;
-      const mergeTag = slot.merged ? `<span class="merge-badge" style="margin-left:6px">ΜΠΛΟΚ ${slot.mergedCount}×${slot.originalDuration}λ</span>`
+      const mergeTag = slot.merged ? `<span class="merge-badge" style="margin-left:6px">${t('merge_badge_label')} ${slot.mergedCount}×${slot.originalDuration}λ</span>`
         : isMultiBlock ? `<span class="merge-badge" style="margin-left:6px">${slot._blockCount}×${slot.duration}λ</span>` : '';
       html += `
         <div class="slot-block ${COLORS[slot.color||0]}${(slot.merged||isMultiBlock)?' merged':''}${slot.isGroup?' group-slot':''}"
@@ -4290,7 +4296,7 @@ const App = {
              ondragstart="App._onSlotDragStart(event,${state.scheduleDay},${i})"
              ondragover="event.preventDefault()" ondrop="App._onSlotDrop(event,${state.scheduleDay},${i})">
           <div class="slot-time">${slot.start} – ${displayEnd}</div>
-          <div class="slot-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(slot.studentName)}${mergeTag}${slot.isGroup?'<span style="font-size:10px;background:rgba(139,92,246,.2);color:#a78bfa;padding:1px 6px;border-radius:10px;margin-left:4px">ομάδα</span>':''}</div>
+          <div class="slot-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(slot.studentName)}${mergeTag}${slot.isGroup?`<span style="font-size:10px;background:rgba(139,92,246,.2);color:#a78bfa;padding:1px 6px;border-radius:10px;margin-left:4px">${t('form_type_group').toLowerCase()}</span>`:''}</div>
           <div class="slot-meta">
             <span class="chip chip-gray">${esc(slot.subject)}</span>
             <span class="chip chip-gray">${slot._totalDur}λ</span>
@@ -4301,7 +4307,7 @@ const App = {
         const sameLocation = slot.studentId===slots[i+1].studentId ||
           (slot.groupCode && slot.groupCode===slots[i+1].groupCode);
         if(sameLocation){
-          html += `<div class="slot-gap" style="color:var(--text-muted,#888)">📍 ίδια τοποθεσία</div>`;
+          html += `<div class="slot-gap" style="color:var(--text-muted,#888)">${t('schedule_gap_same_location')}</div>`;
         } else {
           // Show the travel time actually implied by the gap between these two lessons
           // (end of this one to start of the next), not a separately re-estimated number —
@@ -4309,7 +4315,7 @@ const App = {
           const margin = state.settings.travelMargin ?? 3;
           const gapMin = Scheduler.toMin(slots[i+1].start) - Scheduler.toMin(slot._end||slot.end);
           const driveMin = Math.max(0, gapMin - margin);
-          html += `<div class="slot-gap">🚗 ~${driveMin}λ μετακίνηση${margin?` + ${margin}λ ασφαλείας`:''}</div>`;
+          html += `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`;
         }
       }
     }
