@@ -681,6 +681,8 @@ const I18N = {
     form_fullname_label:'Ονοματεπώνυμο', form_fullname_placeholder:'Πλήρες όνομα',
     form_address_placeholder:'Πληκτρολογήστε διεύθυνση…', form_duration_label:'Διάρκεια (λ)',
     form_pick_on_map:'Επιλογή στον χάρτη', form_pick_confirm:'Επιβεβαίωση τοποθεσίας',
+    form_location_map_label:'Τοποθεσία στον χάρτη',
+    form_location_map_hint:'Σύρε το pin ή πάτα στον χάρτη για να διορθώσεις την ακριβή τοποθεσία.',
     toast_location_picked:'Η τοποθεσία επιλέχθηκε',
     form_times_per_week:'Φορές/εβδ.', form_merge_label:'Ενιαίο block (δίωρο κ.λπ.)',
     form_merge_off:'Ποτέ — πάντα ξεχωριστά μαθήματα', form_merge_always:'Πάντα — ένα συνεχόμενο block',
@@ -831,6 +833,8 @@ const I18N = {
     form_fullname_label:'Full name', form_fullname_placeholder:'Full name',
     form_address_placeholder:'Type address…', form_duration_label:'Duration (min)',
     form_pick_on_map:'Pick on map', form_pick_confirm:'Confirm location',
+    form_location_map_label:'Location on map',
+    form_location_map_hint:'Drag the pin or tap the map to fine-tune the exact location.',
     toast_location_picked:'Location selected',
     form_times_per_week:'Times/wk', form_merge_label:'Single block (double lesson etc.)',
     form_merge_off:'Never — always separate lessons', form_merge_always:'Always — one continuous block',
@@ -981,6 +985,8 @@ const I18N = {
     form_fullname_label:'Nom complet', form_fullname_placeholder:'Nom complet',
     form_address_placeholder:'Saisissez une adresse…', form_duration_label:'Durée (min)',
     form_pick_on_map:'Choisir sur la carte', form_pick_confirm:'Confirmer l\'emplacement',
+    form_location_map_label:'Emplacement sur la carte',
+    form_location_map_hint:'Faites glisser le repère ou touchez la carte pour ajuster l\'emplacement exact.',
     toast_location_picked:'Emplacement sélectionné',
     form_times_per_week:'Fois/sem.', form_merge_label:'Bloc unique (double cours, etc.)',
     form_merge_off:'Jamais — toujours des cours séparés', form_merge_always:'Toujours — un bloc continu',
@@ -1131,6 +1137,8 @@ const I18N = {
     form_fullname_label:'Vollständiger Name', form_fullname_placeholder:'Vollständiger Name',
     form_address_placeholder:'Adresse eingeben…', form_duration_label:'Dauer (Min)',
     form_pick_on_map:'Auf der Karte wählen', form_pick_confirm:'Standort bestätigen',
+    form_location_map_label:'Standort auf der Karte',
+    form_location_map_hint:'Ziehen Sie den Pin oder tippen Sie auf die Karte, um den genauen Standort anzupassen.',
     toast_location_picked:'Standort ausgewählt',
     form_times_per_week:'Mal/Woche', form_merge_label:'Einzelblock (Doppelstunde usw.)',
     form_merge_off:'Nie — immer getrennte Stunden', form_merge_always:'Immer — ein durchgehender Block',
@@ -3967,7 +3975,7 @@ const App = {
     const L = getLabels();
     document.getElementById('drawer-student-title').textContent = isNew?`${t('drawer_new_prefix')} ${L.client}`:`${t('drawer_edit_prefix')} ${L.client}`;
     document.getElementById('drawer-student-body').innerHTML = this.buildStudentForm(st);
-    this.initStudentFormEvents();
+    this.initStudentFormEvents(st);
     document.getElementById('drawer-student-overlay').classList.add('open');
   },
 
@@ -4018,6 +4026,11 @@ const App = {
           </button>
         </div>
         <div id="addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+      </div>
+      <div class="form-group">
+        <label>${t('form_location_map_label')}</label>
+        <div id="st-loc-map" style="height:170px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate"></div>
+        <div class="settings-sub" style="margin-top:4px">${t('form_location_map_hint')}</div>
       </div>
       <div class="form-group">
         <label>${L.session}</label>
@@ -4112,8 +4125,47 @@ const App = {
     `;
   },
 
-  initStudentFormEvents(){
+  initStudentFormEvents(st){
     this.toggleGroupField();
+    // Reset any picked-but-unsaved coord from a previous drawer session before
+    // seeding the inline map from this student's actual saved location.
+    this._addrPendingCoord = null;
+    this.initStudentLocationMap(st);
+  },
+
+  // Inline draggable-pin map shown right in the edit form (in addition to the
+  // "pick on map" button/full-screen picker) — lets you fine-tune or set the
+  // exact location without leaving the drawer or knowing the address.
+  initStudentLocationMap(st){
+    const el = document.getElementById('st-loc-map');
+    if(!el || typeof L === 'undefined') return;
+    if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    const existing = st && state.coords[st.id];
+    const home = state.coords['home'] || {lat:38.2466, lon:21.7346};
+    const start = existing || home;
+    const map = L.map(el, {zoomControl:true, attributionControl:false}).setView([start.lat, start.lon], existing?16:13);
+    el._leaflet_map = map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    const marker = L.marker([start.lat, start.lon], {
+      draggable:true,
+      icon:L.divIcon({className:'',html:'<div style="width:22px;height:22px;background:#7c3aed;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
+    }).addTo(map);
+    el._leaflet_marker = marker;
+    const onPin = (lat, lon)=>{
+      this._addrPendingCoord = {lat, lon};
+      this.reverseGeocodeIntoField(lat, lon, 'st-addr');
+    };
+    marker.on('dragend', ()=>{ const p=marker.getLatLng(); onPin(p.lat, p.lng); });
+    map.on('click', (e)=>{ marker.setLatLng(e.latlng); onPin(e.latlng.lat, e.latlng.lng); });
+  },
+
+  // Moves the inline location-map's marker (if currently open) to match a
+  // coordinate picked another way (search suggestion, full-screen map picker).
+  updateStudentLocationMapMarker(coord){
+    const el = document.getElementById('st-loc-map');
+    if(!el || !el._leaflet_map || !el._leaflet_marker) return;
+    el._leaflet_marker.setLatLng([coord.lat, coord.lon]);
+    el._leaflet_map.setView([coord.lat, coord.lon], 16);
   },
 
   toggleGroupField(){
@@ -4246,6 +4298,7 @@ const App = {
       const inp = document.getElementById('st-addr');
       if(inp) inp.value = short;
       this._addrPendingCoord = coord;
+      this.updateStudentLocationMapMarker(coord);
     }
     const box = document.getElementById(boxId);
     if(box) box.style.display='none';
@@ -4291,29 +4344,43 @@ const App = {
     }, 30);
   },
 
+  // Shared reverse-geocode: HERE when a key is configured, else free Nominatim.
+  // Returns the full display string, or null on failure.
+  async _reverseGeocode(lat, lon){
+    const hereKey = state.settings && state.settings.hereApiKey;
+    if(hereKey){
+      const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=el&apiKey=${hereKey}`;
+      const r = await fetch(url);
+      if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
+      const d = await r.json();
+      const item = d.items && d.items[0];
+      return item && (item.address ? item.address.label : item.title);
+    }
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
+    const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+    const d = await r.json();
+    return d && d.display_name;
+  },
+
   async reverseGeocodePreview(lat, lon){
     const addrBox = document.getElementById('map-picker-address');
-    const hereKey = state.settings && state.settings.hereApiKey;
     try{
-      let display;
-      if(hereKey){
-        const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=el&apiKey=${hereKey}`;
-        const r = await fetch(url);
-        if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
-        const d = await r.json();
-        const item = d.items && d.items[0];
-        display = item && (item.address ? item.address.label : item.title);
-      } else {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
-        const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
-        const d = await r.json();
-        display = d && d.display_name;
-      }
+      const display = await this._reverseGeocode(lat, lon);
       if(addrBox) addrBox.textContent = display ? display.split(',').slice(0,4).join(',') : t('search_no_results');
       this._mapPickerAddress = display;
     }catch(e){
       if(addrBox) addrBox.textContent = t('search_error');
     }
+  },
+
+  // Drops the reverse-geocoded short address directly into a text input (used by
+  // the inline location map's drag/click pin) instead of a separate preview box.
+  async reverseGeocodeIntoField(lat, lon, inputId){
+    const input = document.getElementById(inputId);
+    try{
+      const display = await this._reverseGeocode(lat, lon);
+      if(input && display) input.value = display.split(',').slice(0,3).join(',').trim();
+    }catch(e){ /* keep whatever the user had typed */ }
   },
 
   closeMapPicker(){
@@ -4332,7 +4399,7 @@ const App = {
     const input = document.getElementById(this._mapPickerTarget);
     if(input) input.value = short;
     if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
-    else this._addrPendingCoord = coord;
+    else { this._addrPendingCoord = coord; this.updateStudentLocationMapMarker(coord); }
     Toast.show(t('toast_location_picked'), 'success');
     this.closeMapPicker();
   },
