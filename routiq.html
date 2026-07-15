@@ -552,6 +552,29 @@ input[type=time]{color-scheme:light}
   </div>
 </div>
 
+<!-- MAP PICKER -->
+<div id="map-picker-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg,#f7f6f3);flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2)">
+    <span style="font-weight:700;font-size:15px" id="map-picker-title"></span>
+    <button class="btn-icon" onclick="App.closeMapPicker()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div style="position:relative;flex:1;isolation:isolate">
+    <div id="map-picker-map" style="position:absolute;inset:0"></div>
+    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);pointer-events:none;z-index:10">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="#7c3aed" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3.5" fill="#fff"/></svg>
+    </div>
+  </div>
+  <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--bg2)">
+    <div id="map-picker-address" style="font-size:12px;color:var(--text2);margin-bottom:10px;min-height:16px;text-align:center"></div>
+    <button class="btn btn-primary btn-full" onclick="App.confirmMapPicker()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>
+      <span id="map-picker-confirm-label"></span>
+    </button>
+  </div>
+</div>
+
 <!-- TOASTS -->
 <div class="toast-container" id="toast-container"></div>
 
@@ -657,6 +680,8 @@ const I18N = {
     drawer_new_prefix:'Νέος', drawer_edit_prefix:'Επεξεργασία',
     form_fullname_label:'Ονοματεπώνυμο', form_fullname_placeholder:'Πλήρες όνομα',
     form_address_placeholder:'Πληκτρολογήστε διεύθυνση…', form_duration_label:'Διάρκεια (λ)',
+    form_pick_on_map:'Επιλογή στον χάρτη', form_pick_confirm:'Επιβεβαίωση τοποθεσίας',
+    toast_location_picked:'Η τοποθεσία επιλέχθηκε',
     form_times_per_week:'Φορές/εβδ.', form_merge_label:'Ενιαίο block (δίωρο κ.λπ.)',
     form_merge_off:'Ποτέ — πάντα ξεχωριστά μαθήματα', form_merge_always:'Πάντα — ένα συνεχόμενο block',
     form_merge_auto:'Αυτόματα — ο αλγόριθμος αποφασίζει ό,τι ταιριάζει καλύτερα',
@@ -804,6 +829,8 @@ const I18N = {
     drawer_new_prefix:'New', drawer_edit_prefix:'Edit',
     form_fullname_label:'Full name', form_fullname_placeholder:'Full name',
     form_address_placeholder:'Type address…', form_duration_label:'Duration (min)',
+    form_pick_on_map:'Pick on map', form_pick_confirm:'Confirm location',
+    toast_location_picked:'Location selected',
     form_times_per_week:'Times/wk', form_merge_label:'Single block (double lesson etc.)',
     form_merge_off:'Never — always separate lessons', form_merge_always:'Always — one continuous block',
     form_merge_auto:'Auto — the algorithm decides what fits best',
@@ -951,6 +978,8 @@ const I18N = {
     drawer_new_prefix:'Nouveau', drawer_edit_prefix:'Modifier',
     form_fullname_label:'Nom complet', form_fullname_placeholder:'Nom complet',
     form_address_placeholder:'Saisissez une adresse…', form_duration_label:'Durée (min)',
+    form_pick_on_map:'Choisir sur la carte', form_pick_confirm:'Confirmer l\'emplacement',
+    toast_location_picked:'Emplacement sélectionné',
     form_times_per_week:'Fois/sem.', form_merge_label:'Bloc unique (double cours, etc.)',
     form_merge_off:'Jamais — toujours des cours séparés', form_merge_always:'Toujours — un bloc continu',
     form_merge_auto:"Auto — l'algorithme décide ce qui convient le mieux",
@@ -1098,6 +1127,8 @@ const I18N = {
     drawer_new_prefix:'Neu', drawer_edit_prefix:'Bearbeiten',
     form_fullname_label:'Vollständiger Name', form_fullname_placeholder:'Vollständiger Name',
     form_address_placeholder:'Adresse eingeben…', form_duration_label:'Dauer (Min)',
+    form_pick_on_map:'Auf der Karte wählen', form_pick_confirm:'Standort bestätigen',
+    toast_location_picked:'Standort ausgewählt',
     form_times_per_week:'Mal/Woche', form_merge_label:'Einzelblock (Doppelstunde usw.)',
     form_merge_off:'Nie — immer getrennte Stunden', form_merge_always:'Immer — ein durchgehender Block',
     form_merge_auto:'Auto — der Algorithmus entscheidet, was am besten passt',
@@ -3975,8 +4006,13 @@ const App = {
       </div>
       <div class="form-group" style="position:relative">
         <label>${t('student_address_label')}</label>
-        <input type="text" id="st-addr" placeholder="${t('form_address_placeholder')}" value="${esc(st?.address||'')}" autocomplete="off"
-          oninput="App.onAddrInput(this.value)" onblur="setTimeout(()=>App.hideAddrSuggest(),200)">
+        <div style="display:flex;gap:6px">
+          <input type="text" id="st-addr" placeholder="${t('form_address_placeholder')}" value="${esc(st?.address||'')}" autocomplete="off" style="flex:1"
+            oninput="App.onAddrInput(this.value)" onblur="setTimeout(()=>App.hideAddrSuggest(),200)">
+          <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('st-addr')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </button>
+        </div>
         <div id="addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
       <div class="form-group">
@@ -4188,6 +4224,75 @@ const App = {
   hideAddrSuggest(boxId='addr-suggest'){
     const box = document.getElementById(boxId);
     if(box) box.style.display='none';
+  },
+
+  // ---- MAP PICKER (drop a pin instead of typing an address/name) ----
+  _mapPickerTarget: null,
+  _mapPickerCoord: null,
+  _mapPickerTimer: null,
+
+  openMapPicker(targetId){
+    this._mapPickerTarget = targetId;
+    const input = document.getElementById(targetId);
+    const overlay = document.getElementById('map-picker-overlay');
+    document.getElementById('map-picker-title').textContent = t('form_pick_on_map');
+    document.getElementById('map-picker-confirm-label').textContent = t('form_pick_confirm');
+    document.getElementById('map-picker-address').textContent = t('search_searching');
+    overlay.style.display = 'flex';
+
+    const startC = state.coords['home'] || {lat:38.2466, lon:21.7346}; // Πάτρα fallback
+    setTimeout(()=>{
+      const el = document.getElementById('map-picker-map');
+      if(!el || typeof L === 'undefined') return;
+      if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+      const map = L.map(el, {zoomControl:true, attributionControl:false}).setView([startC.lat, startC.lon], 15);
+      el._leaflet_map = map;
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+      const onMove = ()=>{
+        const c = map.getCenter();
+        this._mapPickerCoord = {lat:c.lat, lon:c.lng};
+        clearTimeout(this._mapPickerTimer);
+        const addrBox = document.getElementById('map-picker-address');
+        if(addrBox) addrBox.textContent = t('search_searching');
+        this._mapPickerTimer = setTimeout(()=>this.reverseGeocodePreview(c.lat, c.lng), 500);
+      };
+      map.on('moveend', onMove);
+      onMove();
+    }, 30);
+  },
+
+  async reverseGeocodePreview(lat, lon){
+    const addrBox = document.getElementById('map-picker-address');
+    try{
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
+      const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+      const d = await r.json();
+      if(addrBox) addrBox.textContent = (d && d.display_name) ? d.display_name.split(',').slice(0,4).join(',') : t('search_no_results');
+      this._mapPickerAddress = d && d.display_name;
+    }catch(e){
+      if(addrBox) addrBox.textContent = t('search_error');
+    }
+  },
+
+  closeMapPicker(){
+    const overlay = document.getElementById('map-picker-overlay');
+    if(overlay) overlay.style.display = 'none';
+    const el = document.getElementById('map-picker-map');
+    if(el && el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    this._mapPickerTarget = null;
+    this._mapPickerCoord = null;
+  },
+
+  confirmMapPicker(){
+    if(!this._mapPickerCoord){ this.closeMapPicker(); return; }
+    const coord = this._mapPickerCoord;
+    const short = this._mapPickerAddress ? this._mapPickerAddress.split(',').slice(0,3).join(',').trim() : `${coord.lat.toFixed(5)}, ${coord.lon.toFixed(5)}`;
+    const input = document.getElementById(this._mapPickerTarget);
+    if(input) input.value = short;
+    if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
+    else this._addrPendingCoord = coord;
+    Toast.show(t('toast_location_picked'), 'success');
+    this.closeMapPicker();
   },
 
   onPairedChange(partnerId){
@@ -5546,9 +5651,14 @@ const App = {
         <div style="margin-bottom:28px">
           <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('onboarding_address_label')}</label>
           <div style="position:relative">
-            <input id="ob-addr" type="text" placeholder="${t('form_address_placeholder')}" autocomplete="off"
-              style="width:100%;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
-              oninput="App.onAddrInput(this.value,'ob-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-addr-suggest'),200)">
+            <div style="display:flex;gap:6px">
+              <input id="ob-addr" type="text" placeholder="${t('form_address_placeholder')}" autocomplete="off"
+                style="flex:1;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
+                oninput="App.onAddrInput(this.value,'ob-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-addr-suggest'),200)">
+              <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('ob-addr')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              </button>
+            </div>
             <div id="ob-addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2,#fff);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
           </div>
         </div>
