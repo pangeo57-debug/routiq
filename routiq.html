@@ -16,6 +16,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 :root {
   --green: #059669;
@@ -781,6 +783,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
     toast_popup_blocked:'Ο browser μπλόκαρε το παράθυρο εκτύπωσης — επιτρέψτε pop-ups', print_no_lessons:'Κανένα μάθημα',
+    toast_pdf_lib_failed:'Αποτυχία δημιουργίας PDF — δοκιμάστε ξανά', toast_pdf_generating:'Δημιουργία PDF…', toast_pdf_downloaded:'Το PDF κατέβηκε ✓',
     print_lessons_suffix:'μαθήματα', merge_badge_label:'ΜΠΛΟΚ',
     btn_optimize_short:'Βελτιστοποίηση με χάρτη',
     diag_no_common_days:'Δεν υπάρχουν κοινές διαθέσιμες μέρες', diag_placed_count:'Τοποθετήθηκε {c}/{t}', diag_no_free_slot:'Δεν βρέθηκε ελεύθερη θέση στο παράθυρο',
@@ -933,6 +936,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
     toast_popup_blocked:'The browser blocked the print window — please allow pop-ups', print_no_lessons:'No lesson',
+    toast_pdf_lib_failed:'PDF generation failed — please try again', toast_pdf_generating:'Generating PDF…', toast_pdf_downloaded:'PDF downloaded ✓',
     print_lessons_suffix:'lessons', merge_badge_label:'BLOCK',
     btn_optimize_short:'Optimize with map',
     diag_no_common_days:'No common available days', diag_placed_count:'Placed {c}/{t}', diag_no_free_slot:'No free slot found in the window',
@@ -1085,6 +1089,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
     toast_popup_blocked:"Le navigateur a bloqué la fenêtre d'impression — autorisez les pop-ups", print_no_lessons:'Aucun cours',
+    toast_pdf_lib_failed:'Échec de la génération du PDF — réessayez', toast_pdf_generating:'Génération du PDF…', toast_pdf_downloaded:'PDF téléchargé ✓',
     print_lessons_suffix:'cours', merge_badge_label:'BLOC',
     btn_optimize_short:'Optimiser avec carte',
     diag_no_common_days:"Aucun jour disponible commun", diag_placed_count:'Placé {c}/{t}', diag_no_free_slot:'Aucun créneau libre trouvé dans la plage',
@@ -1237,6 +1242,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
     toast_popup_blocked:'Der Browser hat das Druckfenster blockiert — bitte Pop-ups erlauben', print_no_lessons:'Keine Stunde',
+    toast_pdf_lib_failed:'PDF-Erstellung fehlgeschlagen — bitte erneut versuchen', toast_pdf_generating:'PDF wird erstellt…', toast_pdf_downloaded:'PDF heruntergeladen ✓',
     print_lessons_suffix:'Stunden', merge_badge_label:'BLOCK',
     btn_optimize_short:'Mit Karte optimieren',
     diag_no_common_days:'Keine gemeinsamen verfügbaren Tage', diag_placed_count:'Platziert {c}/{t}', diag_no_free_slot:'Kein freier Platz im Zeitfenster gefunden',
@@ -3458,9 +3464,24 @@ const App = {
 
   // Opens a clean printable view of the full weekly schedule in a new tab and
   // triggers the browser's print dialog — user picks "Save as PDF" there.
-  printSchedule(){
-    const win = window.open('', '_blank');
-    if(!win){ Toast.show(t('toast_popup_blocked'),'error'); return; }
+  // Builds and downloads a real .pdf file directly (jsPDF), instead of opening a
+  // print dialog — window.print() from a JS-opened window is unreliable on iOS,
+  // especially when the app is installed as a standalone PWA (no browser chrome
+  // to offer "Save as PDF" from), so it often looked like nothing happened.
+  // Builds and downloads a real .pdf file directly, instead of opening a print
+  // dialog — window.print() from a JS-opened window is unreliable on iOS,
+  // especially when the app is installed as a standalone PWA (no browser chrome
+  // to offer "Save as PDF" from), so it often looked like nothing happened.
+  //
+  // Renders the schedule as real HTML (so Greek text uses the browser's own
+  // fonts correctly — jsPDF's built-in fonts don't support Greek glyphs at all),
+  // rasterizes it with html2canvas, then slices that image across as many A4
+  // pages as needed inside a jsPDF document and triggers a native download.
+  async printSchedule(){
+    if(typeof jspdf === 'undefined' || !jspdf.jsPDF || typeof html2canvas === 'undefined'){
+      Toast.show(t('toast_pdf_lib_failed'),'error'); return;
+    }
+    Toast.show(t('toast_pdf_generating'),'info');
     const teacherName = state.settings.teacherName || 'RoutePal';
     const avatarColors=['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
     const dateLocale = curLang()==='el'?'el-GR':curLang();
@@ -3469,81 +3490,105 @@ const App = {
     const allSlots = state.settings.workDays.flatMap(d=>state.schedule[d]||[]);
     const totalLessons = allSlots.length;
     const totalStudents = new Set(state.students.map(s=>s.id)).size;
-    const totalMinutes = allSlots.reduce((a,s)=>a+(s.duration||0),0);
-    const totalHours = (totalMinutes/60).toFixed(1);
+    const totalHours = (allSlots.reduce((a,s)=>a+(s.duration||0),0)/60).toFixed(1);
 
-    let html = `<!DOCTYPE html><html lang="${curLang()}"><head><meta charset="UTF-8"><title>${t('print_title')} — ${esc(teacherName)}</title>
-      <style>
-        @page{ margin:18mm 16mm }
-        *{box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,'DM Sans','Segoe UI',Arial,sans-serif;padding:32px;color:#1c1c2e;max-width:760px;margin:0 auto;background:#fff}
-        .header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1c1530;padding-bottom:14px;margin-bottom:6px}
-        .brand{font-size:24px;font-weight:800;letter-spacing:-.02em}
-        .brand span{background:linear-gradient(135deg,#059669,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
-        .brand-sub{font-size:12px;color:#64748b;margin-top:2px;font-weight:500}
-        .meta{text-align:right;font-size:11px;color:#94a3b8;line-height:1.6}
-        .meta strong{color:#1c1c2e;font-size:13px;display:block;font-weight:700}
-        .stats{display:flex;gap:10px;margin:18px 0 24px}
-        .stat{flex:1;background:#f7f6f3;border-radius:10px;padding:10px 14px;text-align:center}
-        .stat-val{font-size:20px;font-weight:800;color:#1c1c2e}
-        .stat-label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;font-weight:600}
-        .day{margin-bottom:18px;page-break-inside:avoid}
-        .day h2{font-size:14px;font-weight:700;background:#1c1530;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;margin:0;display:flex;justify-content:space-between;align-items:center}
-        .day h2 span{color:#c4b5fd;font-weight:500;font-size:11px}
-        .day-body{border:1px solid #e2e0da;border-top:none;border-radius:0 0 8px 8px;overflow:hidden}
-        .empty{color:#94a3b8;font-size:12px;padding:14px;text-align:center;font-style:italic}
-        .slot{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid #f0efe9}
-        .slot:last-child{border-bottom:none}
-        .slot-color{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;min-height:28px}
-        .slot-time{font-weight:700;font-size:12px;color:#1c1c2e;width:92px;flex-shrink:0;font-variant-numeric:tabular-nums}
-        .slot-info{flex:1;min-width:0}
-        .slot-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
-        .slot-meta{font-size:11px;color:#64748b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;text-transform:uppercase;letter-spacing:.03em}
-        .footer{margin-top:28px;padding-top:14px;border-top:1px solid #e2e0da;font-size:10px;color:#94a3b8;text-align:center}
-        @media print{ body{padding:0;max-width:none} .day{page-break-inside:avoid} }
-      </style></head><body>
-      <div class="header">
-        <div>
-          <div class="brand">Route<span>Pal</span></div>
-          <div class="brand-sub">${t('print_h1_sub')}</div>
-        </div>
-        <div class="meta">
-          <strong>${esc(teacherName)}</strong>
-          ${genDate}
-        </div>
-      </div>
-      <div class="stats">
-        <div class="stat"><div class="stat-val">${totalLessons}</div><div class="stat-label">${t('print_lessons_suffix')}</div></div>
-        <div class="stat"><div class="stat-val">${totalStudents}</div><div class="stat-label">${(getLabels().clients||'').toUpperCase()}</div></div>
-        <div class="stat"><div class="stat-val">${totalHours}${t('unit_hr')}</div><div class="stat-label">${t('home_hours_week').toUpperCase()}</div></div>
-      </div>`;
+    let daysHtml = '';
     for(const day of state.settings.workDays){
       const slots = (state.schedule[day]||[]).slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
-      html += `<div class="day"><h2>${DAYS_FULL[day]} <span>${slots.length} ${t('print_lessons_suffix')}</span></h2><div class="day-body">`;
+      daysHtml += `<div class="pdf-day"><h2>${esc(DAYS_FULL[day])} <span>${slots.length} ${esc(t('print_lessons_suffix'))}</span></h2><div class="pdf-day-body">`;
       if(!slots.length){
-        html += `<div class="empty">${t('print_no_lessons')}</div>`;
+        daysHtml += `<div class="pdf-empty">${esc(t('print_no_lessons'))}</div>`;
       } else {
         slots.forEach(sl=>{
           const col = avatarColors[(sl.color||0)%avatarColors.length];
-          const badge = sl.merged ? `<span class="badge">${t('merge_badge_label')}</span>` : sl.isGroup ? `<span class="badge">${t('form_type_group')}</span>` : '';
-          html += `<div class="slot">
-            <div class="slot-color" style="background:${col}"></div>
-            <div class="slot-time">${sl.start}–${sl.end}</div>
-            <div class="slot-info">
-              <div class="slot-name">${esc(sl.studentName)}${badge}</div>
-              <div class="slot-meta">${esc(sl.subject||'')} · ${esc(sl.address||'')}</div>
+          const badge = sl.merged ? `<span class="pdf-badge">${esc(t('merge_badge_label'))}</span>` : sl.isGroup ? `<span class="pdf-badge">${esc(t('form_type_group'))}</span>` : '';
+          daysHtml += `<div class="pdf-slot">
+            <div class="pdf-slot-color" style="background:${col}"></div>
+            <div class="pdf-slot-time">${esc(sl.start)}–${esc(sl.end)}</div>
+            <div class="pdf-slot-info">
+              <div class="pdf-slot-name">${esc(sl.studentName)}${badge}</div>
+              <div class="pdf-slot-meta">${esc(sl.subject||'')} · ${esc(sl.address||'')}</div>
             </div>
           </div>`;
         });
       }
-      html += `</div></div>`;
+      daysHtml += `</div></div>`;
     }
-    html += `<div class="footer">RoutePal · ${genDate}</div>`;
-    html += `</body></html>`;
-    win.document.write(html);
-    win.document.close();
-    win.onload = () => win.print();
+
+    const container = document.createElement('div');
+    container.style.cssText = 'position:absolute;left:-9999px;top:0;width:760px;background:#fff;padding:32px;font-family:-apple-system,BlinkMacSystemFont,"DM Sans","Segoe UI",Arial,sans-serif;color:#1c1c2e';
+    container.innerHTML = `
+      <style>
+        .pdf-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1c1530;padding-bottom:14px;margin-bottom:6px}
+        .pdf-brand{font-size:24px;font-weight:800;letter-spacing:-.02em}
+        .pdf-brand b{color:#059669}
+        .pdf-brand-sub{font-size:12px;color:#64748b;margin-top:2px;font-weight:500}
+        .pdf-meta{text-align:right;font-size:11px;color:#94a3b8;line-height:1.6}
+        .pdf-meta strong{color:#1c1c2e;font-size:13px;display:block;font-weight:700}
+        .pdf-stats{display:flex;gap:10px;margin:18px 0 24px}
+        .pdf-stat{flex:1;background:#f7f6f3;border-radius:10px;padding:10px 14px;text-align:center}
+        .pdf-stat-val{font-size:20px;font-weight:800;color:#1c1c2e}
+        .pdf-stat-label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;font-weight:600}
+        .pdf-day{margin-bottom:18px}
+        .pdf-day h2{font-size:14px;font-weight:700;background:#1c1530;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;margin:0;display:flex;justify-content:space-between;align-items:center}
+        .pdf-day h2 span{color:#c4b5fd;font-weight:500;font-size:11px}
+        .pdf-day-body{border:1px solid #e2e0da;border-top:none;border-radius:0 0 8px 8px;overflow:hidden}
+        .pdf-empty{color:#94a3b8;font-size:12px;padding:14px;text-align:center;font-style:italic}
+        .pdf-slot{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid #f0efe9}
+        .pdf-slot:last-child{border-bottom:none}
+        .pdf-slot-color{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;min-height:28px}
+        .pdf-slot-time{font-weight:700;font-size:12px;color:#1c1c2e;width:92px;flex-shrink:0}
+        .pdf-slot-info{flex:1;min-width:0}
+        .pdf-slot-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+        .pdf-slot-meta{font-size:11px;color:#64748b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .pdf-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;text-transform:uppercase;letter-spacing:.03em}
+        .pdf-footer{margin-top:28px;padding-top:14px;border-top:1px solid #e2e0da;font-size:10px;color:#94a3b8;text-align:center}
+      </style>
+      <div class="pdf-header">
+        <div>
+          <div class="pdf-brand">Route<b>Pal</b></div>
+          <div class="pdf-brand-sub">${esc(t('print_h1_sub'))}</div>
+        </div>
+        <div class="pdf-meta">
+          <strong>${esc(teacherName)}</strong>
+          ${esc(genDate)}
+        </div>
+      </div>
+      <div class="pdf-stats">
+        <div class="pdf-stat"><div class="pdf-stat-val">${totalLessons}</div><div class="pdf-stat-label">${esc(t('print_lessons_suffix'))}</div></div>
+        <div class="pdf-stat"><div class="pdf-stat-val">${totalStudents}</div><div class="pdf-stat-label">${esc((getLabels().clients||'').toUpperCase())}</div></div>
+        <div class="pdf-stat"><div class="pdf-stat-val">${totalHours}${esc(t('unit_hr'))}</div><div class="pdf-stat-label">${esc(t('home_hours_week').toUpperCase())}</div></div>
+      </div>
+      ${daysHtml}
+      <div class="pdf-footer">RoutePal · ${esc(genDate)}</div>
+    `;
+    document.body.appendChild(container);
+
+    try{
+      const canvas = await html2canvas(container, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+      const doc = new jspdf.jsPDF({unit:'pt', format:'a4'});
+      const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+      const imgW = pageW;
+      const imgH = canvas.height * imgW / canvas.width;
+      const imgData = canvas.toDataURL('image/png');
+      let heightLeft = imgH, position = 0;
+      doc.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+      while(heightLeft > 0){
+        position -= pageH;
+        doc.addPage();
+        doc.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+      }
+      const safeTeacher = teacherName.replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'') || 'routepal';
+      doc.save(`${safeTeacher}-${t('print_title').toLowerCase()}.pdf`);
+      Toast.show(t('toast_pdf_downloaded'),'success');
+    }catch(e){
+      console.error('PDF generation failed:', e);
+      Toast.show(t('toast_pdf_lib_failed'),'error');
+    }finally{
+      document.body.removeChild(container);
+    }
   },
 
   async runAndNotify(){
