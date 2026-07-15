@@ -3419,35 +3419,84 @@ const App = {
     const win = window.open('', '_blank');
     if(!win){ Toast.show(t('toast_popup_blocked'),'error'); return; }
     const teacherName = state.settings.teacherName || 'RoutePal';
+    const avatarColors=['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
+    const dateLocale = curLang()==='el'?'el-GR':curLang();
+    const genDate = new Date().toLocaleDateString(dateLocale,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+    const allSlots = state.settings.workDays.flatMap(d=>state.schedule[d]||[]);
+    const totalLessons = allSlots.length;
+    const totalStudents = new Set(state.students.map(s=>s.id)).size;
+    const totalMinutes = allSlots.reduce((a,s)=>a+(s.duration||0),0);
+    const totalHours = (totalMinutes/60).toFixed(1);
+
     let html = `<!DOCTYPE html><html lang="${curLang()}"><head><meta charset="UTF-8"><title>${t('print_title')} — ${esc(teacherName)}</title>
       <style>
-        body{font-family:-apple-system,'DM Sans',Arial,sans-serif;padding:24px;color:#1c1c2e;max-width:700px;margin:0 auto}
-        h1{font-size:20px;margin-bottom:2px} h1 span{color:#059669}
-        .sub{color:#64748b;font-size:12px;margin-bottom:20px}
-        .day{margin-bottom:16px;page-break-inside:avoid}
-        .day h2{font-size:14px;border-bottom:2px solid #e2e0da;padding-bottom:4px;margin-bottom:6px;display:flex;justify-content:space-between}
-        .day h2 span{color:#94a3b8;font-weight:400;font-size:12px}
-        .empty{color:#94a3b8;font-size:12px;padding:4px 0}
-        .slot{border-left:3px solid #059669;padding:6px 10px;margin-bottom:4px;background:#fafaf9;border-radius:0 6px 6px 0}
-        .slot-time{font-weight:700;font-size:13px}
-        .slot-name{font-weight:600;font-size:13px}
-        .slot-meta{font-size:11px;color:#64748b;margin-top:2px}
-        @media print{ body{padding:0} }
+        @page{ margin:18mm 16mm }
+        *{box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,'DM Sans','Segoe UI',Arial,sans-serif;padding:32px;color:#1c1c2e;max-width:760px;margin:0 auto;background:#fff}
+        .header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1c1530;padding-bottom:14px;margin-bottom:6px}
+        .brand{font-size:24px;font-weight:800;letter-spacing:-.02em}
+        .brand span{background:linear-gradient(135deg,#059669,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
+        .brand-sub{font-size:12px;color:#64748b;margin-top:2px;font-weight:500}
+        .meta{text-align:right;font-size:11px;color:#94a3b8;line-height:1.6}
+        .meta strong{color:#1c1c2e;font-size:13px;display:block;font-weight:700}
+        .stats{display:flex;gap:10px;margin:18px 0 24px}
+        .stat{flex:1;background:#f7f6f3;border-radius:10px;padding:10px 14px;text-align:center}
+        .stat-val{font-size:20px;font-weight:800;color:#1c1c2e}
+        .stat-label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;font-weight:600}
+        .day{margin-bottom:18px;page-break-inside:avoid}
+        .day h2{font-size:14px;font-weight:700;background:#1c1530;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;margin:0;display:flex;justify-content:space-between;align-items:center}
+        .day h2 span{color:#c4b5fd;font-weight:500;font-size:11px}
+        .day-body{border:1px solid #e2e0da;border-top:none;border-radius:0 0 8px 8px;overflow:hidden}
+        .empty{color:#94a3b8;font-size:12px;padding:14px;text-align:center;font-style:italic}
+        .slot{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid #f0efe9}
+        .slot:last-child{border-bottom:none}
+        .slot-color{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;min-height:28px}
+        .slot-time{font-weight:700;font-size:12px;color:#1c1c2e;width:92px;flex-shrink:0;font-variant-numeric:tabular-nums}
+        .slot-info{flex:1;min-width:0}
+        .slot-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+        .slot-meta{font-size:11px;color:#64748b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#7c3aed;text-transform:uppercase;letter-spacing:.03em}
+        .footer{margin-top:28px;padding-top:14px;border-top:1px solid #e2e0da;font-size:10px;color:#94a3b8;text-align:center}
+        @media print{ body{padding:0;max-width:none} .day{page-break-inside:avoid} }
       </style></head><body>
-      <h1>Route<span>Pal</span> — ${t('print_h1_sub')}</h1>
-      <div class="sub">${esc(teacherName)} · ${new Date().toLocaleDateString(curLang()==='el'?'el-GR':curLang())}</div>`;
+      <div class="header">
+        <div>
+          <div class="brand">Route<span>Pal</span></div>
+          <div class="brand-sub">${t('print_h1_sub')}</div>
+        </div>
+        <div class="meta">
+          <strong>${esc(teacherName)}</strong>
+          ${genDate}
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="stat-val">${totalLessons}</div><div class="stat-label">${t('print_lessons_suffix')}</div></div>
+        <div class="stat"><div class="stat-val">${totalStudents}</div><div class="stat-label">${(getLabels().clients||'').toUpperCase()}</div></div>
+        <div class="stat"><div class="stat-val">${totalHours}${t('unit_hr')}</div><div class="stat-label">${t('home_hours_week').toUpperCase()}</div></div>
+      </div>`;
     for(const day of state.settings.workDays){
       const slots = (state.schedule[day]||[]).slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
-      html += `<div class="day"><h2>${DAYS_FULL[day]} <span>${slots.length} ${t('print_lessons_suffix')}</span></h2>`;
+      html += `<div class="day"><h2>${DAYS_FULL[day]} <span>${slots.length} ${t('print_lessons_suffix')}</span></h2><div class="day-body">`;
       if(!slots.length){
         html += `<div class="empty">${t('print_no_lessons')}</div>`;
       } else {
         slots.forEach(sl=>{
-          html += `<div class="slot"><div class="slot-time">${sl.start}–${sl.end}</div><div class="slot-name">${esc(sl.studentName)}</div><div class="slot-meta">${esc(sl.subject||'')} · ${esc(sl.address||'')}</div></div>`;
+          const col = avatarColors[(sl.color||0)%avatarColors.length];
+          const badge = sl.merged ? `<span class="badge">${t('merge_badge_label')}</span>` : sl.isGroup ? `<span class="badge">${t('form_type_group')}</span>` : '';
+          html += `<div class="slot">
+            <div class="slot-color" style="background:${col}"></div>
+            <div class="slot-time">${sl.start}–${sl.end}</div>
+            <div class="slot-info">
+              <div class="slot-name">${esc(sl.studentName)}${badge}</div>
+              <div class="slot-meta">${esc(sl.subject||'')} · ${esc(sl.address||'')}</div>
+            </div>
+          </div>`;
         });
       }
-      html += `</div>`;
+      html += `</div></div>`;
     }
+    html += `<div class="footer">RoutePal · ${genDate}</div>`;
     html += `</body></html>`;
     win.document.write(html);
     win.document.close();
