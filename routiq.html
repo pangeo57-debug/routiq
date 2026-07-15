@@ -726,7 +726,8 @@ const I18N = {
     settings_home_placeholder:'Οδός αρ., Πόλη', settings_travel_mode_label:'Μέσο μεταφοράς',
     settings_travel_car:'🚗 Αυτοκίνητο', settings_travel_bike:'🚲 Ποδήλατο', settings_travel_walk:'🚶 Πεζός',
     settings_fuel_consumption_label:'Κατανάλωση (L/100km)', settings_margin_label:'Margin ασφαλείας (λεπτά)',
-    settings_avg_speed_label:'Μέση ταχύτητα πόλης (km/h)', settings_here_key_label:'HERE Maps API Key (για live traffic)',
+    settings_avg_speed_label:'Μέση ταχύτητα πόλης (km/h)', settings_here_key_label:'HERE Maps API Key',
+    settings_here_key_hint:'Προαιρετικό — βελτιώνει την ακρίβεια αναζήτησης διεύθυνσης/μαγαζιού και ενεργοποιεί live traffic χρόνους.',
     settings_here_key_placeholder:'Προαιρετικό — για traffic-aware χρόνους', settings_lunch_label:'Διάλειμμα μεσημεριού',
     settings_lunch_none:'Κανένα', settings_lunch_30:'30 λεπτά', settings_lunch_60:'1 ώρα',
     settings_add_block:'Προσθήκη μπλοκαρίσματος', settings_maps_title:'Χάρτες &amp; Δρομολόγηση',
@@ -875,7 +876,8 @@ const I18N = {
     settings_home_placeholder:'Street no., City', settings_travel_mode_label:'Mode of transport',
     settings_travel_car:'🚗 Car', settings_travel_bike:'🚲 Bike', settings_travel_walk:'🚶 Walking',
     settings_fuel_consumption_label:'Consumption (L/100km)', settings_margin_label:'Safety margin (minutes)',
-    settings_avg_speed_label:'Average city speed (km/h)', settings_here_key_label:'HERE Maps API Key (for live traffic)',
+    settings_avg_speed_label:'Average city speed (km/h)', settings_here_key_label:'HERE Maps API Key',
+    settings_here_key_hint:'Optional — improves address/place search accuracy and enables live traffic times.',
     settings_here_key_placeholder:'Optional — for traffic-aware times', settings_lunch_label:'Lunch break',
     settings_lunch_none:'None', settings_lunch_30:'30 minutes', settings_lunch_60:'1 hour',
     settings_add_block:'Add blocked time', settings_maps_title:'Maps &amp; Routing',
@@ -1024,7 +1026,8 @@ const I18N = {
     settings_home_placeholder:'Rue n°, Ville', settings_travel_mode_label:'Moyen de transport',
     settings_travel_car:'🚗 Voiture', settings_travel_bike:'🚲 Vélo', settings_travel_walk:'🚶 À pied',
     settings_fuel_consumption_label:'Consommation (L/100km)', settings_margin_label:'Marge de sécurité (minutes)',
-    settings_avg_speed_label:'Vitesse moyenne en ville (km/h)', settings_here_key_label:'Clé API HERE Maps (trafic en temps réel)',
+    settings_avg_speed_label:'Vitesse moyenne en ville (km/h)', settings_here_key_label:'Clé API HERE Maps',
+    settings_here_key_hint:'Optionnel — améliore la précision de recherche d\'adresse/lieu et active les temps de trajet en temps réel.',
     settings_here_key_placeholder:'Facultatif — pour des temps tenant compte du trafic', settings_lunch_label:'Pause déjeuner',
     settings_lunch_none:'Aucune', settings_lunch_30:'30 minutes', settings_lunch_60:'1 heure',
     settings_add_block:'Ajouter un blocage', settings_maps_title:'Cartes &amp; Itinéraires',
@@ -1173,7 +1176,8 @@ const I18N = {
     settings_home_placeholder:'Straße Nr., Stadt', settings_travel_mode_label:'Verkehrsmittel',
     settings_travel_car:'🚗 Auto', settings_travel_bike:'🚲 Fahrrad', settings_travel_walk:'🚶 Zu Fuß',
     settings_fuel_consumption_label:'Verbrauch (L/100km)', settings_margin_label:'Sicherheitsmarge (Minuten)',
-    settings_avg_speed_label:'Durchschnittliche Stadtgeschwindigkeit (km/h)', settings_here_key_label:'HERE Maps API-Schlüssel (für Live-Verkehr)',
+    settings_avg_speed_label:'Durchschnittliche Stadtgeschwindigkeit (km/h)', settings_here_key_label:'HERE Maps API-Schlüssel',
+    settings_here_key_hint:'Optional — verbessert die Genauigkeit der Adress-/Ortssuche und aktiviert Live-Verkehrszeiten.',
     settings_here_key_placeholder:'Optional — für verkehrsbasierte Zeiten', settings_lunch_label:'Mittagspause',
     settings_lunch_none:'Keine', settings_lunch_30:'30 Minuten', settings_lunch_60:'1 Stunde',
     settings_add_block:'Blockierung hinzufügen', settings_maps_title:'Karten &amp; Routing',
@@ -4151,21 +4155,10 @@ const App = {
     if(val.length < 3){ box.style.display='none'; return; }
     box.style.display='block';
     box.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_searching')}</div>`;
+    const hereKey = state.settings && state.settings.hereApiKey;
     this._addrTimer = setTimeout(async ()=>{
       try{
-        // Search the raw text as typed — no forced ", Ελλάδα" suffix. countrycodes=gr
-        // already scopes results to Greece; appending the country name to the query
-        // string was hurting POI/business-name matches (e.g. "Starbucks Πάτρα") since
-        // Nominatim then has to match "Ελλάδα" as a literal token too.
-        const q = encodeURIComponent(val.trim());
-        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1${Router._viewboxParam()}`;
-        const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
-        let results = await r.json();
-        if((!results || results.length===0) && Router._viewboxParam()){
-          const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1`;
-          const r2 = await fetch(url2, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
-          results = await r2.json();
-        }
+        const results = hereKey ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
         const b = document.getElementById(boxId);
         if(!b) return;
         if(!results || results.length===0){
@@ -4177,25 +4170,23 @@ const App = {
         const home = state.coords && state.coords['home'];
         if(home){
           results.forEach(res=>{
-            const dx=parseFloat(res.lon)-home.lon, dy=parseFloat(res.lat)-home.lat;
+            const dx=res.lon-home.lon, dy=res.lat-home.lat;
             res._distKm = Math.sqrt(dx*dx+dy*dy)*111;
           });
           results.sort((a,b)=>a._distKm-b._distKm);
         }
-        results = results.slice(0,5);
-        b.innerHTML = results.map((res,i)=>{
-          const name = res.display_name;
+        const shown = results.slice(0,5);
+        b.innerHTML = shown.map((res)=>{
           // Named places (shops, cafes, landmarks — e.g. searching "Starbucks" instead of
-          // a street address) come back with namedetails.name; show that as the headline
-          // with the address as context underneath, instead of the raw address fragment.
-          const poiName = res.namedetails && res.namedetails.name;
-          const short = poiName || name.split(',').slice(0,3).join(',');
+          // a street address) show their actual name as the headline, with the full
+          // address as context underneath, instead of a raw address fragment.
+          const short = res.poiName || res.name.split(',').slice(0,3).join(',');
           const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
           return `<div class="addr-suggest-item" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4"
-            onmousedown="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')"
-            ontouchstart="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')">
+            onmousedown="App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')"
+            ontouchstart="App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')">
             <div style="font-weight:500;color:var(--text)">${esc(short)}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(name)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(res.name)}</div>
           </div>`;
         }).join('');
       }catch(e){
@@ -4203,6 +4194,45 @@ const App = {
         if(b) b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--red)">${t('search_error')}</div>`;
       }
     }, 400);
+  },
+
+  // HERE Autosuggest — used when the user has set a HERE API key (Settings > Maps &
+  // Routing), for Google-grade business/POI name matching. Falls back to Nominatim
+  // (free, no key needed) when no key is configured — see _searchNominatim below.
+  async _searchHere(val, key){
+    const home = (state.coords && state.coords['home']) || {lat:38.2466, lon:21.7346};
+    const q = encodeURIComponent(val.trim());
+    const url = `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${home.lat},${home.lon}&limit=8&lang=el&apiKey=${key}`;
+    const r = await fetch(url);
+    if(!r.ok) throw new Error(`HERE Autosuggest ${r.status}`);
+    const d = await r.json();
+    const items = (d.items||[]).filter(it=>it.position); // skip query-refinement items with no coordinates
+    return items.map(it=>{
+      const label = (it.address && it.address.label) || it.title || '';
+      const name = (it.title && !label.startsWith(it.title)) ? `${it.title}, ${label}` : label;
+      return { name, poiName: it.title, lat: it.position.lat, lon: it.position.lng };
+    });
+  },
+
+  async _searchNominatim(val){
+    // Search the raw text as typed — no forced ", Ελλάδα" suffix. countrycodes=gr
+    // already scopes results to Greece; appending the country name to the query
+    // string was hurting POI/business-name matches (e.g. "Starbucks Πάτρα") since
+    // Nominatim then has to match "Ελλάδα" as a literal token too.
+    const q = encodeURIComponent(val.trim());
+    const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1${Router._viewboxParam()}`;
+    const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+    let results = await r.json();
+    if((!results || results.length===0) && Router._viewboxParam()){
+      const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1`;
+      const r2 = await fetch(url2, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+      results = await r2.json();
+    }
+    return (results||[]).map(res=>({
+      name: res.display_name,
+      poiName: res.namedetails && res.namedetails.name,
+      lat: parseFloat(res.lat), lon: parseFloat(res.lon)
+    }));
   },
 
   selectAddr(name, lat, lon, boxId='addr-suggest'){
@@ -4263,12 +4293,24 @@ const App = {
 
   async reverseGeocodePreview(lat, lon){
     const addrBox = document.getElementById('map-picker-address');
+    const hereKey = state.settings && state.settings.hereApiKey;
     try{
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
-      const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
-      const d = await r.json();
-      if(addrBox) addrBox.textContent = (d && d.display_name) ? d.display_name.split(',').slice(0,4).join(',') : t('search_no_results');
-      this._mapPickerAddress = d && d.display_name;
+      let display;
+      if(hereKey){
+        const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=el&apiKey=${hereKey}`;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
+        const d = await r.json();
+        const item = d.items && d.items[0];
+        display = item && (item.address ? item.address.label : item.title);
+      } else {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
+        const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+        const d = await r.json();
+        display = d && d.display_name;
+      }
+      if(addrBox) addrBox.textContent = display ? display.split(',').slice(0,4).join(',') : t('search_no_results');
+      this._mapPickerAddress = display;
     }catch(e){
       if(addrBox) addrBox.textContent = t('search_error');
     }
@@ -5252,6 +5294,7 @@ const App = {
         <div class="form-group">
           <label>${t('settings_here_key_label')}</label>
           <input type="text" id="set-here-key" placeholder="${t('settings_here_key_placeholder')}" value="${esc(st.hereApiKey||'')}">
+          <div class="settings-sub" style="margin-top:4px">${t('settings_here_key_hint')}</div>
         </div>
         <div class="form-group" style="margin:0">
           <label>${t('settings_lunch_label')}</label>
