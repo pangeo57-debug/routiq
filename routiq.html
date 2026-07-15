@@ -286,7 +286,7 @@ input[type=time]{color-scheme:light}
 
 /* MODAL / DRAWER */
 .overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;
+  position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;
   display:flex;align-items:flex-end;justify-content:center;
   backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .2s;
 }
@@ -307,7 +307,7 @@ input[type=time]{color-scheme:light}
 
 /* CONFIRM DIALOG */
 .confirm-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;
+  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2100;
   display:flex;align-items:center;justify-content:center;padding:20px;
   backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .2s;
 }
@@ -3809,7 +3809,7 @@ const App = {
               </div>
             </div>
             <div id="students-overview-map-wrap" style="overflow:hidden;transition:max-height .3s ease;max-height:${state._mapExpanded?'220px':'0px'}">
-              <div id="students-overview-map" style="height:200px;margin:0 16px 12px;border-radius:10px;overflow:hidden;background:var(--bg3)"></div>
+              <div id="students-overview-map" style="height:200px;margin:0 16px 12px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate"></div>
             </div>
           </div>
         `:''}
@@ -4770,7 +4770,7 @@ const App = {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           <span style="font-size:13px;color:#059669;font-weight:600">OpenStreetMap — ${t('route_real_distance')}</span>
         </div>`:''}
-      <div id="route-map" style="height:220px;border-radius:12px;margin:0 16px 8px;overflow:hidden;background:var(--bg2)"></div>
+      <div id="route-map" style="height:220px;border-radius:12px;margin:0 16px 8px;overflow:hidden;background:var(--bg2);position:relative;isolation:isolate"></div>
       <div id="route-content">
         ${this.buildRouteContent(slots, rr)}
       </div>
