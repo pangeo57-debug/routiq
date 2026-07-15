@@ -3776,7 +3776,18 @@ const App = {
     const chev = document.getElementById('map-chevron');
     if(wrap) wrap.style.maxHeight = state._mapExpanded ? '220px' : '0px';
     if(chev) chev.style.transform = state._mapExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
-    if(state._mapExpanded) setTimeout(()=>this.initStudentsMap(), 50);
+    if(state._mapExpanded){
+      // Container animates over 300ms (see max-height transition above) — initializing
+      // Leaflet before it reaches full size bakes in a wrong size and the map renders
+      // broken/unresponsive ("frozen"). Wait for the transition to actually finish.
+      if(wrap){
+        const onDone = (e)=>{ if(e && e.propertyName!=='max-height') return; wrap.removeEventListener('transitionend', onDone); this.initStudentsMap(); };
+        wrap.addEventListener('transitionend', onDone);
+        setTimeout(onDone, 400); // fallback in case transitionend doesn't fire
+      } else {
+        this.initStudentsMap();
+      }
+    }
   },
 
   initStudentsMap(){
@@ -3807,6 +3818,9 @@ const App = {
       L.marker([c.lat,c.lon],{icon:L.divIcon({className:'',html:`<div style="width:26px;height:26px;background:${col};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700">${initials}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).bindTooltip(`${esc(s.name)}<br><span style='font-size:11px;color:#aaa'>${esc(s.address)}</span>`,{permanent:false}).addTo(map);
     });
     try{ map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); }catch(e){}
+    // Defensive: if the container was resized/reflowed after this map was created
+    // (e.g. drawer opened/closed above it), make sure Leaflet re-measures it.
+    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 60);
   },
 
   studentCard(st){
