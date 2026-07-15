@@ -4117,12 +4117,16 @@ const App = {
     box.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_searching')}</div>`;
     this._addrTimer = setTimeout(async ()=>{
       try{
-        const q = encodeURIComponent(val + ', Ελλάδα');
-        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1${Router._viewboxParam()}`;
+        // Search the raw text as typed — no forced ", Ελλάδα" suffix. countrycodes=gr
+        // already scopes results to Greece; appending the country name to the query
+        // string was hurting POI/business-name matches (e.g. "Starbucks Πάτρα") since
+        // Nominatim then has to match "Ελλάδα" as a literal token too.
+        const q = encodeURIComponent(val.trim());
+        const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1${Router._viewboxParam()}`;
         const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
         let results = await r.json();
         if((!results || results.length===0) && Router._viewboxParam()){
-          const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1`;
+          const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1`;
           const r2 = await fetch(url2, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
           results = await r2.json();
         }
@@ -4145,13 +4149,17 @@ const App = {
         results = results.slice(0,5);
         b.innerHTML = results.map((res,i)=>{
           const name = res.display_name;
-          const short = name.split(',').slice(0,3).join(',');
+          // Named places (shops, cafes, landmarks — e.g. searching "Starbucks" instead of
+          // a street address) come back with namedetails.name; show that as the headline
+          // with the address as context underneath, instead of the raw address fragment.
+          const poiName = res.namedetails && res.namedetails.name;
+          const short = poiName || name.split(',').slice(0,3).join(',');
           const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
           return `<div class="addr-suggest-item" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4"
             onmousedown="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')"
             ontouchstart="App.selectAddr(${JSON.stringify(name)},${res.lat},${res.lon},'${boxId}')">
-            <div style="font-weight:500;color:var(--text)">${short}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${name}</div>
+            <div style="font-weight:500;color:var(--text)">${esc(short)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(name)}</div>
           </div>`;
         }).join('');
       }catch(e){
