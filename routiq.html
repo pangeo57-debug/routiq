@@ -779,6 +779,7 @@ const I18N = {
     phase4b_title:'Φάση 4 — Επανατοποθέτηση', phase4b_sub:'Τοποθέτηση αδύνατων μαθητών…',
     phase5_title:'Φάση 5 — LNS', phase5_sub:'Επανατοποθέτηση με destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Ολοκληρώθηκε', phase_done_sub:'Αποθήκευση προγράμματος…',
+    phase_km_title:'Πραγματικά χιλιόμετρα', phase_km_sub:'Υπολογισμός οδικής απόστασης (OSRM)…',
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
@@ -932,6 +933,7 @@ const I18N = {
     phase4b_title:'Phase 4 — Re-placement', phase4b_sub:'Placing unfit students…',
     phase5_title:'Phase 5 — LNS', phase5_sub:'Re-placing with destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Complete', phase_done_sub:'Saving schedule…',
+    phase_km_title:'Real driving distance', phase_km_sub:'Calculating road distance (OSRM)…',
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
@@ -1085,6 +1087,7 @@ const I18N = {
     phase4b_title:'Phase 4 — Replacement', phase4b_sub:'Placement des élèves non placés…',
     phase5_title:'Phase 5 — LNS', phase5_sub:'Replacement par destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Terminé', phase_done_sub:'Enregistrement du programme…',
+    phase_km_title:'Distance routière réelle', phase_km_sub:'Calcul de la distance routière (OSRM)…',
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
@@ -1238,6 +1241,7 @@ const I18N = {
     phase4b_title:'Phase 4 — Neuplatzierung', phase4b_sub:'Nicht passende Schüler platzieren…',
     phase5_title:'Phase 5 — LNS', phase5_sub:'Neuplatzierung mit Destroy-Repair (10s)…', phase5b_sub:'Destroy-Repair (10s)…',
     phase_done_title:'Abgeschlossen', phase_done_sub:'Plan wird gespeichert…',
+    phase_km_title:'Echte Fahrstrecke', phase_km_sub:'Straßenentfernung wird berechnet (OSRM)…',
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
@@ -3434,13 +3438,20 @@ const App = {
     Storage.saveSchedule(state.schedule);
 
     state.scheduleOptimized = true;
-    state.scheduleKmAfter = this._estimateTotalKm(state.schedule);
+    state.scheduleKmAfter = this._estimateTotalKm(state.schedule); // instant placeholder
+    schedProgress(97,t('phase_km_title'),t('phase_km_sub'),'🚗');
+    try{
+      state.scheduleKmAfter = await this._estimateTotalKmReal(state.schedule);
+    }catch(e){ /* keep the straight-line placeholder */ }
 
     schedProgress(null,null,null,null);
     this.renderSchedule();
     if(btn){ btn.disabled=false; btn.innerHTML=t('btn_optimize_short'); }
   },
 
+  // Straight-line ("as the crow flies") estimate — instant, no network. Used as
+  // an immediate placeholder and as the per-day fallback when OSRM is
+  // unreachable for _estimateTotalKmReal below.
   _estimateTotalKm(schedule){
     const homeC = state.coords['home'] || Scheduler.coordsHash(state.settings.homeAddress||'Πλατεία Γεωργίου 1, Πάτρα');
     let total = 0;
@@ -3458,6 +3469,52 @@ const App = {
         prevSl = sl;
       }
       total += Router.estimateKm(prev, homeC);
+    }
+    return total;
+  },
+
+  // Real driving-distance total (home → first lesson → … → last lesson → home,
+  // for every work day, summed for the week) using OSRM's road network — the
+  // same source of truth as the Route screen, so this matches what you'd see
+  // in Google Maps/Waze instead of a straight-line guess. One matrix request
+  // per day (home + that day's unique stop locations); any day whose request
+  // fails falls back to the straight-line estimate for just that day, so a
+  // single network hiccup never blanks out the whole week's total.
+  async _estimateTotalKmReal(schedule){
+    const homeC = state.coords['home'] || Scheduler.coordsHash(state.settings.homeAddress||'Πλατεία Γεωργίου 1, Πάτρα');
+    let total = 0;
+    for(const day of Object.keys(schedule)){
+      const slots = schedule[day].slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+      if(!slots.length) continue;
+      const uniqueSlots = [];
+      let prevSl = null;
+      slots.forEach(sl=>{
+        const sameLocation = prevSl && (prevSl.studentId === sl.studentId ||
+          (prevSl.groupCode && prevSl.groupCode === sl.groupCode));
+        if(!sameLocation) uniqueSlots.push(sl);
+        prevSl = sl;
+      });
+      if(!uniqueSlots.length) continue;
+      const coordsList = [homeC, ...uniqueSlots.map(sl => state.coords[sl.studentId] || Scheduler.coordsHash(sl.address)), homeC];
+      let dayKm = null;
+      try{
+        const matrix = await Router.getMatrix(coordsList);
+        if(matrix && matrix.distances){
+          dayKm = 0;
+          for(let i=0;i<coordsList.length-1;i++) dayKm += (matrix.distances[i]?.[i+1]||0)/1000;
+        }
+      }catch(e){ /* fall through to straight-line for this day */ }
+      if(dayKm == null){
+        dayKm = 0;
+        let prev = homeC;
+        uniqueSlots.forEach(sl=>{
+          const c = state.coords[sl.studentId] || Scheduler.coordsHash(sl.address);
+          dayKm += Router.estimateKm(prev, c);
+          prev = c;
+        });
+        dayKm += Router.estimateKm(prev, homeC);
+      }
+      total += dayKm;
     }
     return total;
   },
@@ -3699,10 +3756,9 @@ const App = {
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
 
-    schedProgress(100,t('phase_done_title'),t('phase_done_sub'),'✅');
-    await new Promise(r=>setTimeout(r,300));
-
     if(r){
+      // Instant straight-line placeholder so the stat isn't blank while the
+      // real-road-distance request (below) is in flight.
       state.scheduleKmBefore = this._estimateTotalKm(state.schedule);
       // Phases 2-5 (geoOptimize/SA/repairs) can place students that were still
       // unplaced after Phase 1 — recompute the unplaced list from the FINAL
@@ -3710,7 +3766,15 @@ const App = {
       state.scheduleAttempts[0] = { ...r, schedule: state.schedule, unplaced: this.computeUnplacedLive() };
       state.schedulerResult = state.scheduleAttempts[0];
       Storage.saveSchedule(state.schedule);
+
+      schedProgress(97,t('phase_km_title'),t('phase_km_sub'),'🚗');
+      try{
+        state.scheduleKmBefore = await this._estimateTotalKmReal(state.schedule);
+      }catch(e){ /* keep the straight-line placeholder */ }
     }
+
+    schedProgress(100,t('phase_done_title'),t('phase_done_sub'),'✅');
+    await new Promise(r=>setTimeout(r,300));
 
     state._scheduleStale = false;
     schedProgress(null,null,null,null);
