@@ -4242,10 +4242,11 @@ const App = {
           </div>`;
         }).join('');
       }catch(e){
+        console.warn('Address search failed:', e);
         const b = document.getElementById(boxId);
         if(b) b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--red)">${t('search_error')}</div>`;
       }
-    }, 400);
+    }, 500);
   },
 
   // HERE Autosuggest — used when the user has set a HERE API key (Settings > Maps &
@@ -4272,15 +4273,17 @@ const App = {
     // string was hurting POI/business-name matches (e.g. "Starbucks Πάτρα") since
     // Nominatim then has to match "Ελλάδα" as a literal token too.
     const q = encodeURIComponent(val.trim());
-    const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1${Router._viewboxParam()}`;
-    const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+    const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1${Router._viewboxParam()}`;
+    const r = await fetch(url, {headers:{'Accept-Language':'el'}});
+    if(!r.ok) throw new Error(`Nominatim ${r.status}`);
     let results = await r.json();
-    if((!results || results.length===0) && Router._viewboxParam()){
-      const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1&dedupe=1`;
-      const r2 = await fetch(url2, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
-      results = await r2.json();
+    if((!Array.isArray(results) || results.length===0) && Router._viewboxParam()){
+      const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1`;
+      const r2 = await fetch(url2, {headers:{'Accept-Language':'el'}});
+      if(r2.ok) results = await r2.json();
     }
-    return (results||[]).map(res=>({
+    if(!Array.isArray(results)) results = [];
+    return results.map(res=>({
       name: res.display_name,
       poiName: res.namedetails && res.namedetails.name,
       lat: parseFloat(res.lat), lon: parseFloat(res.lon)
