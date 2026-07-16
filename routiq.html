@@ -613,13 +613,7 @@ function defaultSettings(){
     homeAddress:'',
     profession:'tutor',
     workDays:[1,2,3,4,5],
-    dayHours:{
-      1:{start:'15:00',end:'22:00'},
-      2:{start:'15:00',end:'22:00'},
-      3:{start:'15:00',end:'22:00'},
-      4:{start:'15:00',end:'22:00'},
-      5:{start:'15:00',end:'22:00'},
-    },
+    dayHours:{},
     blockedSlots:[],
     travelMode:'car',
     fuelConsumption:7,
@@ -726,6 +720,7 @@ const I18N = {
     route_no_lessons_text:'Δεν υπάρχουν μαθήματα αυτή την ημέρα.', route_travel_estimated_suffix:' (εκτ.)',
     route_home_label:'Σπίτι', route_arrival_label:'Άφιξη', toast_calc_error:'Σφάλμα κατά τον υπολογισμό', route_driving_suffix:'οδήγηση',
     no_blocked_times:'Δεν υπάρχουν μπλοκαρισμένες ώρες', settings_workday_hint:'Επιλέξτε τουλάχιστον μία εργάσιμη ημέρα',
+    settings_day_hours_missing:'Όρισε ώρες για {day} — διαφορετικά δεν θα χρησιμοποιείται στον προγραμματισμό',
     settings_name_placeholder:'Το όνομά σας', settings_home_geocoded:'✓ γεωκωδικοποιήθηκε', settings_home_not_geocoded:'⚠ Δεν έχει γίνει geocoding',
     settings_home_placeholder:'Οδός αρ., Πόλη', settings_travel_mode_label:'Μέσο μεταφοράς',
     settings_travel_car:'🚗 Αυτοκίνητο', settings_travel_bike:'🚲 Ποδήλατο', settings_travel_walk:'🚶 Πεζός',
@@ -887,6 +882,7 @@ const I18N = {
     route_no_lessons_text:'No lessons this day.', route_travel_estimated_suffix:' (est.)',
     route_home_label:'Home', route_arrival_label:'Arrival', toast_calc_error:'Error during calculation', route_driving_suffix:'driving',
     no_blocked_times:'No blocked times', settings_workday_hint:'Select at least one working day',
+    settings_day_hours_missing:'Set hours for {day} — otherwise it won\'t be used for scheduling',
     settings_name_placeholder:'Your name', settings_home_geocoded:'✓ geocoded', settings_home_not_geocoded:'⚠ Not geocoded yet',
     settings_home_placeholder:'Street no., City', settings_travel_mode_label:'Mode of transport',
     settings_travel_car:'🚗 Car', settings_travel_bike:'🚲 Bike', settings_travel_walk:'🚶 Walking',
@@ -1048,6 +1044,7 @@ const I18N = {
     route_no_lessons_text:'Aucun cours ce jour.', route_travel_estimated_suffix:' (est.)',
     route_home_label:'Domicile', route_arrival_label:'Arrivée', toast_calc_error:'Erreur lors du calcul', route_driving_suffix:'trajet',
     no_blocked_times:'Aucune heure bloquée', settings_workday_hint:'Sélectionnez au moins un jour de travail',
+    settings_day_hours_missing:'Définissez les horaires pour {day} — sinon ce jour ne sera pas utilisé pour la planification',
     settings_name_placeholder:'Votre nom', settings_home_geocoded:'✓ géocodé', settings_home_not_geocoded:'⚠ Pas encore géocodé',
     settings_home_placeholder:'Rue n°, Ville', settings_travel_mode_label:'Moyen de transport',
     settings_travel_car:'🚗 Voiture', settings_travel_bike:'🚲 Vélo', settings_travel_walk:'🚶 À pied',
@@ -1209,6 +1206,7 @@ const I18N = {
     route_no_lessons_text:'Keine Stunden an diesem Tag.', route_travel_estimated_suffix:' (gesch.)',
     route_home_label:'Zuhause', route_arrival_label:'Ankunft', toast_calc_error:'Fehler bei der Berechnung', route_driving_suffix:'Fahrt',
     no_blocked_times:'Keine blockierten Zeiten', settings_workday_hint:'Wählen Sie mindestens einen Arbeitstag',
+    settings_day_hours_missing:'Legen Sie Zeiten für {day} fest — sonst wird dieser Tag nicht für die Planung verwendet',
     settings_name_placeholder:'Ihr Name', settings_home_geocoded:'✓ geocodiert', settings_home_not_geocoded:'⚠ Noch nicht geocodiert',
     settings_home_placeholder:'Straße Nr., Stadt', settings_travel_mode_label:'Verkehrsmittel',
     settings_travel_car:'🚗 Auto', settings_travel_bike:'🚲 Fahrrad', settings_travel_walk:'🚶 Zu Fuß',
@@ -4775,7 +4773,10 @@ const App = {
     const dayHours = state.settings.dayHours||{};
     const availability = {};
     workDays.forEach(d=>{
-      const dh = dayHours[d] || {start:'15:00', end:'21:30'};
+      const dh = dayHours[d];
+      // No working hours set for this day yet — nothing to build a window
+      // from, so it stays off rather than inventing a default.
+      if(!dh){ availability[d] = {on:false}; return; }
       const dayStart = Scheduler.toMin(dh.start), dayEnd = Scheduler.toMin(dh.end);
       const blocks = (exceptions||[]).filter(e=>Number(e.day)===d)
         .map(e=>[Scheduler.toMin(e.start), Scheduler.toMin(e.end)])
@@ -5640,10 +5641,11 @@ const App = {
         ${allDays.filter(d=>st.workDays.includes(d)).map(d=>`
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="width:36px;font-size:13px;font-weight:600;color:var(--text2)">${DAYS[d]}</span>
-            <input type="time" id="dh-start-${d}" value="${st.dayHours?.[d]?.start||'15:00'}" style="flex:1">
+            <input type="time" id="dh-start-${d}" value="${st.dayHours?.[d]?.start||''}" style="flex:1">
             <span style="font-size:12px;color:var(--text3)">–</span>
-            <input type="time" id="dh-end-${d}" value="${st.dayHours?.[d]?.end||'21:30'}" style="flex:1">
-          </div>`).join('')}
+            <input type="time" id="dh-end-${d}" value="${st.dayHours?.[d]?.end||''}" style="flex:1">
+          </div>
+          ${!st.dayHours?.[d] ? `<p style="font-size:12px;color:var(--orange);padding:2px 0 6px">${tf('settings_day_hours_missing',{day:DAYS_FULL[d]})}</p>` : ''}`).join('')}
         <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">${t('settings_workday_hint')}</p>
       </div>
 
