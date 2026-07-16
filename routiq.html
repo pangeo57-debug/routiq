@@ -2990,6 +2990,12 @@ const Scheduler = {
     // Group members must only ever be placed together, and forceMerge students already
     // got their combined block in Phase 0 — neither should be solo-repaired here.
     const isGroupMember = s => !!(s.pairedWith || (s.type==='group' && s.group));
+    // How many days a student could theoretically be placed on — a rough proxy for
+    // how easy they are to re-place if bumped. Destroying a tightly-constrained
+    // student's slot to free room for someone else risks turning a fixable gap
+    // into a NEW unplaced student who may never find another slot; a flexible
+    // student is much more likely to land somewhere else.
+    const availDayCount = s => wdays.filter(d => { const av=s.availability[d]; return av&&av.on; }).length;
     const copyS = s=>{const o={};for(const d of wdays)o[d]=[...(s[d]||[])];return o;};
     // Count by mergedCount, not raw entry count — a single 2-session merged block
     // must count as 2, or this thinks a fully-placed student is still short one.
@@ -3014,7 +3020,15 @@ const Scheduler = {
         // single-session reinsertion below, which would silently drop the merge.
         const candidates=sc[d].map((s,i)=>({s,i})).filter(x=>!x.s.merged&&!x.s.isGroup);
         if(!candidates.length) continue;
-        const {s:victim,i:idx}=candidates[Math.floor(rng()*candidates.length)];
+        // Prefer victims whose own student is flexible (available 3+ days) over
+        // someone with only 1-2 available days — only fall back to a constrained
+        // victim if literally nobody flexible occupies this day's schedule.
+        const flexible = candidates.filter(({s})=>{
+          const st = students.find(x=>x.id===s.studentId);
+          return st && availDayCount(st) >= 3;
+        });
+        const pool = flexible.length ? flexible : candidates;
+        const {s:victim,i:idx}=pool[Math.floor(rng()*pool.length)];
         destroyed.push(students.find(s=>s.id===victim.studentId));
         sc[d].splice(idx,1);
       }
