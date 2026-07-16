@@ -785,6 +785,7 @@ const I18N = {
     phase5_title:'Φάση 5 — LNS', phase5_sub:'Επανατοποθέτηση με destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Ολοκληρώθηκε', phase_done_sub:'Αποθήκευση προγράμματος…',
     phase_km_title:'Πραγματικά χιλιόμετρα', phase_km_sub:'Υπολογισμός οδικής απόστασης (OSRM)…',
+    phase_persist_title:'Επίμονη αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — συνεχίζει να ψάχνει ({sec}δ)…',
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
@@ -945,6 +946,7 @@ const I18N = {
     phase5_title:'Phase 5 — LNS', phase5_sub:'Re-placing with destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Complete', phase_done_sub:'Saving schedule…',
     phase_km_title:'Real driving distance', phase_km_sub:'Calculating road distance (OSRM)…',
+    phase_persist_title:'Searching persistently', phase_persist_sub:'{n} student(s) left — still searching ({sec}s)…',
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
@@ -1105,6 +1107,7 @@ const I18N = {
     phase5_title:'Phase 5 — LNS', phase5_sub:'Replacement par destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Terminé', phase_done_sub:'Enregistrement du programme…',
     phase_km_title:'Distance routière réelle', phase_km_sub:'Calcul de la distance routière (OSRM)…',
+    phase_persist_title:'Recherche persistante', phase_persist_sub:'{n} élève(s) restant(s) — recherche en cours ({sec}s)…',
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
@@ -1265,6 +1268,7 @@ const I18N = {
     phase5_title:'Phase 5 — LNS', phase5_sub:'Neuplatzierung mit Destroy-Repair (10s)…', phase5b_sub:'Destroy-Repair (10s)…',
     phase_done_title:'Abgeschlossen', phase_done_sub:'Plan wird gespeichert…',
     phase_km_title:'Echte Fahrstrecke', phase_km_sub:'Straßenentfernung wird berechnet (OSRM)…',
+    phase_persist_title:'Hartnäckige Suche', phase_persist_sub:'noch {n} Schüler — Suche läuft weiter ({sec}s)…',
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
@@ -3005,7 +3009,7 @@ const Scheduler = {
   },
 
   // Phase 5: LNS — destroy 2-4 slots blocking an unplaced student, re-place everyone
-  lnsRepair(schedule, students, settings, budgetMs=10000){
+  async lnsRepair(schedule, students, settings, budgetMs=10000, onProgress=null){
     const wdays = settings.workDays;
     // Group members must only ever be placed together, and forceMerge students already
     // got their combined block in Phase 0 — neither should be solo-repaired here.
@@ -3023,10 +3027,45 @@ const Scheduler = {
     const getUnpl = sch=>{const m=countM(sch);return students.filter(s=>!isGroupMember(s)&&!s.forceMerge&&(m[s.id]||0)<s.lessonsPerWeek);};
     let best=copyS(schedule), bestU=getUnpl(best).length;
     if(!bestU) return;
+
+    // Deterministic pre-pass: try placing every unplaced student directly into
+    // any open slot first, with NO destruction at all. The randomized
+    // destroy-and-reinsert loop below only ever tries to place someone AFTER
+    // successfully destroying something first — if a student's available day
+    // is simply empty or has room without bumping anyone, there's nothing to
+    // destroy, `destroyed` stays empty, and the loop skips straight past the
+    // placement attempt entirely. That silently missed the easy, no-conflict
+    // case (an empty or lightly-loaded day within the student's own window).
+    for(const target of getUnpl(best)){
+      let remaining = target.lessonsPerWeek - (countM(best)[target.id]||0);
+      const tdays = wdays.filter(d=>{ const av=target.availability[d]; return av&&av.on; });
+      for(const d of tdays){
+        if(remaining<=0) break;
+        if((best[d]||[]).some(s=>s.studentId===target.id)) continue;
+        const slot = this.findSlotFixed(target, d, best[d]||[], settings, target.lessonDuration);
+        if(slot){
+          best[d]=best[d]||[];
+          best[d].push({studentId:target.id,studentName:target.name,subject:target.subject||'—',address:target.address,color:target.color||0,start:slot.start,end:slot.end,duration:target.lessonDuration,mergedCount:1,merged:false});
+          best[d].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+          remaining--;
+        }
+      }
+    }
+    bestU = getUnpl(best).length;
+    if(!bestU){ for(const d of wdays) schedule[d]=best[d]||[]; return; }
+
     let ss=31337;
     const rng=()=>{ss=(ss*1664525+1013904223)&0xffffffff;return(ss>>>0)/0xffffffff;};
     const t0=Date.now();
+    let iter=0, lastProgress=t0;
     while(Date.now()-t0<budgetMs && bestU>0){
+      // Yield to the browser periodically so a long budget (this can run for
+      // minutes when there are still unplaced students) never looks frozen.
+      if(++iter%200===0){
+        await new Promise(r=>setTimeout(r,0));
+        const now=Date.now();
+        if(onProgress && now-lastProgress>1000){ lastProgress=now; onProgress(bestU, now-t0, budgetMs); }
+      }
       const sc=copyS(best);
       const unpl=getUnpl(sc); if(!unpl.length) break;
       const target=unpl[Math.floor(rng()*unpl.length)];
@@ -3526,11 +3565,22 @@ const App = {
     // Phase 5: LNS — destroy/repair to place remaining students (10s)
     schedProgress(95,t('phase5_title'),t('phase5_sub'),'🔍');
     await new Promise(r=>setTimeout(r,30));
-    Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000);
+    await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000);
     // Safety net: forcibly fix (or drop) any slot that still violates a
     // student's own availability, regardless of which phase caused it.
     const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
     if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
+    // Still someone unplaced after the normal 10s pass? Don't give up — keep
+    // trying with a much longer budget (up to 7 min) specifically because a
+    // short search can miss a real, valid slot on a lightly-loaded day. Only
+    // runs when it's actually needed, so the common "everyone fits" case
+    // stays fast.
+    if(this.computeUnplacedLive().length > 0){
+      await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 420000, (nLeft, elapsed)=>{
+        schedProgress(96, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}), '🔁');
+      });
+      Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
+    }
     // Verify constraints — surfaced to the user, not just the console.
     const issues=Scheduler.verifySchedule(state.schedule,state.students,state.settings);
     if(issues.length){
@@ -3863,7 +3913,7 @@ const App = {
     // Phase 5: LNS
     schedProgress(92,t('phase5_title'),t('phase5b_sub'),'🔍');
     await new Promise(r=>setTimeout(r,40));
-    try{ Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
+    try{ await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
 
     // Safety net: forcibly fix (or drop) any slot that still violates a
     // student's own availability, regardless of which phase caused it.
@@ -3871,6 +3921,19 @@ const App = {
       const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
       if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
     }catch(e){}
+
+    // Still someone unplaced after the normal 10s pass? Keep trying with a much
+    // longer budget (up to 7 min) instead of giving up — a short search can miss
+    // a real, valid slot on a lightly-loaded day. Only runs when actually needed.
+    if(this.computeUnplacedLive().length > 0){
+      try{
+        await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 420000, (nLeft, elapsed)=>{
+          schedProgress(93, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}), '🔁');
+        });
+        const fixResult2 = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
+        if(fixResult2.repaired) console.warn(`⚠ enforceConstraints (after persistent search): repaired ${fixResult2.repaired-fixResult2.dropped}, dropped ${fixResult2.dropped}`);
+      }catch(e){}
+    }
 
     // Verify constraints — surfaced to the user, not just the console, so a
     // scheduling bug that violates someone's availability doesn't ship silently.
