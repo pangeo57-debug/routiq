@@ -2933,6 +2933,57 @@ const Scheduler = {
     return issues;
   },
 
+  // Final safety net, run after every optimization phase regardless of which
+  // phase (if any) caused the problem: find any slot that violates the
+  // student's own availability window or the teacher's day hours, pull it out,
+  // and try to re-place that exact student on one of their genuinely available
+  // days via findSlotFixed (which always re-validates availability). If no
+  // valid day/time can be found, the slot is dropped rather than left
+  // violating — the student then shows up in the normal "unplaced" banner
+  // instead of silently sitting on a day they said they can't do.
+  //
+  // Skips merged/group blocks (splitting them safely needs the merge/group
+  // logic itself, not a generic single-slot re-placement) — those remain
+  // covered by verifySchedule()'s reporting only.
+  enforceConstraints(schedule, students, settings){
+    const sm = Object.fromEntries(students.map(s=>[s.id,s]));
+    let repaired = 0, dropped = 0;
+    for(const d of settings.workDays){
+      const slots = schedule[d] = schedule[d] || [];
+      for(let i=slots.length-1; i>=0; i--){
+        const sl = slots[i];
+        if(sl.merged || sl.isGroup) continue;
+        const st = sm[sl.studentId];
+        if(!st) continue;
+        const av = st.availability[d];
+        const dh = settings.dayHours[d];
+        const violates = !av || !av.on ||
+          this.toMin(sl.start) < this.toMin(av.start) ||
+          this.toMin(sl.end) > this.toMin(av.end) + 15 ||
+          (dh && this.toMin(sl.end) > this.toMin(dh.end) + 15);
+        if(!violates) continue;
+
+        slots.splice(i, 1);
+        repaired++;
+        let placed = false;
+        for(const day2 of settings.workDays){
+          if(day2 === d) continue; // already proven invalid/removed from here
+          if(!st.forceMerge && (schedule[day2]||[]).some(s2 => s2.studentId === st.id)) continue;
+          const newSlot = this.findSlotFixed(st, day2, schedule[day2]||[], settings, sl.duration || st.lessonDuration);
+          if(newSlot){
+            schedule[day2] = schedule[day2] || [];
+            schedule[day2].push({ ...sl, start: newSlot.start, end: newSlot.end });
+            schedule[day2].sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+            placed = true;
+            break;
+          }
+        }
+        if(!placed) dropped++;
+      }
+    }
+    return { repaired, dropped };
+  },
+
   // Phase 5: LNS — destroy 2-4 slots blocking an unplaced student, re-place everyone
   lnsRepair(schedule, students, settings, budgetMs=10000){
     const wdays = settings.workDays;
@@ -3442,6 +3493,10 @@ const App = {
     schedProgress(95,t('phase5_title'),t('phase5_sub'),'🔍');
     await new Promise(r=>setTimeout(r,30));
     Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000);
+    // Safety net: forcibly fix (or drop) any slot that still violates a
+    // student's own availability, regardless of which phase caused it.
+    const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
+    if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
     // Verify constraints — surfaced to the user, not just the console.
     const issues=Scheduler.verifySchedule(state.schedule,state.students,state.settings);
     if(issues.length){
@@ -3775,6 +3830,13 @@ const App = {
     schedProgress(92,t('phase5_title'),t('phase5b_sub'),'🔍');
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
+
+    // Safety net: forcibly fix (or drop) any slot that still violates a
+    // student's own availability, regardless of which phase caused it.
+    try{
+      const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
+      if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
+    }catch(e){}
 
     // Verify constraints — surfaced to the user, not just the console, so a
     // scheduling bug that violates someone's availability doesn't ship silently.
