@@ -1923,7 +1923,12 @@ const Scheduler = {
     const distKm=(a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
     const trvMin=(a,b)=>travelMinFn?travelMinFn(a,b):Math.max(1,Math.round(distKm(a,b)/((settings&&settings.avgCitySpeedKmh)||25)*60));
 
-    // Compute total km for a schedule snapshot
+    // Compute total km for a schedule snapshot. Includes a small per-slot
+    // Saturday penalty (matching saOptimize) so cross-day moves/swaps prefer
+    // filling weekdays first when the real travel-distance difference is a
+    // near-tie — never at the cost of an actual placement, this function is
+    // only used to compare already-equally-valid arrangements.
+    const WEEKEND_PENALTY = 2;
     const totalKm=(sch)=>{
       let km=0;
       for(const day of settings.workDays){
@@ -1934,6 +1939,7 @@ const Scheduler = {
           if(!prevS||prevS.studentId!==s.studentId) km+=distKm(prev,getC(s));
           prev=getC(s); prevS=s;
         }
+        if(day===6) km += slots.length*WEEKEND_PENALTY;
       }
       return km;
     };
@@ -2807,12 +2813,18 @@ const Scheduler = {
       ? (a,b)=>travelMinFn(a,b)
       : (a,b)=>Math.max(1,Math.round(distKm(a,b)/((settings.avgCitySpeedKmh)||25)*60));
 
+    // Small per-slot penalty (km-equivalent) for landing on Saturday, so that
+    // among otherwise-equal options SA prefers filling weekdays first — this
+    // never costs a placement (SA only ever rearranges already-placed slots,
+    // it doesn't drop anyone), it just nudges the pick when km is a near-tie.
+    const WEEKEND_PENALTY = 2;
     const calcSchedKm = (sch)=>{
       let km=0;
       for(const d of wdays){
         const sl=(sch[d]||[]);let prev=HOME;let prevS=null;
         for(const s of sl){const c=coords[s.studentId]||HOME;if(!prevS||prevS.studentId!==s.studentId)km+=distKm(prev,c);prev=c;prevS=s;}
         if(sl.length)km+=distKm(prev,HOME);
+        if(d===6) km += sl.length*WEEKEND_PENALTY;
       }
       return km;
     };
