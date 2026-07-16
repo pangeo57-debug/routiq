@@ -39,6 +39,23 @@
   --nav-h: 64px;
   --max-w: 430px;
 }
+/* Dark theme — either the OS preference (auto) or an explicit user choice
+   (data-theme attribute on <html>, set by App.setTheme() and always wins
+   over the OS preference since it's more specific / comes later). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --green: #10b981; --blue: #a78bfa;
+    --bg: #14141c; --bg2: #1c1c28; --bg3: #23232f; --bg4: #2c2c3a;
+    --border: #34344350; --text: #f0f0f5; --text2: #a3a3b8; --text3: #75758c;
+    --red: #f87171; --orange: #fbbf24; --purple: #a78bfa; --yellow: #facc15;
+  }
+}
+:root[data-theme="dark"] {
+  --green: #10b981; --blue: #a78bfa;
+  --bg: #14141c; --bg2: #1c1c28; --bg3: #23232f; --bg4: #2c2c3a;
+  --border: #34344350; --text: #f0f0f5; --text2: #a3a3b8; --text3: #75758c;
+  --red: #f87171; --orange: #fbbf24; --purple: #a78bfa; --yellow: #facc15;
+}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;font-size:16px;-webkit-tap-highlight-color:transparent}
 body{
@@ -623,6 +640,7 @@ function defaultSettings(){
     avgCitySpeedKmh:25,
     hereApiKey:'',
     language:'el',
+    theme:'system',
   };
 }
 
@@ -654,6 +672,7 @@ const I18N = {
     settings_reset:'Επαναφορά demo δεδομένων', settings_export:'Εξαγωγή', settings_import:'Εισαγωγή',
     settings_full_wipe:'Πλήρης καθαρισμός δεδομένων',
     settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
+    settings_theme:'Θέμα εμφάνισης', theme_system:'Σύστημα (αυτόματο)', theme_light:'Ανοιχτό', theme_dark:'Σκοτεινό',
     btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...', common_please_wait:'Παρακαλώ περιμένετε', unit_min:'λ', unit_hr:'ω', unit_meter:'μ', unit_km:'χλμ',
     btn_delete:'Διαγραφή', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
     confirm_title:'Επιβεβαίωση', block_drawer_title:'Μπλοκαρισμένη Ώρα',
@@ -816,6 +835,7 @@ const I18N = {
     settings_reset:'Reset to demo data', settings_export:'Export', settings_import:'Import',
     settings_full_wipe:'Wipe all data completely',
     settings_test_algo:'Algorithm Test', settings_language:'Language',
+    settings_theme:'Appearance', theme_system:'System (automatic)', theme_light:'Light', theme_dark:'Dark',
     btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...', common_please_wait:'Please wait', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
     btn_delete:'Delete', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
     confirm_title:'Confirm', block_drawer_title:'Blocked Time',
@@ -978,6 +998,7 @@ const I18N = {
     settings_reset:'Réinitialiser aux données de démo', settings_export:'Exporter', settings_import:'Importer',
     settings_full_wipe:'Effacer complètement toutes les données',
     settings_test_algo:'Test algorithme', settings_language:'Langue',
+    settings_theme:'Apparence', theme_system:'Système (auto)', theme_light:'Clair', theme_dark:'Sombre',
     btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...', common_please_wait:'Veuillez patienter', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
     btn_delete:'Supprimer', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
     confirm_title:'Confirmation', block_drawer_title:'Heure bloquée',
@@ -1140,6 +1161,7 @@ const I18N = {
     settings_reset:'Auf Demo-Daten zurücksetzen', settings_export:'Exportieren', settings_import:'Importieren',
     settings_full_wipe:'Alle Daten vollständig löschen',
     settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
+    settings_theme:'Erscheinungsbild', theme_system:'System (automatisch)', theme_light:'Hell', theme_dark:'Dunkel',
     btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...', common_please_wait:'Bitte warten', unit_min:'Min', unit_hr:'Std', unit_meter:'m', unit_km:'km',
     btn_delete:'Löschen', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
     confirm_title:'Bestätigung', block_drawer_title:'Blockierte Zeit',
@@ -3410,6 +3432,7 @@ const App = {
     if(!Array.isArray(state.settings.workDays)) state.settings.workDays = [1,2,3,4,5];
     if(!state.settings.language) state.settings.language = 'el';
     applyLanguageArrays();
+    this.applyTheme();
 
     // First run: clean slate + onboarding
     if(!localStorage.getItem('rp_init_v24')){
@@ -3442,6 +3465,23 @@ const App = {
     state.currentScreen = screen;
     this.updateNavLabels();
     this['render'+screen.charAt(0).toUpperCase()+screen.slice(1)]();
+  },
+
+  // ---- THEME (light / dark / system) ----
+  applyTheme(){
+    const theme = (state.settings && state.settings.theme) || 'system';
+    const root = document.documentElement;
+    if(theme==='system') delete root.dataset.theme; // let @media (prefers-color-scheme) decide
+    else root.dataset.theme = theme;
+    const isDark = theme==='dark' || (theme==='system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute('content', isDark ? '#14141c' : '#f7f6f3');
+  },
+
+  setTheme(theme){
+    state.settings.theme = theme;
+    Storage.saveSettings(state.settings);
+    this.applyTheme();
   },
 
   updateNavLabels(){
@@ -5733,6 +5773,15 @@ const App = {
           <option value="en" ${curLang()==='en'?'selected':''}>🇬🇧 English</option>
           <option value="fr" ${curLang()==='fr'?'selected':''}>🇫🇷 Français</option>
           <option value="de" ${curLang()==='de'?'selected':''}>🇩🇪 Deutsch</option>
+        </select>
+      </div>
+
+      <div class="section-title">${t('settings_theme')}</div>
+      <div class="card">
+        <select id="set-theme" onchange="App.setTheme(this.value)">
+          <option value="system" ${(state.settings.theme||'system')==='system'?'selected':''}>${t('theme_system')}</option>
+          <option value="light" ${state.settings.theme==='light'?'selected':''}>${t('theme_light')}</option>
+          <option value="dark" ${state.settings.theme==='dark'?'selected':''}>${t('theme_dark')}</option>
         </select>
       </div>
 
