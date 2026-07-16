@@ -783,6 +783,7 @@ const I18N = {
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
+    toast_constraint_issues:'⚠ {n} πρόβλημα/τα στο πρόγραμμα — δες κονσόλα για λεπτομέρειες',
     toast_popup_blocked:'Ο browser μπλόκαρε το παράθυρο εκτύπωσης — επιτρέψτε pop-ups', print_no_lessons:'Κανένα μάθημα',
     toast_pdf_lib_failed:'Αποτυχία δημιουργίας PDF — δοκιμάστε ξανά', toast_pdf_generating:'Δημιουργία PDF…', toast_pdf_downloaded:'Το PDF κατέβηκε ✓',
     print_lessons_suffix:'μαθήματα', merge_badge_label:'ΜΠΛΟΚ',
@@ -937,6 +938,7 @@ const I18N = {
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
+    toast_constraint_issues:'⚠ {n} issue(s) in the schedule — check console for details',
     toast_popup_blocked:'The browser blocked the print window — please allow pop-ups', print_no_lessons:'No lesson',
     toast_pdf_lib_failed:'PDF generation failed — please try again', toast_pdf_generating:'Generating PDF…', toast_pdf_downloaded:'PDF downloaded ✓',
     print_lessons_suffix:'lessons', merge_badge_label:'BLOCK',
@@ -1091,6 +1093,7 @@ const I18N = {
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
+    toast_constraint_issues:'⚠ {n} problème(s) dans le programme — voir la console pour les détails',
     toast_popup_blocked:"Le navigateur a bloqué la fenêtre d'impression — autorisez les pop-ups", print_no_lessons:'Aucun cours',
     toast_pdf_lib_failed:'Échec de la génération du PDF — réessayez', toast_pdf_generating:'Génération du PDF…', toast_pdf_downloaded:'PDF téléchargé ✓',
     print_lessons_suffix:'cours', merge_badge_label:'BLOC',
@@ -1245,6 +1248,7 @@ const I18N = {
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
+    toast_constraint_issues:'⚠ {n} Problem(e) im Stundenplan — Details in der Konsole',
     toast_popup_blocked:'Der Browser hat das Druckfenster blockiert — bitte Pop-ups erlauben', print_no_lessons:'Keine Stunde',
     toast_pdf_lib_failed:'PDF-Erstellung fehlgeschlagen — bitte erneut versuchen', toast_pdf_generating:'PDF wird erstellt…', toast_pdf_downloaded:'PDF heruntergeladen ✓',
     print_lessons_suffix:'Stunden', merge_badge_label:'BLOCK',
@@ -2768,6 +2772,12 @@ const Scheduler = {
   async saOptimize(schedule, students, settings, coords, travelMinFn, budgetMs=20000){
     const HOME = coords['home'] || {lat:0,lon:0};
     const wdays = settings.workDays;
+    const studentsById = Object.fromEntries(students.map(s=>[s.id,s]));
+    const isAvailable = (studentId, day) => {
+      const st = studentsById[studentId];
+      const av = st && st.availability && st.availability[day];
+      return !!(av && av.on);
+    };
     const distKm = (a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
     const trvMin = travelMinFn
       ? (a,b)=>travelMinFn(a,b)
@@ -2854,6 +2864,10 @@ const Scheduler = {
         const moved=sl1.splice(idx,1)[0];
         // Don't move to a day where this student already has a slot
         if(sl2.some(s=>s.studentId===moved.studentId)) continue;
+        // rebuildDay only checks the TEACHER's working hours for d2, not whether
+        // this particular student is personally available that day — without this
+        // check SA can (and did) move a student onto a day they marked as off.
+        if(!isAvailable(moved.studentId, d2)) continue;
         sl2.splice(Math.floor(rng()*(sl2.length+1)),0,moved);
         newSl1=rebuildDay(sl1,d1);
         newSl2=rebuildDay(sl2,d2); if(!newSl2) continue;
@@ -2877,6 +2891,9 @@ const Scheduler = {
         // Skip swap if it would put same student twice on same day
         if(sl1.some((s,i)=>i!==i1&&s.studentId===b.studentId)) continue;
         if(sl2.some((s,i)=>i!==i2&&s.studentId===a.studentId)) continue;
+        // a moves to d2, b moves to d1 — each must be personally available on
+        // the day it's landing on, not just fit the teacher's working hours there.
+        if(!isAvailable(a.studentId, d2) || !isAvailable(b.studentId, d1)) continue;
         [sl1[i1],sl2[i2]]=[sl2[i2],sl1[i1]];
         newSl1=rebuildDay(sl1,d1); newSl2=rebuildDay(sl2,d2);
         if(!newSl1||!newSl2) continue;
@@ -3425,9 +3442,12 @@ const App = {
     schedProgress(95,t('phase5_title'),t('phase5_sub'),'🔍');
     await new Promise(r=>setTimeout(r,30));
     Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000);
-    // Verify constraints
+    // Verify constraints — surfaced to the user, not just the console.
     const issues=Scheduler.verifySchedule(state.schedule,state.students,state.settings);
-    if(issues.length) console.warn('⚠ Schedule constraint issues:',issues);
+    if(issues.length){
+      console.warn('⚠ Schedule constraint issues:',issues);
+      Toast.show(tf('toast_constraint_issues',{n:issues.length}), 'error');
+    }
     state.scheduleAttempts[0] = { ...state.schedulerResult, schedule: state.schedule };
 
     state.scheduleAttemptIdx = 0;
@@ -3755,6 +3775,16 @@ const App = {
     schedProgress(92,t('phase5_title'),t('phase5b_sub'),'🔍');
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
+
+    // Verify constraints — surfaced to the user, not just the console, so a
+    // scheduling bug that violates someone's availability doesn't ship silently.
+    try{
+      const issues = Scheduler.verifySchedule(state.schedule, state.students, state.settings);
+      if(issues.length){
+        console.warn('⚠ Schedule constraint issues:', issues);
+        Toast.show(tf('toast_constraint_issues',{n:issues.length}), 'error');
+      }
+    }catch(e){}
 
     if(r){
       // Instant straight-line placeholder so the stat isn't blank while the
