@@ -735,6 +735,10 @@ const I18N = {
     schedule_gap_travel:'🚗 ~{min}λ μετακίνηση', schedule_gap_safety:' + {min}λ ασφαλείας',
     toast_no_free_time:'Δεν υπάρχει ελεύθερη ώρα', unplaced_group_badge:'μαθ.',
     toast_slot_picked:'{name} — πάτα άλλο μάθημα (ανταλλαγή) ή ημέρα (μετακίνηση)',
+    toast_move_no_availability:'{name}: δεν έχει διαθεσιμότητα — {day}',
+    toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
+    toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
+    toast_swap_no_availability:'{name}: η ώρα δεν χωράει στη διαθεσιμότητά του/της — {day}',
     unplaced_solution_combo:'Λύση Α: Συνδυαστικό μπλοκ {block}', unplaced_combo_detail:'{needed} × {dur}λ → 1 × {total}λ σε μία μέρα',
     unplaced_apply_block:'Εφαρμογή ως {block} μπλοκ', unplaced_solution_extend_hours:'Λύση {letter}: Παράταση ωραρίου σου',
     unplaced_extend_hours_detail:'Αν παρατείνεις το ωράριό σου τη {day} κατά +{min} λεπτά, χωράει κανονικά.',
@@ -903,6 +907,10 @@ const I18N = {
     schedule_gap_travel:'🚗 ~{min}min travel', schedule_gap_safety:' + {min}min safety',
     toast_no_free_time:'No free time available', unplaced_group_badge:'ls.',
     toast_slot_picked:'{name} — tap another lesson (swap) or a day (move)',
+    toast_move_no_availability:"{name} isn't available — {day}",
+    toast_move_already_booked:'{name} already has a lesson — {day}',
+    toast_move_no_room:'{name}: no free time — {day}',
+    toast_swap_no_availability:"{name}: that time doesn't fit their availability — {day}",
     unplaced_solution_combo:'Solution A: Combined block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min in one day',
     unplaced_apply_block:'Apply as {block} block', unplaced_solution_extend_hours:'Solution {letter}: Extend your hours',
     unplaced_extend_hours_detail:'If you extend your working hours on {day} by +{min} minutes, it fits normally.',
@@ -1071,6 +1079,10 @@ const I18N = {
     schedule_gap_travel:'🚗 ~{min}min trajet', schedule_gap_safety:' + {min}min sécurité',
     toast_no_free_time:'Aucun créneau libre disponible', unplaced_group_badge:'cr.',
     toast_slot_picked:'{name} — touchez un autre cours (échanger) ou un jour (déplacer)',
+    toast_move_no_availability:"{name} n'est pas disponible — {day}",
+    toast_move_already_booked:'{name} a déjà un cours — {day}',
+    toast_move_no_room:'{name} : aucun créneau libre — {day}',
+    toast_swap_no_availability:"{name} : cet horaire ne correspond pas à sa disponibilité — {day}",
     unplaced_solution_combo:'Solution A : Bloc combiné {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min en un jour',
     unplaced_apply_block:'Appliquer comme bloc {block}', unplaced_solution_extend_hours:'Solution {letter} : Prolonger vos horaires',
     unplaced_extend_hours_detail:'Si vous prolongez vos horaires le {day} de +{min} minutes, cela rentre normalement.',
@@ -1239,6 +1251,10 @@ const I18N = {
     schedule_gap_travel:'🚗 ~{min}min Fahrt', schedule_gap_safety:' + {min}min Sicherheit',
     toast_no_free_time:'Keine freie Zeit verfügbar', unplaced_group_badge:'Std.',
     toast_slot_picked:'{name} — andere Stunde antippen (tauschen) oder Tag (verschieben)',
+    toast_move_no_availability:'{name} ist nicht verfügbar — {day}',
+    toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
+    toast_move_no_room:'{name}: keine freie Zeit — {day}',
+    toast_swap_no_availability:'{name}: diese Zeit passt nicht zur Verfügbarkeit — {day}',
     unplaced_solution_combo:'Lösung A: Kombinierter Block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min an einem Tag',
     unplaced_apply_block:'Als {block} Block anwenden', unplaced_solution_extend_hours:'Lösung {letter}: Arbeitszeit verlängern',
     unplaced_extend_hours_detail:'Wenn Sie Ihre Arbeitszeit am {day} um +{min} Minuten verlängern, passt es normal.',
@@ -5275,6 +5291,29 @@ const App = {
     if(srcArrIdx<0 || tgtArrIdx<0) return;
     const {start: sS, end: sE} = state.schedule[srcDay][srcArrIdx];
     const {start: tS, end: tE} = state.schedule[targetDay][tgtArrIdx];
+    // Swapping only exchanges TIMES — each student stays on their own day —
+    // but the incoming time still has to actually fit that student's
+    // personal availability window (and the teacher's hours for that day)
+    // for that day, or this would silently create exactly the kind of
+    // constraint violation the scheduler itself works hard to avoid.
+    const fitsWindow = (student, day, start, end) => {
+      const av = student && student.availability && student.availability[day];
+      if(!av || !av.on) return false;
+      if(Scheduler.toMin(start)<Scheduler.toMin(av.start) || Scheduler.toMin(end)>Scheduler.toMin(av.end)+15) return false;
+      const dh = state.settings.dayHours && state.settings.dayHours[day];
+      if(dh && Scheduler.toMin(end)>Scheduler.toMin(dh.end)+15) return false;
+      return true;
+    };
+    const srcStudent = state.students.find(s=>s.id===srcSlot.studentId);
+    const tgtStudent = state.students.find(s=>s.id===tgtSlot.studentId);
+    if(srcStudent && !fitsWindow(srcStudent, srcDay, tS, tE)){
+      Toast.show(tf('toast_swap_no_availability',{name:srcStudent.name, day:DAYS_FULL[srcDay]}),'error');
+      return;
+    }
+    if(tgtStudent && !fitsWindow(tgtStudent, targetDay, sS, sE)){
+      Toast.show(tf('toast_swap_no_availability',{name:tgtStudent.name, day:DAYS_FULL[targetDay]}),'error');
+      return;
+    }
     state.schedule[srcDay][srcArrIdx].start = tS;
     state.schedule[srcDay][srcArrIdx].end = tE;
     state.schedule[targetDay][tgtArrIdx].start = sS;
@@ -5292,8 +5331,24 @@ const App = {
     const existing = state.schedule[targetDay]||[];
     const student = state.students.find(s=>s.id===srcSlot.studentId);
     if(!student) return;
+    // Diagnose WHY it doesn't fit, so the message names the student and the
+    // actual reason instead of a generic "no free time" — the same move can
+    // fail because the day is off for them, they're already booked that day,
+    // or the day just happens to be full; each deserves a different message.
+    const av = student.availability && student.availability[targetDay];
+    if(!av || !av.on){
+      Toast.show(tf('toast_move_no_availability',{name:student.name, day:DAYS_FULL[targetDay]}),'error');
+      return;
+    }
+    if(existing.some(s=>s.studentId===student.id)){
+      Toast.show(tf('toast_move_already_booked',{name:student.name, day:DAYS_FULL[targetDay]}),'error');
+      return;
+    }
     const newTime = Scheduler.findSlotFixed(student, targetDay, existing, state.settings, srcSlot.duration);
-    if(!newTime){ Toast.show(t('toast_no_free_time'),'error'); return; }
+    if(!newTime){
+      Toast.show(tf('toast_move_no_room',{name:student.name, day:DAYS_FULL[targetDay]}),'error');
+      return;
+    }
     const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
     if(srcArrIdx>=0) state.schedule[srcDay].splice(srcArrIdx,1);
     if(!state.schedule[targetDay]) state.schedule[targetDay]=[];
