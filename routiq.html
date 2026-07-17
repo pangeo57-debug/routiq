@@ -813,6 +813,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
     toast_constraint_issues:'⚠ {n} πρόβλημα/τα στο πρόγραμμα — δες κονσόλα για λεπτομέρειες',
+    toast_geocode_failures:'⚠ {n} διεύθυνση/εις δεν γεωκωδικοποιήθηκαν — δες κονσόλα για λεπτομέρειες',
     toast_popup_blocked:'Ο browser μπλόκαρε το παράθυρο εκτύπωσης — επιτρέψτε pop-ups', print_no_lessons:'Κανένα μάθημα',
     toast_pdf_lib_failed:'Αποτυχία δημιουργίας PDF — δοκιμάστε ξανά', toast_pdf_generating:'Δημιουργία PDF…', toast_pdf_downloaded:'Το PDF κατέβηκε ✓',
     print_lessons_suffix:'μαθήματα', merge_badge_label:'ΜΠΛΟΚ',
@@ -979,6 +980,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
     toast_constraint_issues:'⚠ {n} issue(s) in the schedule — check console for details',
+    toast_geocode_failures:'⚠ {n} address(es) failed to geocode — check console for details',
     toast_popup_blocked:'The browser blocked the print window — please allow pop-ups', print_no_lessons:'No lesson',
     toast_pdf_lib_failed:'PDF generation failed — please try again', toast_pdf_generating:'Generating PDF…', toast_pdf_downloaded:'PDF downloaded ✓',
     print_lessons_suffix:'lessons', merge_badge_label:'BLOCK',
@@ -1145,6 +1147,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
     toast_constraint_issues:'⚠ {n} problème(s) dans le programme — voir la console pour les détails',
+    toast_geocode_failures:'⚠ {n} adresse(s) non géocodée(s) — voir la console pour les détails',
     toast_popup_blocked:"Le navigateur a bloqué la fenêtre d'impression — autorisez les pop-ups", print_no_lessons:'Aucun cours',
     toast_pdf_lib_failed:'Échec de la génération du PDF — réessayez', toast_pdf_generating:'Génération du PDF…', toast_pdf_downloaded:'PDF téléchargé ✓',
     print_lessons_suffix:'cours', merge_badge_label:'BLOC',
@@ -1311,6 +1314,7 @@ const I18N = {
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
     toast_constraint_issues:'⚠ {n} Problem(e) im Stundenplan — Details in der Konsole',
+    toast_geocode_failures:'⚠ {n} Adresse(n) konnten nicht geokodiert werden — Details in der Konsole',
     toast_popup_blocked:'Der Browser hat das Druckfenster blockiert — bitte Pop-ups erlauben', print_no_lessons:'Keine Stunde',
     toast_pdf_lib_failed:'PDF-Erstellung fehlgeschlagen — bitte erneut versuchen', toast_pdf_generating:'PDF wird erstellt…', toast_pdf_downloaded:'PDF heruntergeladen ✓',
     print_lessons_suffix:'Stunden', merge_badge_label:'BLOCK',
@@ -3231,16 +3235,27 @@ const Router = {
     try{
       const q = encodeURIComponent(address + ', Ελλάδα');
       const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr&addressdetails=1${this._viewboxParam()}`;
-      const r = await fetch(url, {headers:{'Accept-Language':'el', 'User-Agent':'RoutePal/1.0'}});
+      const r = await fetch(url, {headers:{'Accept-Language':'el'}});
+      if(!r.ok){
+        console.warn(`Nominatim geocode failed for "${address}": HTTP ${r.status} ${r.statusText}`);
+        return null;
+      }
       let d = await r.json();
       // Bounded search found nothing (e.g. address genuinely outside the home area) — retry unbounded
-      if((!d || d.length===0) && this._viewboxParam()){
+      if((!Array.isArray(d) || d.length===0) && this._viewboxParam()){
         const url2 = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr&addressdetails=1`;
-        const r2 = await fetch(url2, {headers:{'Accept-Language':'el', 'User-Agent':'RoutePal/1.0'}});
+        const r2 = await fetch(url2, {headers:{'Accept-Language':'el'}});
+        if(!r2.ok){
+          console.warn(`Nominatim geocode (unbounded retry) failed for "${address}": HTTP ${r2.status} ${r2.statusText}`);
+          return null;
+        }
         d = await r2.json();
       }
-      if(d && d.length>0) return {lat:parseFloat(d[0].lat), lon:parseFloat(d[0].lon)};
-    }catch(e){}
+      if(Array.isArray(d) && d.length>0) return {lat:parseFloat(d[0].lat), lon:parseFloat(d[0].lon)};
+      console.warn(`Nominatim found no results for "${address}"`);
+    }catch(e){
+      console.warn(`Nominatim geocode threw for "${address}":`, e.message);
+    }
     return null;
   },
 
@@ -3943,7 +3958,7 @@ const App = {
     }
     if(toGeocode.length > 0){
       const hereKey = state.settings && state.settings.hereApiKey;
-      let updated = false;
+      let updated = false, failed = 0;
       // Home first, awaited alone — Nominatim biases every later search
       // toward it via Router._viewboxParam(), which only works once home's
       // own coords are actually in state.coords (they weren't yet if it was
@@ -3952,13 +3967,13 @@ const App = {
       const rest = toGeocode.filter(x=>x.id!=='home');
       if(homeItem){
         const c = hereKey ? await Router.geocodeHere(homeItem.addr, hereKey) : await Router.geocode(homeItem.addr);
-        if(c){ state.coords['home']=c; updated=true; }
+        if(c){ state.coords['home']=c; updated=true; } else failed++;
       }
       if(hereKey){
         // HERE's per-key rate limits are generous enough for a batch like
         // this — no artificial throttling needed.
         const results = await Promise.allSettled(rest.map(({id,addr})=>Router.geocodeHere(addr,hereKey).then(c=>({id,c}))));
-        for(const res of results){ if(res.status==='fulfilled' && res.value.c){ state.coords[res.value.id]=res.value.c; updated=true; } }
+        for(const res of results){ if(res.status==='fulfilled' && res.value.c){ state.coords[res.value.id]=res.value.c; updated=true; } else failed++; }
       } else {
         // Nominatim's free public server enforces ~1 request/second. Firing
         // every student's geocode request in parallel (the old behavior) got
@@ -3968,11 +3983,15 @@ const App = {
         // city" bug. Go one at a time instead.
         for(const {id,addr} of rest){
           const c = await Router.geocode(addr);
-          if(c){ state.coords[id]=c; updated=true; }
+          if(c){ state.coords[id]=c; updated=true; } else failed++;
           await new Promise(r=>setTimeout(r,1100));
         }
       }
       if(updated) Storage.saveCoords(state.coords);
+      // Surface failures instead of letting them silently become
+      // wrong-looking pins on the map — check the console for the specific
+      // HTTP status/reason logged by Router.geocode() per failed address.
+      if(failed > 0) Toast.show(tf('toast_geocode_failures',{n:failed}), 'error');
     }
     /*i18n-note: default homeAddress fallback ("Πλατεία Γεωργίου 1, Πάτρα") intentionally kept as literal Greek demo address text*/
 
