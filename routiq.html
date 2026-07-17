@@ -714,6 +714,7 @@ const I18N = {
     form_type_label:'Τύπος', form_type_solo:'Ατομικό', form_type_group:'Ομάδα',
     form_group_code_label:'Κωδικός ομάδας', form_group_code_placeholder:'π.χ. A1',
     form_availability_title:'Διαθεσιμότητα', form_paired_none:'— κανένα —',
+    form_time_constraints_title:'Χρονικοί περιορισμοί',
     form_avail_mode_label:'Τρόπος διαθεσιμότητας',
     form_avail_mode_manual:'Χειροκίνητα ανά ημέρα',
     form_avail_mode_exceptions:'Πάντα διαθέσιμος, εκτός εξαιρέσεων',
@@ -886,6 +887,7 @@ const I18N = {
     form_type_label:'Type', form_type_solo:'Individual', form_type_group:'Group',
     form_group_code_label:'Group code', form_group_code_placeholder:'e.g. A1',
     form_availability_title:'Availability', form_paired_none:'— none —',
+    form_time_constraints_title:'Time constraints',
     form_avail_mode_label:'Availability mode',
     form_avail_mode_manual:'Manual, per day',
     form_avail_mode_exceptions:'Always available, except exceptions',
@@ -1058,6 +1060,7 @@ const I18N = {
     form_type_label:'Type', form_type_solo:'Individuel', form_type_group:'Groupe',
     form_group_code_label:'Code du groupe', form_group_code_placeholder:'ex. A1',
     form_availability_title:'Disponibilité', form_paired_none:'— aucun —',
+    form_time_constraints_title:'Contraintes horaires',
     form_avail_mode_label:'Mode de disponibilité',
     form_avail_mode_manual:'Manuel, par jour',
     form_avail_mode_exceptions:'Toujours disponible, sauf exceptions',
@@ -1230,6 +1233,7 @@ const I18N = {
     form_type_label:'Typ', form_type_solo:'Einzeln', form_type_group:'Gruppe',
     form_group_code_label:'Gruppencode', form_group_code_placeholder:'z.B. A1',
     form_availability_title:'Verfügbarkeit', form_paired_none:'— keine —',
+    form_time_constraints_title:'Zeitliche Einschränkungen',
     form_avail_mode_label:'Verfügbarkeitsmodus',
     form_avail_mode_manual:'Manuell, pro Tag',
     form_avail_mode_exceptions:'Immer verfügbar, außer Ausnahmen',
@@ -4470,28 +4474,13 @@ const App = {
 
   buildStudentForm(st){
     const L = getLabels();
-    const days = [1,2,3,4,5,6];
-    const avMode = st?.availabilityMode==='exceptions' ? 'exceptions' : 'manual';
-    this._editingExceptions = (st?.availabilityExceptions||[]).map(e=>({...e}));
-    const avRows = days.map(d=>{
-      const av = st?.availability?.[d];
-      const on = av?.on||false;
-      return `
-        <div class="avail-day-row" id="avrow-${d}">
-          <div class="avail-day-header">
-            <label class="toggle-switch" style="width:44px">
-              <input type="checkbox" id="avday-${d}" ${on?'checked':''} onchange="App.toggleAvDay(${d})">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="avail-day-name">${DAYS_FULL[d]}</span>
-          </div>
-          <div class="avail-time-row" id="avtime-${d}" style="display:${on?'flex':'none'}">
-            <input type="time" id="avstart-${d}" value="${av?.start||'15:00'}">
-            <span class="avail-sep">${t('form_to')}</span>
-            <input type="time" id="avend-${d}" value="${av?.end||'21:30'}">
-          </div>
-        </div>`;
-    }).join('');
+    // Students saved under the old manual per-day picker don't have
+    // availabilityExceptions populated — derive the equivalent exceptions
+    // from their real st.availability so their actual constraints stay
+    // visible/correct now that manual mode is gone.
+    this._editingExceptions = st
+      ? (st.availabilityMode==='exceptions' ? (st.availabilityExceptions||[]).map(e=>({...e})) : this.computeExceptionsFromAvailability(st))
+      : [];
 
     return `
       <div class="form-group">
@@ -4563,18 +4552,8 @@ const App = {
           <input type="text" id="st-group" placeholder="${t('form_group_code_placeholder')}" value="${esc(st?.group||'')}">
         </div>
       </div>
-      <div class="section-title" style="padding:0;margin:16px 0 8px">${t('form_availability_title')}</div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label>${t('form_avail_mode_label')}</label>
-        <select id="st-avmode" onchange="App.toggleAvMode()">
-          <option value="manual" ${avMode!=='exceptions'?'selected':''}>${t('form_avail_mode_manual')}</option>
-          <option value="exceptions" ${avMode==='exceptions'?'selected':''}>${t('form_avail_mode_exceptions')}</option>
-        </select>
-      </div>
-      <div id="avail-manual-block" style="display:${avMode!=='exceptions'?'block':'none'}">
-        ${avRows}
-      </div>
-      <div id="avail-exceptions-block" style="display:${avMode==='exceptions'?'block':'none'}">
+      <div class="section-title" style="padding:0;margin:16px 0 8px">${t('form_time_constraints_title')}</div>
+      <div id="avail-exceptions-block">
         <div class="settings-sub" style="margin-bottom:10px">${t('form_avail_mode_hint')}</div>
         <div id="avail-exceptions-list">${this.renderAvExceptionsList()}</div>
         <div class="form-row" style="margin-top:10px;align-items:flex-end">
@@ -4893,20 +4872,6 @@ const App = {
     // Just stores choice in the select; actual bidirectional save happens in saveStudent
   },
 
-  toggleAvDay(d){
-    const cb = document.getElementById('avday-'+d);
-    const time = document.getElementById('avtime-'+d);
-    if(time) time.style.display = cb?.checked?'flex':'none';
-  },
-
-  toggleAvMode(){
-    const mode = document.getElementById('st-avmode')?.value||'manual';
-    const manual = document.getElementById('avail-manual-block');
-    const exceptions = document.getElementById('avail-exceptions-block');
-    if(manual) manual.style.display = mode==='exceptions'?'none':'block';
-    if(exceptions) exceptions.style.display = mode==='exceptions'?'block':'none';
-  },
-
   renderAvExceptionsList(){
     const list = this._editingExceptions||[];
     if(list.length===0) return `<p style="font-size:13px;color:var(--text3);padding:4px 0">${t('form_avail_no_exceptions')}</p>`;
@@ -4978,6 +4943,32 @@ const App = {
     return availability;
   },
 
+  // Migration helper: students saved under the old "manual per-day" picker
+  // (now removed in favor of exceptions-only) still have their real
+  // constraints sitting in st.availability — this converts that into the
+  // equivalent exception blocks so they show up correctly (and stay
+  // correct) the first time such a student is opened after the change,
+  // instead of silently looking "available every day" with zero exceptions.
+  computeExceptionsFromAvailability(student){
+    const workDays = state.settings.workDays||[1,2,3,4,5];
+    const dayHours = state.settings.dayHours||{};
+    const exceptions = [];
+    workDays.forEach(d=>{
+      const dh = dayHours[d];
+      if(!dh) return; // no teacher hours for this day — nothing to derive an exception from
+      const dayStart = Scheduler.toMin(dh.start), dayEnd = Scheduler.toMin(dh.end);
+      const av = student.availability && student.availability[d];
+      if(!av || !av.on){
+        exceptions.push({day:d, start:dh.start, end:dh.end});
+        return;
+      }
+      const avStart = Scheduler.toMin(av.start), avEnd = Scheduler.toMin(av.end);
+      if(avStart>dayStart) exceptions.push({day:d, start:dh.start, end:av.start});
+      if(avEnd<dayEnd) exceptions.push({day:d, start:av.end, end:dh.end});
+    });
+    return exceptions;
+  },
+
   saveStudent(){
     const saveBtn = document.querySelector('#drawer-student .drawer-footer .btn-primary');
     const name = document.getElementById('st-name')?.value?.trim();
@@ -4986,29 +4977,10 @@ const App = {
     if(!addr){ Toast.show(t('toast_enter_address'),'error'); return }
     if(saveBtn){ saveBtn.disabled=true; saveBtn.style.opacity='0.6'; saveBtn.textContent=t('saving_ellipsis'); }
 
-    const avMode = document.getElementById('st-avmode')?.value||'manual';
-    let availability = {};
-    let availabilityExceptions = [];
-    if(avMode==='exceptions'){
-      availabilityExceptions = this._editingExceptions||[];
-      availability = this.computeAvailabilityFromExceptions(availabilityExceptions);
-      if(!Object.values(availability).some(av=>av.on)){
-        Toast.show(t('toast_select_day'),'error'); return
-      }
-    } else {
-      [1,2,3,4,5,6].forEach(d=>{
-        const cb = document.getElementById('avday-'+d);
-        if(cb?.checked){
-          availability[d] = {
-            on: true,
-            start: document.getElementById('avstart-'+d)?.value||'15:00',
-            end: document.getElementById('avend-'+d)?.value||'21:30'
-          };
-        }
-      });
-      if(Object.keys(availability).length===0){
-        Toast.show(t('toast_select_day'),'error'); return
-      }
+    const availabilityExceptions = this._editingExceptions||[];
+    const availability = this.computeAvailabilityFromExceptions(availabilityExceptions);
+    if(!Object.values(availability).some(av=>av.on)){
+      Toast.show(t('toast_select_day'),'error'); return
     }
 
     const st = {
@@ -5027,7 +4999,7 @@ const App = {
       forceMerge: document.getElementById('st-mergemode')?.value==='always',
       maxMergeSessions: Number(document.getElementById('st-mergesize')?.value)||undefined,
       availability,
-      availabilityMode: avMode,
+      availabilityMode: 'exceptions',
       availabilityExceptions,
       color: state.editingStudentId
         ? (state.students.find(s=>s.id===state.editingStudentId)?.color||0)
