@@ -476,19 +476,25 @@ input[type=time]{color-scheme:light}
 </head>
 <body>
 
-<!-- Scheduling progress overlay -->
-<div id="sched-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;transition:opacity .3s ease">
-  <div style="background:var(--bg2,#fff);border-radius:22px;padding:32px 36px;min-width:300px;max-width:88vw;text-align:center;box-shadow:0 16px 56px rgba(0,0,0,.4)">
-    <div style="font-size:36px;margin-bottom:12px;transition:transform .2s ease" id="sched-icon">🧩</div>
-    <div id="sched-phase" style="font-size:15px;font-weight:700;color:var(--text,#111);margin-bottom:4px;transition:opacity .2s ease,transform .2s ease">Υπολογισμός...</div>
-    <div id="sched-sub" style="font-size:12px;color:var(--text3,#888);margin-bottom:20px;transition:opacity .2s ease">Παρακαλώ περιμένετε</div>
-    <div style="background:var(--bg3,#f0f0f0);border-radius:12px;height:12px;overflow:hidden;position:relative">
-      <div id="sched-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#0891b2);border-radius:12px;width:0%;transition:width .6s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden">
-        <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);width:60%;animation:schedShimmer 1.1s linear infinite"></div>
+<!-- Scheduling progress indicator — a small floating banner, NOT a full-screen
+     blocking overlay: you can keep browsing while it runs. Settings saves are
+     blocked separately (see App.saveSettings) while this is active, since
+     changing settings mid-calculation could corrupt the in-progress run. -->
+<div id="sched-overlay" style="display:none;position:fixed;left:50%;bottom:calc(var(--nav-h) + 12px);transform:translateX(-50%);z-index:9999;width:calc(100% - 32px);max-width:calc(var(--max-w) - 32px);transition:opacity .3s ease">
+  <div style="background:var(--bg2,#fff);border:1px solid var(--border);border-radius:16px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px">
+    <div style="font-size:22px;flex-shrink:0;line-height:1" id="sched-icon">🧩</div>
+    <div style="flex:1;min-width:0">
+      <div id="sched-phase" style="font-size:12.5px;font-weight:700;color:var(--text,#111);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Υπολογισμός...</div>
+      <div id="sched-sub" style="font-size:11px;color:var(--text3,#888);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Παρακαλώ περιμένετε</div>
+      <div style="background:var(--bg3,#f0f0f0);border-radius:8px;height:5px;overflow:hidden;margin-top:6px;position:relative">
+        <div id="sched-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#0891b2);border-radius:8px;width:0%;transition:width .6s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);width:60%;animation:schedShimmer 1.1s linear infinite"></div>
+        </div>
       </div>
     </div>
-    <div id="sched-pct" style="font-size:12px;color:var(--text3,#888);margin-top:8px;font-weight:600">0%</div>
+    <div id="sched-pct" style="font-size:11px;color:var(--text3,#888);font-weight:700;flex-shrink:0">0%</div>
   </div>
+  <div id="sched-warn" style="font-size:10.5px;color:var(--orange,#d97706);text-align:center;margin-top:6px;font-weight:600"></div>
 </div>
 
 <div id="app">
@@ -798,6 +804,9 @@ const I18N = {
     phase4b_title:'Φάση 4 — Επανατοποθέτηση', phase4b_sub:'Τοποθέτηση αδύνατων μαθητών…',
     phase5_title:'Φάση 5 — LNS', phase5_sub:'Επανατοποθέτηση με destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Ολοκληρώθηκε', phase_done_sub:'Αποθήκευση προγράμματος…',
+    sched_dont_change_settings:'Παρακαλώ περιμένετε, μην αλλάζετε ρυθμίσεις μέχρι να τελειώσει ο υπολογισμός',
+    toast_settings_blocked_calc:'Δεν μπορείς να αποθηκεύσεις ρυθμίσεις όσο τρέχει ο υπολογισμός προγράμματος',
+    notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Το πρόγραμμα είναι έτοιμο ✓',
     phase_km_title:'Πραγματικά χιλιόμετρα', phase_km_sub:'Υπολογισμός οδικής απόστασης (OSRM)…',
     phase_persist_title:'Επίμονη αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — συνεχίζει να ψάχνει ({sec}δ)…',
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
@@ -961,6 +970,9 @@ const I18N = {
     phase4b_title:'Phase 4 — Re-placement', phase4b_sub:'Placing unfit students…',
     phase5_title:'Phase 5 — LNS', phase5_sub:'Re-placing with destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Complete', phase_done_sub:'Saving schedule…',
+    sched_dont_change_settings:"Please wait, don't change settings until the calculation finishes",
+    toast_settings_blocked_calc:"Can't save settings while a schedule calculation is running",
+    notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Your schedule is ready ✓',
     phase_km_title:'Real driving distance', phase_km_sub:'Calculating road distance (OSRM)…',
     phase_persist_title:'Searching persistently', phase_persist_sub:'{n} student(s) left — still searching ({sec}s)…',
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
@@ -1124,6 +1136,9 @@ const I18N = {
     phase4b_title:'Phase 4 — Replacement', phase4b_sub:'Placement des élèves non placés…',
     phase5_title:'Phase 5 — LNS', phase5_sub:'Replacement par destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
     phase_done_title:'Terminé', phase_done_sub:'Enregistrement du programme…',
+    sched_dont_change_settings:"Veuillez patienter, ne modifiez pas les réglages avant la fin du calcul",
+    toast_settings_blocked_calc:"Impossible d'enregistrer les réglages pendant un calcul de programme",
+    notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Votre programme est prêt ✓',
     phase_km_title:'Distance routière réelle', phase_km_sub:'Calcul de la distance routière (OSRM)…',
     phase_persist_title:'Recherche persistante', phase_persist_sub:'{n} élève(s) restant(s) — recherche en cours ({sec}s)…',
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
@@ -1287,6 +1302,9 @@ const I18N = {
     phase4b_title:'Phase 4 — Neuplatzierung', phase4b_sub:'Nicht passende Schüler platzieren…',
     phase5_title:'Phase 5 — LNS', phase5_sub:'Neuplatzierung mit Destroy-Repair (10s)…', phase5b_sub:'Destroy-Repair (10s)…',
     phase_done_title:'Abgeschlossen', phase_done_sub:'Plan wird gespeichert…',
+    sched_dont_change_settings:'Bitte warten, ändern Sie keine Einstellungen bis die Berechnung fertig ist',
+    toast_settings_blocked_calc:'Einstellungen können nicht gespeichert werden, während eine Berechnung läuft',
+    notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Ihr Stundenplan ist fertig ✓',
     phase_km_title:'Echte Fahrstrecke', phase_km_sub:'Straßenentfernung wird berechnet (OSRM)…',
     phase_persist_title:'Hartnäckige Suche', phase_persist_sub:'noch {n} Schüler — Suche läuft weiter ({sec}s)…',
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
@@ -3351,15 +3369,17 @@ function schedProgress(pct, phase, sub, icon){
   if(pct===null){
     clearInterval(_schedCreepTimer); _schedCreepTimer=null;
     ov.style.opacity='0';
-    setTimeout(()=>{ ov.style.display='none'; ov.style.opacity=''; },300);
+    setTimeout(()=>{ ov.style.display='none'; ov.style.opacity=''; const wn=document.getElementById('sched-warn'); if(wn) wn.textContent=''; },300);
     return;
   }
-  ov.style.display='flex';
+  ov.style.display='block';
   const bar=document.getElementById('sched-bar');
   const ph=document.getElementById('sched-phase');
   const sb=document.getElementById('sched-sub');
   const pc=document.getElementById('sched-pct');
   const ic=document.getElementById('sched-icon');
+  const wn=document.getElementById('sched-warn');
+  if(wn && !wn.textContent) wn.textContent = t('sched_dont_change_settings');
   if(bar) bar.style.width=pct+'%';
   // Keep the bar itself visibly creeping forward between explicit phase updates,
   // instead of sitting frozen at a fixed % while a long computation runs.
@@ -3407,7 +3427,8 @@ let state = {
   scheduleAttemptIdx: 0,
   scheduleOptimized: false,
   scheduleKmBefore: null,
-  scheduleKmAfter: null
+  scheduleKmAfter: null,
+  _schedulingInProgress: false
 };
 
 // ============================================================
@@ -3484,6 +3505,23 @@ const App = {
     this.applyTheme();
   },
 
+  // ---- NOTIFICATIONS (tell the user the schedule is ready without making
+  // them stare at a blocking overlay) ----
+  async requestNotifyPermission(){
+    if(typeof Notification==='undefined') return false;
+    if(Notification.permission==='granted') return true;
+    if(Notification.permission==='denied') return false;
+    try{ return (await Notification.requestPermission())==='granted'; }catch(e){ return false; }
+  },
+
+  notifyScheduleReady(){
+    if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
+    // Only bother if the user isn't already looking at the app — the
+    // floating progress banner already told them while it was running.
+    if(typeof document!=='undefined' && !document.hidden) return;
+    try{ new Notification(t('notif_schedule_ready_title'), { body: t('notif_schedule_ready_body'), icon:'icon-192.png' }); }catch(e){}
+  },
+
   updateNavLabels(){
     const L = getLabels();
     const el = document.getElementById('nav-clients-label');
@@ -3533,6 +3571,13 @@ const App = {
   async optimizeSchedule(){
     const btn = document.getElementById('optimize-btn');
     if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> '+t('debug_calc_prefix'); }
+    state._schedulingInProgress = true;
+    // Safety net: if something throws outside the phases' own try/catch guards
+    // and this never gets to its normal cleanup, don't leave Settings blocked
+    // forever — force-clear after longer than any legitimate run could take.
+    clearTimeout(this._schedulingWatchdog);
+    this._schedulingWatchdog = setTimeout(()=>{ state._schedulingInProgress=false; }, 9*60*1000);
+    this.requestNotifyPermission(); // user-gesture-triggered, fine to ask here
 
     // Estimate km BEFORE optimization using pseudo-coords
     const kmBefore = this._estimateTotalKm(state.schedule);
@@ -3654,6 +3699,9 @@ const App = {
     }catch(e){ /* keep the straight-line placeholder */ }
 
     schedProgress(null,null,null,null);
+    state._schedulingInProgress = false;
+    clearTimeout(this._schedulingWatchdog);
+    this.notifyScheduleReady();
     this.renderSchedule();
     if(btn){ btn.disabled=false; btn.innerHTML=t('btn_optimize_short'); }
   },
@@ -3860,6 +3908,13 @@ const App = {
   async runAndNotify(){
     const btn = document.querySelector('.btn[onclick*="runAndNotify"]');
     if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.innerHTML = btn.innerHTML.replace(new RegExp(t('schedule_refresh')+'|<svg[^>]*>.*?<\\/svg>\\s*','s'),'') ; btn.textContent = t('debug_geocoding'); }
+    state._schedulingInProgress = true;
+    // Safety net: if something throws outside the phases' own try/catch guards
+    // and this never gets to its normal cleanup, don't leave Settings blocked
+    // forever — force-clear after longer than any legitimate run could take.
+    clearTimeout(this._schedulingWatchdog);
+    this._schedulingWatchdog = setTimeout(()=>{ state._schedulingInProgress=false; }, 9*60*1000);
+    this.requestNotifyPermission(); // user-gesture-triggered, fine to ask here
 
     // Geocode any missing addresses before scheduling
     const toGeocode = [];
@@ -4017,6 +4072,9 @@ const App = {
 
     state._scheduleStale = false;
     schedProgress(null,null,null,null);
+    state._schedulingInProgress = false;
+    clearTimeout(this._schedulingWatchdog);
+    this.notifyScheduleReady();
     if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
     // Always re-render regardless of scheduler outcome
     if(state.currentScreen==='schedule') this.renderSchedule();
@@ -5898,6 +5956,7 @@ const App = {
   },
 
   saveSettings(){
+    if(state._schedulingInProgress){ Toast.show(t('toast_settings_blocked_calc'),'error'); return; }
     const s = state.settings;
     const prevHome = s.homeAddress;
     s.teacherName = document.getElementById('set-name')?.value?.trim()||'';
