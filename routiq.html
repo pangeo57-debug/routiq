@@ -3244,6 +3244,23 @@ const Router = {
     return null;
   },
 
+  // HERE Geocoding — used when a key is configured, since it doesn't need the
+  // strict ~1-request/second throttling Nominatim's free public server
+  // requires (see App.runAndNotify's bulk geocoding loop).
+  async geocodeHere(address, key){
+    if(!address) return null;
+    try{
+      const q = encodeURIComponent(address);
+      const url = `https://geocode.search.hereapi.com/v1/geocode?q=${q}&in=countryCode:GRC&limit=1&lang=el&apiKey=${key}`;
+      const r = await fetch(url);
+      if(!r.ok) return null;
+      const d = await r.json();
+      const item = d.items && d.items[0];
+      if(item && item.position) return {lat:item.position.lat, lon:item.position.lng};
+    }catch(e){}
+    return null;
+  },
+
   // OSRM Table API: returns duration (seconds) and distance (meters) matrix
   async getMatrix(coords){
     if(coords.length < 2) return null;
@@ -3925,16 +3942,34 @@ const App = {
       if(st.address && !state.coords[st.id]) toGeocode.push({ id:st.id, addr:st.address });
     }
     if(toGeocode.length > 0){
-      const results = await Promise.allSettled(
-        toGeocode.map(({ id, addr }) =>
-          Router.geocode(addr).then(c => ({ id, c }))
-        )
-      );
+      const hereKey = state.settings && state.settings.hereApiKey;
       let updated = false;
-      for(const res of results){
-        if(res.status==='fulfilled' && res.value.c){
-          state.coords[res.value.id] = res.value.c;
-          updated = true;
+      // Home first, awaited alone — Nominatim biases every later search
+      // toward it via Router._viewboxParam(), which only works once home's
+      // own coords are actually in state.coords (they weren't yet if it was
+      // batched into the same parallel round as everyone else).
+      const homeItem = toGeocode.find(x=>x.id==='home');
+      const rest = toGeocode.filter(x=>x.id!=='home');
+      if(homeItem){
+        const c = hereKey ? await Router.geocodeHere(homeItem.addr, hereKey) : await Router.geocode(homeItem.addr);
+        if(c){ state.coords['home']=c; updated=true; }
+      }
+      if(hereKey){
+        // HERE's per-key rate limits are generous enough for a batch like
+        // this — no artificial throttling needed.
+        const results = await Promise.allSettled(rest.map(({id,addr})=>Router.geocodeHere(addr,hereKey).then(c=>({id,c}))));
+        for(const res of results){ if(res.status==='fulfilled' && res.value.c){ state.coords[res.value.id]=res.value.c; updated=true; } }
+      } else {
+        // Nominatim's free public server enforces ~1 request/second. Firing
+        // every student's geocode request in parallel (the old behavior) got
+        // most of them silently rejected/rate-limited, which fell back to
+        // meaningless pseudo-coordinates near a fixed default point instead
+        // of the student's real location — exactly the "map shows the wrong
+        // city" bug. Go one at a time instead.
+        for(const {id,addr} of rest){
+          const c = await Router.geocode(addr);
+          if(c){ state.coords[id]=c; updated=true; }
+          await new Promise(r=>setTimeout(r,1100));
         }
       }
       if(updated) Storage.saveCoords(state.coords);
