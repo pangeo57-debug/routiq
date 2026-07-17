@@ -487,7 +487,7 @@ input[type=time]{color-scheme:light}
       <div id="sched-phase" style="font-size:12.5px;font-weight:700;color:var(--text,#111);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Υπολογισμός...</div>
       <div id="sched-sub" style="font-size:11px;color:var(--text3,#888);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Παρακαλώ περιμένετε</div>
       <div style="background:var(--bg3,#f0f0f0);border-radius:8px;height:5px;overflow:hidden;margin-top:6px;position:relative">
-        <div id="sched-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#0891b2);border-radius:8px;width:0%;transition:width .6s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden">
+        <div id="sched-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#0891b2);border-radius:8px;width:0%;transition:width .25s linear;position:relative;overflow:hidden">
           <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);width:60%;animation:schedShimmer 1.1s linear infinite"></div>
         </div>
       </div>
@@ -795,20 +795,20 @@ const I18N = {
     profession_pet_label:'Εκπαιδευτής / Groomer κατοικιδίων', profession_pet_client:'Ιδιοκτήτης', profession_pet_clients:'Ιδιοκτήτες', profession_pet_session:'Ραντεβού', profession_pet_sessions:'Ραντεβού',
     profession_repair_label:'Τεχνικός / Επισκευαστής', profession_repair_client:'Πελάτης', profession_repair_clients:'Πελάτες', profession_repair_session:'Επίσκεψη', profession_repair_sessions:'Επισκέψεις',
     profession_other_label:'Άλλο (ελεύθερος επαγγελματίας)', profession_other_client:'Πελάτης', profession_other_clients:'Πελάτες', profession_other_session:'Ραντεβού', profession_other_sessions:'Ραντεβού',
-    debug_calc_prefix:'Υπολογισμός...', debug_geocoding:'Geocoding...',
-    phase1_title:'Φάση 1 — Τοποθέτηση μαθητών', phase1_sub:'Backtracking (20s)…',
-    phase1b_title:'Φάση 1 — Τοποθέτηση', phase1b_sub:'Δοκιμή {n} τυχαίων σειρών…',
-    phase2_title:'Φάση 2 — Γεωγραφική βελτιστοποίηση', phase2_sub:'Ταξινόμηση κατά απόσταση…',
-    phase3_title:'Φάση 3 — Simulated Annealing', phase3_sub:'Ελαχιστοποίηση χιλιομέτρων (25s)…', phase3_sub_short:'Ελαχιστοποίηση χιλιομέτρων…',
-    phase4_title:'Φάση 4 — Τελική τοποθέτηση', phase4_sub:'Επανατοποθέτηση αδύνατων…',
-    phase4b_title:'Φάση 4 — Επανατοποθέτηση', phase4b_sub:'Τοποθέτηση αδύνατων μαθητών…',
-    phase5_title:'Φάση 5 — LNS', phase5_sub:'Επανατοποθέτηση με destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
+    debug_calc_prefix:'Υπολογισμός...', debug_geocoding:'Προετοιμασία...',
+    phase1_title:'Δημιουργία προγράμματος', phase1_sub:'Τοποθετούμε τους μαθητές σας…',
+    phase1b_title:'Δημιουργία προγράμματος', phase1b_sub:'Εξετάζουμε πολλούς συνδυασμούς…',
+    phase2_title:'Βελτιστοποίηση διαδρομής', phase2_sub:'Μειώνουμε τα χιλιόμετρα…',
+    phase3_title:'Βελτιστοποίηση διαδρομής', phase3_sub:'Ψάχνουμε την καλύτερη σειρά…', phase3_sub_short:'Ψάχνουμε την καλύτερη σειρά…',
+    phase4_title:'Τελευταίες προσαρμογές', phase4_sub:'Τακτοποιούμε τις λεπτομέρειες…',
+    phase4b_title:'Τελευταίες προσαρμογές', phase4b_sub:'Τακτοποιούμε τις λεπτομέρειες…',
+    phase5_title:'Τελευταίες προσαρμογές', phase5_sub:'Προσπαθούμε να χωρέσουμε όλους…', phase5b_sub:'Προσπαθούμε να χωρέσουμε όλους…',
     phase_done_title:'Ολοκληρώθηκε', phase_done_sub:'Αποθήκευση προγράμματος…',
     sched_dont_change_settings:'Παρακαλώ περιμένετε, μην αλλάζετε ρυθμίσεις μέχρι να τελειώσει ο υπολογισμός',
     toast_settings_blocked_calc:'Δεν μπορείς να αποθηκεύσεις ρυθμίσεις όσο τρέχει ο υπολογισμός προγράμματος',
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Το πρόγραμμα είναι έτοιμο ✓',
-    phase_km_title:'Πραγματικά χιλιόμετρα', phase_km_sub:'Υπολογισμός οδικής απόστασης (OSRM)…',
-    phase_persist_title:'Επίμονη αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — συνεχίζει να ψάχνει ({sec}δ)…',
+    phase_km_title:'Υπολογισμός διαδρομής', phase_km_sub:'Υπολογίζουμε την πραγματική απόσταση…',
+    phase_persist_title:'Αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — μη κλείνετε την εφαρμογή…',
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
@@ -962,20 +962,20 @@ const I18N = {
     profession_pet_label:'Pet Trainer / Groomer', profession_pet_client:'Owner', profession_pet_clients:'Owners', profession_pet_session:'Appointment', profession_pet_sessions:'Appointments',
     profession_repair_label:'Technician / Repair Person', profession_repair_client:'Client', profession_repair_clients:'Clients', profession_repair_session:'Visit', profession_repair_sessions:'Visits',
     profession_other_label:'Other (freelancer)', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Appointment', profession_other_sessions:'Appointments',
-    debug_calc_prefix:'Calculating...', debug_geocoding:'Geocoding...',
-    phase1_title:'Phase 1 — Placing students', phase1_sub:'Backtracking (20s)…',
-    phase1b_title:'Phase 1 — Placement', phase1b_sub:'Trying {n} random orders…',
-    phase2_title:'Phase 2 — Geographic optimization', phase2_sub:'Sorting by distance…',
-    phase3_title:'Phase 3 — Simulated Annealing', phase3_sub:'Minimizing distance (25s)…', phase3_sub_short:'Minimizing distance…',
-    phase4_title:'Phase 4 — Final placement', phase4_sub:'Re-placing unfit students…',
-    phase4b_title:'Phase 4 — Re-placement', phase4b_sub:'Placing unfit students…',
-    phase5_title:'Phase 5 — LNS', phase5_sub:'Re-placing with destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
+    debug_calc_prefix:'Calculating...', debug_geocoding:'Getting ready...',
+    phase1_title:'Building your schedule', phase1_sub:'Placing your students…',
+    phase1b_title:'Building your schedule', phase1b_sub:'Trying lots of combinations…',
+    phase2_title:'Optimizing your route', phase2_sub:'Cutting down the distance…',
+    phase3_title:'Optimizing your route', phase3_sub:'Finding the best order…', phase3_sub_short:'Finding the best order…',
+    phase4_title:'Final touches', phase4_sub:'Tidying up the details…',
+    phase4b_title:'Final touches', phase4b_sub:'Tidying up the details…',
+    phase5_title:'Final touches', phase5_sub:'Trying to fit everyone in…', phase5b_sub:'Trying to fit everyone in…',
     phase_done_title:'Complete', phase_done_sub:'Saving schedule…',
     sched_dont_change_settings:"Please wait, don't change settings until the calculation finishes",
     toast_settings_blocked_calc:"Can't save settings while a schedule calculation is running",
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Your schedule is ready ✓',
-    phase_km_title:'Real driving distance', phase_km_sub:'Calculating road distance (OSRM)…',
-    phase_persist_title:'Searching persistently', phase_persist_sub:'{n} student(s) left — still searching ({sec}s)…',
+    phase_km_title:'Calculating your route', phase_km_sub:'Working out the real distance…',
+    phase_persist_title:'Looking for a solution', phase_persist_sub:"{n} student(s) left — don't close the app…",
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
@@ -1129,20 +1129,20 @@ const I18N = {
     profession_pet_label:'Éducateur / Toiletteur canin', profession_pet_client:'Propriétaire', profession_pet_clients:'Propriétaires', profession_pet_session:'Rendez-vous', profession_pet_sessions:'Rendez-vous',
     profession_repair_label:'Technicien / Réparateur', profession_repair_client:'Client', profession_repair_clients:'Clients', profession_repair_session:'Visite', profession_repair_sessions:'Visites',
     profession_other_label:'Autre (indépendant)', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Rendez-vous', profession_other_sessions:'Rendez-vous',
-    debug_calc_prefix:'Calcul en cours...', debug_geocoding:'Géocodage...',
-    phase1_title:'Phase 1 — Placement des élèves', phase1_sub:'Backtracking (20s)…',
-    phase1b_title:'Phase 1 — Placement', phase1b_sub:'Essai de {n} ordres aléatoires…',
-    phase2_title:'Phase 2 — Optimisation géographique', phase2_sub:'Tri par distance…',
-    phase3_title:'Phase 3 — Recuit simulé', phase3_sub:'Minimisation des kilomètres (25s)…', phase3_sub_short:'Minimisation des kilomètres…',
-    phase4_title:'Phase 4 — Placement final', phase4_sub:'Replacement des élèves non placés…',
-    phase4b_title:'Phase 4 — Replacement', phase4b_sub:'Placement des élèves non placés…',
-    phase5_title:'Phase 5 — LNS', phase5_sub:'Replacement par destroy-repair (10s)…', phase5b_sub:'Destroy-repair (10s)…',
+    debug_calc_prefix:'Calcul en cours...', debug_geocoding:'Préparation...',
+    phase1_title:'Création du programme', phase1_sub:'Nous plaçons vos élèves…',
+    phase1b_title:'Création du programme', phase1b_sub:'Nous testons de nombreuses combinaisons…',
+    phase2_title:'Optimisation de l\'itinéraire', phase2_sub:'Nous réduisons la distance…',
+    phase3_title:'Optimisation de l\'itinéraire', phase3_sub:'Nous cherchons le meilleur ordre…', phase3_sub_short:'Nous cherchons le meilleur ordre…',
+    phase4_title:'Derniers ajustements', phase4_sub:'Nous peaufinons les détails…',
+    phase4b_title:'Derniers ajustements', phase4b_sub:'Nous peaufinons les détails…',
+    phase5_title:'Derniers ajustements', phase5_sub:'Nous essayons de caser tout le monde…', phase5b_sub:'Nous essayons de caser tout le monde…',
     phase_done_title:'Terminé', phase_done_sub:'Enregistrement du programme…',
     sched_dont_change_settings:"Veuillez patienter, ne modifiez pas les réglages avant la fin du calcul",
     toast_settings_blocked_calc:"Impossible d'enregistrer les réglages pendant un calcul de programme",
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Votre programme est prêt ✓',
-    phase_km_title:'Distance routière réelle', phase_km_sub:'Calcul de la distance routière (OSRM)…',
-    phase_persist_title:'Recherche persistante', phase_persist_sub:'{n} élève(s) restant(s) — recherche en cours ({sec}s)…',
+    phase_km_title:'Calcul de votre itinéraire', phase_km_sub:'Nous calculons la distance réelle…',
+    phase_persist_title:'Recherche d\'une solution', phase_persist_sub:'{n} élève(s) restant(s) — ne fermez pas l\'application…',
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
@@ -1296,20 +1296,20 @@ const I18N = {
     profession_pet_label:'Haustiertrainer / Groomer', profession_pet_client:'Besitzer', profession_pet_clients:'Besitzer', profession_pet_session:'Termin', profession_pet_sessions:'Termine',
     profession_repair_label:'Techniker / Reparaturdienst', profession_repair_client:'Kunde', profession_repair_clients:'Kunden', profession_repair_session:'Besuch', profession_repair_sessions:'Besuche',
     profession_other_label:'Sonstiges (Freiberufler)', profession_other_client:'Kunde', profession_other_clients:'Kunden', profession_other_session:'Termin', profession_other_sessions:'Termine',
-    debug_calc_prefix:'Berechnung läuft...', debug_geocoding:'Geocoding...',
-    phase1_title:'Phase 1 — Schüler platzieren', phase1_sub:'Backtracking (20s)…',
-    phase1b_title:'Phase 1 — Platzierung', phase1b_sub:'{n} zufällige Reihenfolgen werden getestet…',
-    phase2_title:'Phase 2 — Geografische Optimierung', phase2_sub:'Sortierung nach Entfernung…',
-    phase3_title:'Phase 3 — Simulated Annealing', phase3_sub:'Kilometer minimieren (25s)…', phase3_sub_short:'Kilometer minimieren…',
-    phase4_title:'Phase 4 — Endplatzierung', phase4_sub:'Nicht passende Schüler neu platzieren…',
-    phase4b_title:'Phase 4 — Neuplatzierung', phase4b_sub:'Nicht passende Schüler platzieren…',
-    phase5_title:'Phase 5 — LNS', phase5_sub:'Neuplatzierung mit Destroy-Repair (10s)…', phase5b_sub:'Destroy-Repair (10s)…',
+    debug_calc_prefix:'Berechnung läuft...', debug_geocoding:'Wird vorbereitet...',
+    phase1_title:'Stundenplan wird erstellt', phase1_sub:'Ihre Schüler werden eingeplant…',
+    phase1b_title:'Stundenplan wird erstellt', phase1b_sub:'Viele Kombinationen werden geprüft…',
+    phase2_title:'Route wird optimiert', phase2_sub:'Die Strecke wird verkürzt…',
+    phase3_title:'Route wird optimiert', phase3_sub:'Die beste Reihenfolge wird gesucht…', phase3_sub_short:'Die beste Reihenfolge wird gesucht…',
+    phase4_title:'Letzte Anpassungen', phase4_sub:'Die Details werden abgestimmt…',
+    phase4b_title:'Letzte Anpassungen', phase4b_sub:'Die Details werden abgestimmt…',
+    phase5_title:'Letzte Anpassungen', phase5_sub:'Es wird versucht, alle unterzubringen…', phase5b_sub:'Es wird versucht, alle unterzubringen…',
     phase_done_title:'Abgeschlossen', phase_done_sub:'Plan wird gespeichert…',
     sched_dont_change_settings:'Bitte warten, ändern Sie keine Einstellungen bis die Berechnung fertig ist',
     toast_settings_blocked_calc:'Einstellungen können nicht gespeichert werden, während eine Berechnung läuft',
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Ihr Stundenplan ist fertig ✓',
-    phase_km_title:'Echte Fahrstrecke', phase_km_sub:'Straßenentfernung wird berechnet (OSRM)…',
-    phase_persist_title:'Hartnäckige Suche', phase_persist_sub:'noch {n} Schüler — Suche läuft weiter ({sec}s)…',
+    phase_km_title:'Route wird berechnet', phase_km_sub:'Die tatsächliche Entfernung wird ermittelt…',
+    phase_persist_title:'Lösung wird gesucht', phase_persist_sub:'noch {n} Schüler — App bitte nicht schließen…',
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
@@ -3413,16 +3413,17 @@ function schedProgress(pct, phase, sub, icon){
   const wn=document.getElementById('sched-warn');
   if(wn && !wn.textContent) wn.textContent = t('sched_dont_change_settings');
   if(bar) bar.style.width=pct+'%';
-  // Keep the bar itself visibly creeping forward between explicit phase updates,
-  // instead of sitting frozen at a fixed % while a long computation runs.
+  // Keep the bar creeping forward continuously between explicit phase updates
+  // — asymptotically toward 99% (never quite arriving) so it never sits
+  // frozen even during a long phase (SA runs ~25s, the persistent search can
+  // run minutes), and always jumps cleanly upward whenever the next real
+  // phase update lands.
   clearInterval(_schedCreepTimer);
   let creepPct=pct;
-  const ceiling=Math.min(98,pct+10);
   _schedCreepTimer=setInterval(()=>{
-    if(creepPct>=ceiling){ clearInterval(_schedCreepTimer); return; }
-    creepPct+=0.3;
+    creepPct += (99-creepPct)*0.02;
     if(bar) bar.style.width=creepPct+'%';
-  },200);
+  },150);
   if(ph&&phase){
     ph.style.opacity='0';
     ph.style.transform='translateY(-4px)';
