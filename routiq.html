@@ -222,6 +222,7 @@ input[type=time]{color-scheme:light}
 .slot-block.color-8::before{background:#b2f7ef}
 .slot-block.color-9::before{background:#ff9ff3}
 .slot-block.dragging{opacity:0.4;}
+.slot-block.drag-picked{outline:2.5px solid var(--blue,#7c3aed);outline-offset:-2px;box-shadow:0 0 0 4px rgba(124,58,237,.15)}
 .day-tab.drag-over{border:2px solid var(--blue);background:rgba(124,58,237,.12);}
 .slot-time{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--text)}
 .slot-name{font-size:14px;font-weight:600;margin-top:2px}
@@ -733,6 +734,7 @@ const I18N = {
     schedule_optimize_btn:'Βελτιστοποίηση με χάρτη (OpenStreetMap)', schedule_gap_same_location:'📍 ίδια τοποθεσία',
     schedule_gap_travel:'🚗 ~{min}λ μετακίνηση', schedule_gap_safety:' + {min}λ ασφαλείας',
     toast_no_free_time:'Δεν υπάρχει ελεύθερη ώρα', unplaced_group_badge:'μαθ.',
+    toast_slot_picked:'{name} — πάτα άλλο μάθημα (ανταλλαγή) ή ημέρα (μετακίνηση)',
     unplaced_solution_combo:'Λύση Α: Συνδυαστικό μπλοκ {block}', unplaced_combo_detail:'{needed} × {dur}λ → 1 × {total}λ σε μία μέρα',
     unplaced_apply_block:'Εφαρμογή ως {block} μπλοκ', unplaced_solution_extend_hours:'Λύση {letter}: Παράταση ωραρίου σου',
     unplaced_extend_hours_detail:'Αν παρατείνεις το ωράριό σου τη {day} κατά +{min} λεπτά, χωράει κανονικά.',
@@ -900,6 +902,7 @@ const I18N = {
     schedule_optimize_btn:'Optimize with map (OpenStreetMap)', schedule_gap_same_location:'📍 same location',
     schedule_gap_travel:'🚗 ~{min}min travel', schedule_gap_safety:' + {min}min safety',
     toast_no_free_time:'No free time available', unplaced_group_badge:'ls.',
+    toast_slot_picked:'{name} — tap another lesson (swap) or a day (move)',
     unplaced_solution_combo:'Solution A: Combined block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min in one day',
     unplaced_apply_block:'Apply as {block} block', unplaced_solution_extend_hours:'Solution {letter}: Extend your hours',
     unplaced_extend_hours_detail:'If you extend your working hours on {day} by +{min} minutes, it fits normally.',
@@ -1067,6 +1070,7 @@ const I18N = {
     schedule_optimize_btn:'Optimiser avec carte (OpenStreetMap)', schedule_gap_same_location:'📍 même lieu',
     schedule_gap_travel:'🚗 ~{min}min trajet', schedule_gap_safety:' + {min}min sécurité',
     toast_no_free_time:'Aucun créneau libre disponible', unplaced_group_badge:'cr.',
+    toast_slot_picked:'{name} — touchez un autre cours (échanger) ou un jour (déplacer)',
     unplaced_solution_combo:'Solution A : Bloc combiné {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min en un jour',
     unplaced_apply_block:'Appliquer comme bloc {block}', unplaced_solution_extend_hours:'Solution {letter} : Prolonger vos horaires',
     unplaced_extend_hours_detail:'Si vous prolongez vos horaires le {day} de +{min} minutes, cela rentre normalement.',
@@ -1234,6 +1238,7 @@ const I18N = {
     schedule_optimize_btn:'Mit Karte optimieren (OpenStreetMap)', schedule_gap_same_location:'📍 gleicher Ort',
     schedule_gap_travel:'🚗 ~{min}min Fahrt', schedule_gap_safety:' + {min}min Sicherheit',
     toast_no_free_time:'Keine freie Zeit verfügbar', unplaced_group_badge:'Std.',
+    toast_slot_picked:'{name} — andere Stunde antippen (tauschen) oder Tag (verschieben)',
     unplaced_solution_combo:'Lösung A: Kombinierter Block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min an einem Tag',
     unplaced_apply_block:'Als {block} Block anwenden', unplaced_solution_extend_hours:'Lösung {letter}: Arbeitszeit verlängern',
     unplaced_extend_hours_detail:'Wenn Sie Ihre Arbeitszeit am {day} um +{min} Minuten verlängern, passt es normal.',
@@ -5213,12 +5218,89 @@ const App = {
   },
 
   switchDay(d){
+    // If a lesson is currently "picked up" (tap-to-move, the touch-friendly
+    // alternative to drag-and-drop — see _onSlotTap), tapping a day tab means
+    // "move it here", not "just look at this day".
+    if(_drag){
+      this._performSlotMoveToDay(_drag.day, _drag.slot, d);
+      _drag = null;
+      document.querySelectorAll('.slot-block.drag-picked').forEach(el=>el.classList.remove('drag-picked'));
+      return;
+    }
     state.scheduleDay = d;
     document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
     document.querySelectorAll('.day-tab').forEach(t=>{
       if(t.textContent.trim().startsWith(DAYS[d])) t.classList.add('active');
     });
     this.renderDaySlots();
+  },
+
+  // Touch-friendly alternative to native HTML5 drag-and-drop, which only
+  // works with a mouse — iOS/Android touch events never fire dragstart/drop
+  // at all, so on a phone the drag handles simply did nothing. Tap a lesson
+  // to "pick it up", then tap another lesson (swap times) or a day tab
+  // (move there) to complete it; tap the same lesson again to cancel.
+  _onSlotTap(e, day, idx){
+    const slots = [...(state.schedule[day]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const slot = slots[idx];
+    if(!slot) return;
+    if(!_drag){
+      _drag = {day, idx, slot};
+      document.querySelectorAll('.slot-block.drag-picked').forEach(el=>el.classList.remove('drag-picked'));
+      e.currentTarget.classList.add('drag-picked');
+      Toast.show(tf('toast_slot_picked',{name:slot.studentName}), 'info');
+      return;
+    }
+    if(_drag.day===day && _drag.idx===idx){
+      _drag = null;
+      e.currentTarget.classList.remove('drag-picked');
+      return;
+    }
+    this._performSlotSwap(_drag.day, _drag.idx, day, idx);
+    _drag = null;
+    document.querySelectorAll('.slot-block.drag-picked').forEach(el=>el.classList.remove('drag-picked'));
+  },
+
+  // Shared by both the native-drag drop handler (desktop mouse) and the
+  // tap-to-pick flow (touch) — swaps the two slots' times.
+  _performSlotSwap(srcDay, srcIdx, targetDay, targetIdx){
+    const srcSlots = [...(state.schedule[srcDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const tgtSlots = [...(state.schedule[targetDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    if(srcDay===targetDay && srcIdx===targetIdx) return;
+    const srcSlot = srcSlots[srcIdx];
+    const tgtSlot = tgtSlots[targetIdx];
+    if(!srcSlot || !tgtSlot) return;
+    const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
+    const tgtArrIdx = state.schedule[targetDay].findIndex(s=>s.studentId===tgtSlot.studentId && s.start===tgtSlot.start);
+    if(srcArrIdx<0 || tgtArrIdx<0) return;
+    const {start: sS, end: sE} = state.schedule[srcDay][srcArrIdx];
+    const {start: tS, end: tE} = state.schedule[targetDay][tgtArrIdx];
+    state.schedule[srcDay][srcArrIdx].start = tS;
+    state.schedule[srcDay][srcArrIdx].end = tE;
+    state.schedule[targetDay][tgtArrIdx].start = sS;
+    state.schedule[targetDay][tgtArrIdx].end = sE;
+    Storage.saveSchedule(state.schedule);
+    this.renderSchedule();
+    this.renderHome();
+  },
+
+  // Shared by both the native-drag day-tab drop handler (desktop mouse) and
+  // the tap-to-pick flow (touch) — moves a slot to a different day, finding
+  // it a genuinely valid new time on that day.
+  _performSlotMoveToDay(srcDay, srcSlot, targetDay){
+    if(srcDay===targetDay) return;
+    const existing = state.schedule[targetDay]||[];
+    const student = state.students.find(s=>s.id===srcSlot.studentId);
+    if(!student) return;
+    const newTime = Scheduler.findSlotFixed(student, targetDay, existing, state.settings, srcSlot.duration);
+    if(!newTime){ Toast.show(t('toast_no_free_time'),'error'); return; }
+    const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
+    if(srcArrIdx>=0) state.schedule[srcDay].splice(srcArrIdx,1);
+    if(!state.schedule[targetDay]) state.schedule[targetDay]=[];
+    state.schedule[targetDay].push({...srcSlot, start: newTime.start, end: newTime.end});
+    Storage.saveSchedule(state.schedule);
+    this.renderSchedule();
+    this.renderHome();
   },
 
   renderDaySlots(){
@@ -5255,7 +5337,8 @@ const App = {
         <div class="slot-block ${COLORS[slot.color||0]}${(slot.merged||isMultiBlock)?' merged':''}${slot.isGroup?' group-slot':''}"
              draggable="true" data-slot-idx="${i}" data-slot-day="${state.scheduleDay}"
              ondragstart="App._onSlotDragStart(event,${state.scheduleDay},${i})"
-             ondragover="event.preventDefault()" ondrop="App._onSlotDrop(event,${state.scheduleDay},${i})">
+             ondragover="event.preventDefault()" ondrop="App._onSlotDrop(event,${state.scheduleDay},${i})"
+             onclick="App._onSlotTap(event,${state.scheduleDay},${i})">
           <div class="slot-time">${slot.start} – ${displayEnd}</div>
           <div class="slot-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(slot.studentName)}${mergeTag}${slot.isGroup?`<span style="font-size:10px;background:rgba(139,92,246,.2);color:#a78bfa;padding:1px 6px;border-radius:10px;margin-left:4px">${t('form_type_group').toLowerCase()}</span>`:''}</div>
           <div class="slot-meta">
@@ -5290,32 +5373,15 @@ const App = {
     e.dataTransfer.effectAllowed = 'move';
   },
 
+  // Desktop mouse drag (native HTML5 DnD) — same underlying logic as the
+  // touch-friendly tap-to-pick flow, see _performSlotSwap/_performSlotMoveToDay.
   _onSlotDrop(e, targetDay, targetIdx){
     e.preventDefault();
     document.querySelectorAll('.slot-block.dragging').forEach(el=>el.classList.remove('dragging'));
     if(!_drag) return;
     const {day: srcDay, idx: srcIdx} = _drag;
     _drag = null;
-    const srcSlots = [...(state.schedule[srcDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
-    const tgtSlots = [...(state.schedule[targetDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
-    if(srcDay===targetDay && srcIdx===targetIdx) return;
-    // Swap times between the two slots
-    const srcSlot = srcSlots[srcIdx];
-    const tgtSlot = tgtSlots[targetIdx];
-    if(!srcSlot || !tgtSlot) return;
-    // Find actual indices in state.schedule arrays
-    const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
-    const tgtArrIdx = state.schedule[targetDay].findIndex(s=>s.studentId===tgtSlot.studentId && s.start===tgtSlot.start);
-    if(srcArrIdx<0 || tgtArrIdx<0) return;
-    const {start: sS, end: sE} = state.schedule[srcDay][srcArrIdx];
-    const {start: tS, end: tE} = state.schedule[targetDay][tgtArrIdx];
-    state.schedule[srcDay][srcArrIdx].start = tS;
-    state.schedule[srcDay][srcArrIdx].end = tE;
-    state.schedule[targetDay][tgtArrIdx].start = sS;
-    state.schedule[targetDay][tgtArrIdx].end = sE;
-    Storage.saveSchedule(state.schedule);
-    App.renderSchedule();
-    App.renderHome();
+    this._performSlotSwap(srcDay, srcIdx, targetDay, targetIdx);
   },
 
   _onDayTabDrop(e, targetDay){
@@ -5324,21 +5390,7 @@ const App = {
     if(!_drag) return;
     const {day: srcDay, slot: srcSlot} = _drag;
     _drag = null;
-    if(srcDay===targetDay) return;
-    const existing = state.schedule[targetDay]||[];
-    const student = state.students.find(s=>s.id===srcSlot.studentId);
-    if(!student) return;
-    const newTime = Scheduler.findSlotFixed(student, targetDay, existing, state.settings, srcSlot.duration);
-    if(!newTime){ Toast.show(t('toast_no_free_time'),'error'); return; }
-    // Remove from source day
-    const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
-    if(srcArrIdx>=0) state.schedule[srcDay].splice(srcArrIdx,1);
-    // Add to target day with new time
-    if(!state.schedule[targetDay]) state.schedule[targetDay]=[];
-    state.schedule[targetDay].push({...srcSlot, start: newTime.start, end: newTime.end});
-    Storage.saveSchedule(state.schedule);
-    App.renderSchedule();
-    App.renderHome();
+    this._performSlotMoveToDay(srcDay, srcSlot, targetDay);
   },
 
   renderUnplaced(unplaced){
