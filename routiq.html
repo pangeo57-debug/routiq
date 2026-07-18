@@ -3446,7 +3446,7 @@ function schedProgress(pct, phase, sub, icon){
   clearInterval(_schedCreepTimer);
   let creepPct=pct;
   _schedCreepTimer=setInterval(()=>{
-    creepPct += (99-creepPct)*0.02;
+    creepPct += (99-creepPct)*0.01;
     if(bar) bar.style.width=creepPct+'%';
   },150);
   if(ph&&phase){
@@ -3624,144 +3624,6 @@ const App = {
     state.scheduleKmAfter = null;
     Storage.saveSchedule(state.schedule);
     this.renderSchedule();
-  },
-
-  async optimizeSchedule(){
-    const btn = document.getElementById('optimize-btn');
-    if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> '+t('debug_calc_prefix'); }
-    state._schedulingInProgress = true;
-    // Safety net: if something throws outside the phases' own try/catch guards
-    // and this never gets to its normal cleanup, don't leave Settings blocked
-    // forever — force-clear after longer than any legitimate run could take.
-    clearTimeout(this._schedulingWatchdog);
-    this._schedulingWatchdog = setTimeout(()=>{ state._schedulingInProgress=false; }, 9*60*1000);
-    this.requestNotifyPermission(); // user-gesture-triggered, fine to ask here
-
-    // Estimate km BEFORE optimization using pseudo-coords
-    const kmBefore = this._estimateTotalKm(state.schedule);
-    state.scheduleKmBefore = kmBefore;
-
-    // Geocode missing addresses (Nominatim, 1.1s rate limit)
-    const allIds = [...new Set(Object.values(state.schedule).flat().map(s=>s.studentId))];
-    if(!state.coords['home']){
-      const c = await Router.geocode(state.settings.homeAddress);
-      if(c){ state.coords['home']=c; Storage.saveCoords(state.coords); }
-      await new Promise(r=>setTimeout(r,1100));
-    }
-    for(const id of allIds){
-      if(!state.coords[id]){
-        const student = state.students.find(s=>s.id===id);
-        if(student){
-          const c = await Router.geocode(student.address);
-          if(c){ state.coords[id]=c; Storage.saveCoords(state.coords); }
-          await new Promise(r=>setTimeout(r,1100));
-        }
-      }
-    }
-
-    // Fetch HERE traffic matrices (peak + off-peak) if API key configured
-    state.travelMatrixPeak = null;
-    state.travelMatrixOffPeak = null;
-    state.travelMatrix = null; // legacy fallback
-    const hereKey = state.settings && state.settings.hereApiKey;
-    if(hereKey){
-      try{
-        Toast.show(t('toast_here_fetching'));
-        const allIds2 = ['home', ...state.students.map(s=>s.id)];
-        const matCoords = allIds2.map(id=>state.coords[id]).filter(Boolean);
-        const validIds = allIds2.filter(id=>state.coords[id]);
-        // Peak: Mon-Fri 17:00 (heavy traffic)
-        const depPeak = new Date(); depPeak.setHours(17,0,0,0);
-        const matPeak = await Router.getHereMatrix(matCoords, hereKey, depPeak.toISOString());
-        state.travelMatrixPeak = {durations: matPeak.durations, coordIds: validIds};
-        // Off-peak: Saturday 11:00 (lighter traffic)
-        const depOff = new Date(); depOff.setHours(11,0,0,0);
-        // Move to next Saturday if needed
-        const dow = depOff.getDay(); if(dow!==6) depOff.setDate(depOff.getDate()+(6-dow+7)%7||7);
-        const matOff = await Router.getHereMatrix(matCoords, hereKey, depOff.toISOString());
-        state.travelMatrixOffPeak = {durations: matOff.durations, coordIds: validIds};
-        Toast.show(t('toast_here_updated'));
-      }catch(e){
-        Toast.show(t('toast_here_failed'));
-        console.warn('HERE matrix error:', e);
-      }
-    }
-
-    // Build OSRM travel time matrix
-    const matrixCoords = [state.coords['home'], ...allIds.map(id=>state.coords[id]).filter(Boolean)];
-    const matrix = await Router.getMatrix(matrixCoords).catch(()=>null);
-    let travelMinFn = null;
-    if(matrix && matrix.durations){
-      const idxMap = matrixCoords;
-      const distKm=(a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
-      travelMinFn = (a,b) => {
-        const ia = idxMap.findIndex(c=>c&&c.lat===a.lat&&c.lon===a.lon);
-        const ib = idxMap.findIndex(c=>c&&c.lat===b.lat&&c.lon===b.lon);
-        if(ia>=0&&ib>=0&&matrix.durations[ia]&&matrix.durations[ia][ib]!=null)
-          return Math.max(1,Math.round(matrix.durations[ia][ib]/60));
-        return Math.max(1,Math.round(distKm(a,b)/((state.settings&&state.settings.avgCitySpeedKmh)||25)*60));
-      };
-    }
-
-    // Phase 2: geo-optimize (nearest-neighbor TSP, cross-day swaps, 3-way/4-way cycles)
-    schedProgress(45,t('phase2_title'),t('phase2_sub'),'🗺️');
-    await new Promise(r=>setTimeout(r,30));
-    Scheduler.geoOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn);
-    // Phase 3: Simulated Annealing — 25s cross-day reassignment
-    schedProgress(55,t('phase3_title'),t('phase3_sub'),'🔥');
-    await new Promise(r=>setTimeout(r,30));
-    await Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
-    // Phase 4: repair pass — try to place students left out after SA freed up time
-    schedProgress(88,t('phase4_title'),t('phase4_sub'),'🔧');
-    await new Promise(r=>setTimeout(r,30));
-    Scheduler.saRepair(state.schedule, state.students, state.settings, state.schedulerResult);
-    // Phase 5: LNS — destroy/repair to place remaining students (10s)
-    schedProgress(95,t('phase5_title'),t('phase5_sub'),'🔍');
-    await new Promise(r=>setTimeout(r,30));
-    await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000);
-    // Safety net: forcibly fix (or drop) any slot that still violates a
-    // student's own availability, regardless of which phase caused it.
-    const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
-    if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
-    // Still someone unplaced after the normal 10s pass? Don't give up — keep
-    // trying with a much longer budget (up to 7 min) specifically because a
-    // short search can miss a real, valid slot on a lightly-loaded day. Only
-    // runs when it's actually needed, so the common "everyone fits" case
-    // stays fast.
-    if(this.computeUnplacedLive().length > 0){
-      await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 420000, (nLeft, elapsed)=>{
-        schedProgress(96, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}), '🔁');
-      });
-      Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
-    }
-    // Verify constraints — surfaced to the user, not just the console.
-    const issues=Scheduler.verifySchedule(state.schedule,state.students,state.settings);
-    if(issues.length){
-      console.warn('⚠ Schedule constraint issues:',issues);
-      Toast.show(tf('toast_constraint_issues',{n:issues.length}), 'error');
-    }
-    state.scheduleAttempts[0] = { ...state.schedulerResult, schedule: state.schedule };
-
-    state.scheduleAttemptIdx = 0;
-    const best = state.scheduleAttempts[0];
-    state.schedule = best.schedule;
-    state.schedulerResult = best;
-    state.routeResults = {};
-    Storage.saveSchedule(state.schedule);
-
-    state.scheduleOptimized = true;
-    state.scheduleKmAfter = this._estimateTotalKm(state.schedule); // instant placeholder
-    schedProgress(97,t('phase_km_title'),t('phase_km_sub'),'🚗');
-    try{
-      state.scheduleKmAfter = await this._estimateTotalKmReal(state.schedule);
-    }catch(e){ /* keep the straight-line placeholder */ }
-
-    schedProgress(null,null,null,null);
-    state._schedulingInProgress = false;
-    clearTimeout(this._schedulingWatchdog);
-    this.notifyScheduleReady();
-    this.renderSchedule();
-    if(btn){ btn.disabled=false; btn.innerHTML=t('btn_optimize_short'); }
   },
 
   // Straight-line ("as the crow flies") estimate — instant, no network. Used as
@@ -5171,22 +5033,6 @@ const App = {
         <div class="progress-bar" style="height:6px">
           <div class="progress-fill" style="width:${total?placed/total*100:0}%"></div>
         </div>
-      </div>
-      <div style="padding:0 16px 12px">
-        ${state.scheduleOptimized ? `
-          <div style="display:flex;align-items:center;gap:8px;background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:10px;padding:10px 14px;margin-bottom:8px">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#059669">${t('schedule_optimized_done')}</div>
-              <div style="font-size:12px;color:var(--text2)">${tf('schedule_km_before_after',{before:state.scheduleKmBefore?.toFixed(1),after:state.scheduleKmAfter?.toFixed(1),saved:((state.scheduleKmBefore||0)-(state.scheduleKmAfter||0)).toFixed(1)})}</div>
-            </div>
-          </div>
-        ` : `
-          <button id="optimize-btn" class="btn btn-secondary btn-full" onclick="App.optimizeSchedule()" style="font-size:13px">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 6.9 8 11.7z"/></svg>
-            ${t('schedule_optimize_btn')}
-          </button>
-        `}
       </div>
       ${this.renderUnplaced(result.unplaced)}
       <div class="day-tabs" id="day-tabs">
