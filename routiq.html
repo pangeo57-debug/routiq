@@ -4620,6 +4620,10 @@ const App = {
       const inp = document.getElementById('ob-addr');
       if(inp) inp.value = short;
       this._obCoord = coord;
+    } else if(boxId==='set-home-suggest'){
+      const inp = document.getElementById('set-home');
+      if(inp) inp.value = short;
+      this._homeAddrPendingCoord = coord;
     } else {
       const inp = document.getElementById('st-addr');
       if(inp) inp.value = short;
@@ -4725,6 +4729,7 @@ const App = {
     const input = document.getElementById(this._mapPickerTarget);
     if(input) input.value = short;
     if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
+    else if(this._mapPickerTarget === 'set-home') this._homeAddrPendingCoord = coord;
     else { this._addrPendingCoord = coord; this.updateStudentLocationMapMarker(coord); }
     Toast.show(t('toast_location_picked'), 'success');
     this.closeMapPicker();
@@ -5695,13 +5700,20 @@ const App = {
           <label>${t('settings_name')}</label>
           <input type="text" id="set-name" value="${esc(st.teacherName||'')}" placeholder="${t('settings_name_placeholder')}">
         </div>
-        <div class="form-group" style="margin:0">
+        <div class="form-group" style="margin:0;position:relative">
           <label>${t('settings_home_address')}
             ${state.coords['home']
               ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_geocoded')} ${state.coords['home'].lat.toFixed(4)}, ${state.coords['home'].lon.toFixed(4)}</span>`
               : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_not_geocoded')}</span>`}
           </label>
-          <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="${t('settings_home_placeholder')}">
+          <div style="display:flex;gap:6px">
+            <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="${t('settings_home_placeholder')}" autocomplete="off" style="flex:1"
+              oninput="App.onAddrInput(this.value,'set-home-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('set-home-suggest'),200)">
+            <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('set-home')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </button>
+          </div>
+          <div id="set-home-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
         </div>
       </div>
 
@@ -5948,14 +5960,21 @@ const App = {
     s.hereApiKey = document.getElementById('set-here-key')?.value?.trim()||'';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
 
-    // If home address changed, force re-geocode
+    // If home address changed, use the coord already resolved by autocomplete/
+    // map-picker selection if we have one — avoids an extra geocode round-trip
+    // and matches how student addresses are handled in saveStudent().
     if(s.homeAddress !== prevHome){
-      delete state.coords['home'];
+      if(this._homeAddrPendingCoord){
+        state.coords['home'] = this._homeAddrPendingCoord;
+      } else {
+        delete state.coords['home'];
+      }
       state.travelMatrix = null;
       state.travelMatrixPeak = null;
       state.travelMatrixOffPeak = null;
       Storage.saveCoords(state.coords);
     }
+    this._homeAddrPendingCoord = null;
 
     // Day hours
     s.workDays.forEach(d=>{
