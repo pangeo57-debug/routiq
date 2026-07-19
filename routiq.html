@@ -6001,7 +6001,10 @@ const App = {
     });
 
     Storage.saveSettings(s);
-    this.runAndNotify();
+    // Mark stale — don't auto-recalculate. The user regenerates explicitly
+    // via "Ανανέωση" whenever they're ready, not on every settings save.
+    state._scheduleStale = true;
+    if(state.currentScreen==='home') this.renderHome();
     Toast.show(t('toast_settings_saved'),'success');
   },
 
@@ -6046,17 +6049,19 @@ const App = {
     state.settings.blockedSlots = state.settings.blockedSlots||[];
     state.settings.blockedSlots.push({day,start,end,reason});
     Storage.saveSettings(state.settings);
+    state._scheduleStale = true;
     this.closeBlockDrawer();
-    this.runAndNotify();
     this.renderSettings();
+    if(state.currentScreen==='home') this.renderHome();
     Toast.show(t('toast_block_added'),'success');
   },
 
   deleteBlock(idx){
     state.settings.blockedSlots.splice(idx,1);
     Storage.saveSettings(state.settings);
-    this.runAndNotify();
+    state._scheduleStale = true;
     this.renderSettings();
+    if(state.currentScreen==='home') this.renderHome();
     Toast.show(t('toast_block_removed'),'info');
   },
 
