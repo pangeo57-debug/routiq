@@ -1455,10 +1455,54 @@ const Scheduler = {
     const coords = (typeof state !== 'undefined' && state.coords) || {};
     const cA = coords[fromId] || this.coordsHash(fromAddr||'');
     const cB = coords[toId]   || this.coordsHash(toAddr||'');
-    const dx = cA.lon - cB.lon, dy = cA.lat - cB.lat;
-    const km = Math.sqrt(dx*dx + dy*dy) * 111 * 1.4;
+    const km = this.haversineKm(cA, cB) * 1.4;
     const spd = (typeof state!=='undefined'&&state.settings&&state.settings.avgCitySpeedKmh)||25;
     return Math.max(1, Math.round(km / spd * 60));
+  },
+
+  // Real great-circle distance (km) between two {lat,lon} points. The old
+  // fallback here used Δlat/Δlon as if they were equal-length units, which
+  // overstates east-west distances at any latitude away from the equator —
+  // at Patras' latitude (~38°N) that's roughly a 20-25% distortion depending
+  // on the leg's direction. This matters only when no OSRM/HERE matrix is
+  // available (see travelMatrixPeak/OffPeak above) — once a real matrix is
+  // present, this fallback isn't used at all.
+  haversineKm(a, b){
+    if(!a||!b) return 0;
+    const R = 6371;
+    const dLat = (b.lat - a.lat) * Math.PI/180, dLon = (b.lon - a.lon) * Math.PI/180;
+    const la1 = a.lat*Math.PI/180, la2 = b.lat*Math.PI/180;
+    const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+    // Clamp to [0,1]: floating-point rounding can push h fractionally below 0
+    // (or above 1) for near-identical/antipodal points, which turns sqrt()/asin()
+    // into NaN — and a NaN distance silently breaks every downstream comparison
+    // (loops that check "is this better?" never resolve, causing a hang instead
+    // of a crash, which is why this shipped unnoticed until real data hit it).
+    const hc = Math.min(1, Math.max(0, h));
+    return 2*R*Math.asin(Math.sqrt(hc));
+  },
+
+  // Estimated real-road km between two stops (by id), same matrix travelEstMin
+  // uses for minutes. Falls back to straight-line*1.4 when no matrix/distances
+  // are available (e.g. HERE was used, which gives durations but not distances).
+  // This is what geoOptimize/saOptimize should use for their km objective and
+  // for nearest-neighbor ordering, instead of raw Euclidean distance — otherwise
+  // the whole optimization pass is chasing a metric that doesn't match the roads.
+  travelEstKm(fromId, fromAddr, toId, toAddr, day){
+    if(typeof state!=='undefined'){
+      const mat = (day===6 && state.travelMatrixOffPeak) ? state.travelMatrixOffPeak
+                : (state.travelMatrixPeak || state.travelMatrix);
+      if(mat && mat.distances){
+        const ia = mat.coordIds.indexOf(fromId);
+        const ib = mat.coordIds.indexOf(toId);
+        if(ia>=0 && ib>=0 && mat.distances[ia] && mat.distances[ia][ib]!=null)
+          return mat.distances[ia][ib]/1000;
+      }
+    }
+    const coords = (typeof state !== 'undefined' && state.coords) || {};
+    const cA = coords[fromId] || this.coordsHash(fromAddr||'');
+    const cB = coords[toId]   || this.coordsHash(toAddr||'');
+    return this.haversineKm(cA, cB) * 1.4;
   },
 
   // Geographic centroid of a day's lessons
@@ -1502,7 +1546,7 @@ const Scheduler = {
   // a tie-breaker. Every student matters more than a shorter drive.
   runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false){
     const hasRealCoords = Object.keys(coords).length > 0;
-    const dist=(a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
+    const dist=(a,b)=>this.haversineKm(a,b)*1.4;
     const totalKm=(schedule)=>{
       if(!hasRealCoords) return 0;
       const home = coords['home']||{lat:0,lon:0};
@@ -1991,7 +2035,7 @@ const Scheduler = {
   geoOptimize(schedule, students, settings, coords, travelMinFn=null){
     const HOME=coords['home']||this.coordsHash((settings&&settings.homeAddress)||'Πάτρα');
     const getC=(slot)=>coords[slot.studentId]||this.coordsHash(slot.address||'');
-    const distKm=(a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
+    const distKm=(a,b)=>this.haversineKm(a,b)*1.4;
     const trvMin=(a,b)=>travelMinFn?travelMinFn(a,b):Math.max(1,Math.round(distKm(a,b)/((settings&&settings.avgCitySpeedKmh)||25)*60));
 
     // Compute total km for a schedule snapshot. Includes a small per-slot
@@ -2879,7 +2923,7 @@ const Scheduler = {
       const av = st && st.availability && st.availability[day];
       return !!(av && av.on);
     };
-    const distKm = (a,b)=>{const dx=a.lon-b.lon,dy=a.lat-b.lat;return Math.sqrt(dx*dx+dy*dy)*111*1.4;};
+    const distKm = (a,b)=>this.haversineKm(a,b)*1.4;
     const trvMin = travelMinFn
       ? (a,b)=>travelMinFn(a,b)
       : (a,b)=>Math.max(1,Math.round(distKm(a,b)/((settings.avgCitySpeedKmh)||25)*60));
@@ -3345,7 +3389,7 @@ const Router = {
       origins, destinations,
       departureTime: departureTime || new Date().toISOString(),
       routingMode:'fast', transportMode:'car',
-      matrixAttributes:['travelTimes']
+      matrixAttributes:['travelTimes','distances']
     };
     const url = `https://matrix.router.hereapi.com/v8/matrix?async=false&apiKey=${encodeURIComponent(apiKey)}`;
     const resp = await fetch(url, {
@@ -3355,17 +3399,20 @@ const Router = {
     });
     if(!resp.ok) throw new Error(`HERE API ${resp.status}`);
     const data = await resp.json();
-    // data.matrix.travelTimes is flat array, numOrigins × numDestinations
+    // data.matrix.travelTimes/distances are flat arrays, numOrigins × numDestinations
     const n = coords.length;
     const durations = [];
+    const distances = [];
     for(let i=0;i<n;i++){
       durations.push([]);
+      distances.push([]);
       for(let j=0;j<n;j++){
         const idx = i*n+j;
         durations[i].push(data.matrix&&data.matrix.travelTimes?data.matrix.travelTimes[idx]:null);
+        distances[i].push(data.matrix&&data.matrix.distances?data.matrix.distances[idx]:null);
       }
     }
-    return {durations, coords};
+    return {durations, distances, coords};
   },
 
   // Nearest-neighbor TSP for ordering stops
@@ -3388,17 +3435,14 @@ const Router = {
 
   dist(a,b){
     if(!a||!b) return Infinity;
-    const dx=(a.lon||0)-(b.lon||0), dy=(a.lat||0)-(b.lat||0);
-    return Math.sqrt(dx*dx+dy*dy);
+    return Scheduler.haversineKm(a,b);
   },
 
-  // Estimate km from degree distance
-  degreesToKm(deg){ return deg * 111 },
-
+  // Real (haversine) distance in km — see Scheduler.haversineKm for why the
+  // old Δlat/Δlon approximation was measurably wrong away from the equator.
   estimateKm(a,b){
     if(!a||!b) return 0;
-    const dx=a.lon-b.lon, dy=a.lat-b.lat;
-    return this.degreesToKm(Math.sqrt(dx*dx+dy*dy));
+    return Scheduler.haversineKm(a,b);
   },
 
 };
@@ -3906,18 +3950,20 @@ const App = {
           // Peak: weekdays 17:00
           const depPeak = new Date(); depPeak.setHours(17,0,0,0);
           const matPeak = await Router.getHereMatrix(matCoords, hereKey, depPeak.toISOString());
-          state.travelMatrixPeak = {durations: matPeak.durations, coordIds: validIds};
+          state.travelMatrixPeak = {durations: matPeak.durations, distances: matPeak.distances, coordIds: validIds};
           // Off-peak: Saturday 11:00
           const depOff = new Date(); depOff.setHours(11,0,0,0);
           const dow = depOff.getDay(); if(dow!==6) depOff.setDate(depOff.getDate()+(6-dow+7)%7||7);
           const matOff = await Router.getHereMatrix(matCoords, hereKey, depOff.toISOString());
-          state.travelMatrixOffPeak = {durations: matOff.durations, coordIds: validIds};
+          state.travelMatrixOffPeak = {durations: matOff.durations, distances: matOff.distances, coordIds: validIds};
         } else {
           const matrix = await Router.getMatrix(matCoords).catch(()=>null);
           if(matrix && matrix.durations){
-            // No traffic data — use same matrix for both (OSRM is traffic-free)
-            state.travelMatrixPeak = {durations: matrix.durations, coordIds: validIds};
-            state.travelMatrixOffPeak = {durations: matrix.durations, coordIds: validIds};
+            // No traffic data — use same matrix for both (OSRM is traffic-free).
+            // OSRM also gives real road distances (meters) — keep them so the km
+            // objective used by geoOptimize/saOptimize reflects actual roads.
+            state.travelMatrixPeak = {durations: matrix.durations, distances: matrix.distances, coordIds: validIds};
+            state.travelMatrixOffPeak = {durations: matrix.durations, distances: matrix.distances, coordIds: validIds};
           }
         }
       }
@@ -4549,8 +4595,7 @@ const App = {
         const home = state.coords && state.coords['home'];
         if(home){
           results.forEach(res=>{
-            const dx=res.lon-home.lon, dy=res.lat-home.lat;
-            res._distKm = Math.sqrt(dx*dx+dy*dy)*111;
+            res._distKm = Scheduler.haversineKm(res, home);
           });
           results.sort((a,b)=>a._distKm-b._distKm);
         }
