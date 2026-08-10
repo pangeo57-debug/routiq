@@ -3266,6 +3266,294 @@ const Scheduler = {
     for(const d of wdays) schedule[d]=best[d]||[];
   },
 
+  // Adaptive Large Neighborhood Search — destroy/repair with adaptive operator
+  // weights (random/worst/Shaw removal, greedy/regret-2 insertion), 2-opt+Or-opt
+  // local search per touched day, and a restart-on-stagnation kick. Used as a
+  // single-pass replacement for the geoOptimize+saOptimize pipeline: both phases
+  // were only ever comparing straight-line distance internally even when a real
+  // OSRM/HERE road matrix was already fetched — this routes every comparison
+  // through travelEstKm/travelEstMin so it optimizes against actual roads.
+  async alnsOptimize(schedule, students, settings, coords, budgetMs=25000){
+    const wdays = settings.workDays;
+    const dayHours = settings.dayHours;
+    const HOME_ID='home', HOME_ADDR=settings.homeAddress||'';
+    const studentsById = Object.fromEntries(students.map(s=>[s.id,s]));
+    const isAvailable=(sid,day)=>{const av=studentsById[sid]&&studentsById[sid].availability&&studentsById[sid].availability[day];return !!(av&&av.on);};
+    const roadKm=(idA,addrA,idB,addrB,day)=>this.travelEstKm(idA,addrA,idB,addrB,day);
+    const trvMin=(idA,addrA,idB,addrB,day)=>this.travelEstMin(idA,addrA,idB,addrB,day);
+
+    // Convert app's slot format -> internal {studentId,address,start,end} (minutes).
+    // Merged/group blocks are left untouched throughout (never removed/moved),
+    // same safeguard the existing SA already applies.
+    const sc={}, merged={};
+    for(const d of wdays){
+      sc[d]=[]; merged[d]=[];
+      for(const sl of (schedule[d]||[])){
+        if(sl.merged||sl.isGroup){ merged[d].push(sl); continue; }
+        sc[d].push({studentId:sl.studentId, address:sl.address||studentsById[sl.studentId]?.address||'', start:this.toMin(sl.start), end:this.toMin(sl.end)});
+      }
+    }
+
+    const rebuildDay=(slots,day)=>{
+      if(!slots.length) return [];
+      const dh=dayHours[day]; if(!dh) return null;
+      const dayStart=this.toMin(dh.start), dayEnd=this.toMin(dh.end)+15;
+      const buf=settings.travelMargin||2;
+      // Merged/group blocks for this day are laid out with fixed clock times and
+      // never touched by this pass (see the merged[] split above) — a movable
+      // slot's computed start/end must be pushed past any of them it would
+      // otherwise land on, exactly like it would avoid a blocked time slot.
+      const fixed=(merged[day]||[]).map(m=>({start:this.toMin(m.start), end:this.toMin(m.end)}));
+      const out=[]; let cur=dayStart;
+      for(let i=0;i<slots.length;i++){
+        const s=slots[i];
+        const student=studentsById[s.studentId]; if(!student) return null;
+        const dur=student.lessonDuration||(s.end-s.start)||30;
+        const prevId=i===0?HOME_ID:out[i-1].studentId, prevAddr=i===0?HOME_ADDR:out[i-1].address;
+        const trav=i===0?0:trvMin(prevId,prevAddr,s.studentId,s.address,day);
+        cur=i===0?dayStart:out[i-1].end+trav+buf;
+        let end=cur+dur;
+        // Push past any fixed block this candidate window collides with (loop:
+        // pushing past one block can land inside another later block).
+        for(let guard=0; guard<fixed.length+1; guard++){
+          const hit=fixed.find(f=>cur<f.end+buf && end+buf>f.start);
+          if(!hit) break;
+          cur=hit.end+buf; end=cur+dur;
+        }
+        if(end>dayEnd) return null;
+        out.push({studentId:s.studentId, address:s.address, start:cur, end});
+        cur=end;
+      }
+      return out;
+    };
+    const dayFeasible=(slots,day)=>{
+      for(const s of slots){
+        const av=studentsById[s.studentId]&&studentsById[s.studentId].availability&&studentsById[s.studentId].availability[day];
+        if(!av||!av.on) return false;
+        if(s.start<this.toMin(av.start)||s.end>this.toMin(av.end)) return false;
+      }
+      return true;
+    };
+    const WEEKEND_PENALTY=2;
+    const calcKm=(schObj)=>{
+      let km=0;
+      for(const d of wdays){
+        const slots=schObj[d]; if(!slots||!slots.length) continue;
+        let prevId=HOME_ID, prevAddr=HOME_ADDR, prevS=null;
+        for(const s of slots){ if(!prevS||prevS.studentId!==s.studentId) km+=roadKm(prevId,prevAddr,s.studentId,s.address,d); prevId=s.studentId; prevAddr=s.address; prevS=s; }
+        km+=roadKm(prevId,prevAddr,HOME_ID,HOME_ADDR,d);
+        if(Number(d)===6) km+=slots.length*WEEKEND_PENALTY;
+      }
+      return km;
+    };
+    const placedCount=(schObj)=>wdays.reduce((n,d)=>n+(schObj[d]?schObj[d].length:0),0);
+
+    let ss=13579;
+    const rng=()=>{ss=(ss*1664525+1013904223)&0xffffffff;return(ss>>>0)/0xffffffff;};
+
+    // Granular neighborhoods: precompute each student's K nearest others by
+    // straight-line distance, so destroy/repair only considers near-candidate
+    // positions instead of scanning every day×position combo.
+    const K_NEIGH=10;
+    const neighborsOf={};
+    for(const s of students){
+      const c=this.safeCoord(coords, s.id, s.address); if(!c) continue;
+      const ranked=students.filter(o=>o.id!==s.id&&coords[o.id])
+        .sort((a,b)=>this.haversineKm(c,coords[a.id])-this.haversineKm(c,coords[b.id]));
+      neighborsOf[s.id]=ranked.slice(0,K_NEIGH).map(o=>o.id);
+    }
+    const candidateDays=(sid)=>{
+      const days=new Set();
+      for(const nb of (neighborsOf[sid]||[])){
+        for(const d of wdays) if((sc[d]||[]).some(s=>s.studentId===nb) && isAvailable(sid,d)) days.add(d);
+      }
+      for(const d of wdays) if(isAvailable(sid,d)) days.add(d); // small day count anyway -- always keep every legal day open
+      return [...days];
+    };
+
+    const insertionOptions=(sid)=>{
+      const student=studentsById[sid];
+      const opts=[];
+      for(const d of candidateDays(sid)){
+        const order=(sc[d]||[]).map(s=>s.studentId);
+        for(let pos=0;pos<=order.length;pos++){
+          const trial=[...order.slice(0,pos), sid, ...order.slice(pos)];
+          const trialSlots=trial.map(id=>({studentId:id, address:studentsById[id].address}));
+          const rebuilt=rebuildDay(trialSlots,d);
+          if(!rebuilt) continue;
+          if(!dayFeasible(rebuilt,d)) continue;
+          const before=calcKm({...sc,[d]:sc[d]}); const afterObj={...sc,[d]:rebuilt}; const after=calcKm(afterObj);
+          opts.push({day:d, order:trial, cost:after-before});
+        }
+      }
+      return opts;
+    };
+
+    // ---- destroy operators ----
+    const allStops=()=>{const out=[];for(const d of wdays)for(const s of sc[d]) out.push({day:d,studentId:s.studentId}); return out;};
+    const randomRemoval=(q)=>{const all=allStops();for(let i=all.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[all[i],all[j]]=[all[j],all[i]];} const rem=all.slice(0,q); for(const r of rem) sc[r.day]=sc[r.day].filter(s=>s.studentId!==r.studentId); return rem;};
+    const worstRemoval=(q)=>{
+      const scored=[];
+      for(const d of wdays){const slots=sc[d];for(let i=0;i<slots.length;i++){
+        const prevId=i===0?HOME_ID:slots[i-1].studentId, prevAddr=i===0?HOME_ADDR:slots[i-1].address;
+        const nextId=i===slots.length-1?HOME_ID:slots[i+1].studentId, nextAddr=i===slots.length-1?HOME_ADDR:slots[i+1].address;
+        const cur=slots[i];
+        const detour=roadKm(prevId,prevAddr,cur.studentId,cur.address,d)+roadKm(cur.studentId,cur.address,nextId,nextAddr,d)-roadKm(prevId,prevAddr,nextId,nextAddr,d);
+        scored.push({day:d, studentId:cur.studentId, detour});
+      }}
+      scored.sort((a,b)=>b.detour-a.detour);
+      const rem=scored.slice(0,q).map(r=>({day:r.day,studentId:r.studentId}));
+      for(const r of rem) sc[r.day]=sc[r.day].filter(s=>s.studentId!==r.studentId);
+      return rem;
+    };
+    const shawRemoval=(q)=>{
+      const all=allStops(); if(!all.length) return [];
+      const seed=all[Math.floor(rng()*all.length)];
+      sc[seed.day]=sc[seed.day].filter(s=>s.studentId!==seed.studentId);
+      const removed=[seed];
+      let remaining=allStops();
+      while(removed.length<q && remaining.length){
+        const ref=removed[removed.length-1]; const refC=this.safeCoord(coords, ref.studentId, studentsById[ref.studentId]?.address);
+        let bestI=-1,bestScore=Infinity;
+        for(let i=0;i<remaining.length;i++){
+          const c=coords[remaining[i].studentId]; if(!c) continue;
+          const score=this.haversineKm(refC,c);
+          if(score<bestScore){bestScore=score;bestI=i;}
+        }
+        if(bestI===-1) break;
+        const pick=remaining[bestI];
+        sc[pick.day]=sc[pick.day].filter(s=>s.studentId!==pick.studentId);
+        removed.push(pick);
+        remaining=remaining.filter((_,i)=>i!==bestI);
+      }
+      return removed;
+    };
+
+    // ---- repair operators ----
+    const greedyInsertion=(removedIds)=>{
+      const pool=[...removedIds]; const stillUnplaced=[];
+      while(pool.length){
+        let best=null,bestIdx=-1;
+        for(let i=0;i<pool.length;i++){
+          const opts=insertionOptions(pool[i]);
+          if(!opts.length) continue;
+          opts.sort((a,b)=>a.cost-b.cost);
+          if(!best||opts[0].cost<best.cost){best={...opts[0],sid:pool[i]};bestIdx=i;}
+        }
+        if(!best){stillUnplaced.push(...pool);break;}
+        pool.splice(bestIdx,1);
+        const rebuilt=rebuildDay(best.order.map(id=>({studentId:id,address:studentsById[id].address})), best.day);
+        if(rebuilt) sc[best.day]=rebuilt;
+      }
+      return stillUnplaced;
+    };
+    const regret2Insertion=(removedIds)=>{
+      const pool=[...removedIds]; const stillUnplaced=[];
+      while(pool.length){
+        let chosenIdx=-1,chosenOpt=null,bestRegret=-Infinity;
+        for(let i=0;i<pool.length;i++){
+          const opts=insertionOptions(pool[i]);
+          if(!opts.length) continue;
+          opts.sort((a,b)=>a.cost-b.cost);
+          const regret=opts.length>1?opts[1].cost-opts[0].cost:opts[0].cost;
+          if(regret>bestRegret){bestRegret=regret;chosenIdx=i;chosenOpt=opts[0];}
+        }
+        if(chosenIdx===-1){stillUnplaced.push(...pool);break;}
+        pool.splice(chosenIdx,1);
+        const rebuilt=rebuildDay(chosenOpt.order.map(id=>({studentId:id,address:studentsById[id].address})), chosenOpt.day);
+        if(rebuilt) sc[chosenOpt.day]=rebuilt;
+      }
+      return stillUnplaced;
+    };
+
+    // ---- local search: 2-opt + Or-opt per touched day ----
+    const twoOptOrOptDay=(day)=>{
+      let slots=sc[day]; if(slots.length<3) return;
+      let order=slots.map(s=>s.studentId);
+      let bestKm=calcKm({[day]:slots});
+      let improved=true;
+      while(improved){
+        improved=false;
+        for(let i=0;i<order.length-1;i++)for(let j=i+1;j<order.length;j++){
+          const trial=[...order.slice(0,i),...order.slice(i,j+1).reverse(),...order.slice(j+1)];
+          const rebuilt=rebuildDay(trial.map(id=>({studentId:id,address:studentsById[id].address})),day);
+          if(!rebuilt||!dayFeasible(rebuilt,day)) continue;
+          const km=calcKm({[day]:rebuilt});
+          if(km<bestKm-1e-9){order=trial;bestKm=km;improved=true;slots=rebuilt;}
+        }
+      }
+      sc[day]=slots;
+    };
+
+    // ---- main ALNS loop ----
+    let curPlaced=placedCount(sc), curKm=calcKm(sc);
+    let bestSc=JSON.parse(JSON.stringify(sc)), bestPlaced=curPlaced, bestKm=curKm;
+    const dOps=[{n:'random',fn:randomRemoval,w:1},{n:'worst',fn:worstRemoval,w:1},{n:'shaw',fn:shawRemoval,w:1}];
+    const rOps=[{n:'greedy',fn:greedyInsertion,w:1},{n:'regret2',fn:regret2Insertion,w:1}];
+    const pick=(ops)=>{const total=ops.reduce((a,o)=>a+o.w,0);let r=rng()*total;for(const o of ops){if(r<o.w)return o;r-=o.w;}return ops[ops.length-1];};
+    const REACT=0.3;
+    const STAGNATION_LIMIT=300; let stagnant=0;
+
+    const t0=Date.now(); let iter=0;
+    while(Date.now()-t0<budgetMs){
+      if(++iter%80===0) await new Promise(r=>setTimeout(r,0));
+      const T=Math.max(0.01, 2.0*(1-(Date.now()-t0)/budgetMs));
+      const snapshot=JSON.parse(JSON.stringify(sc));
+      const nTotal=placedCount(sc);
+      const q=Math.max(1,Math.min(5,Math.floor(nTotal*(0.1+rng()*0.2))));
+
+      const dOp=pick(dOps); const removed=dOp.fn(q);
+      const rOp=pick(rOps); rOp.fn(removed.map(r=>r.studentId));
+      const touched=[...new Set(removed.map(r=>r.day))];
+      for(const d of touched) if((sc[d]||[]).length) twoOptOrOptDay(d);
+
+      const trialPlaced=placedCount(sc), trialKm=calcKm(sc);
+      const better=trialPlaced>curPlaced||(trialPlaced===curPlaced&&trialKm<curKm);
+      const worseAccept=trialPlaced===curPlaced&&rng()<Math.exp(-(trialKm-curKm)/T);
+
+      let reward=0;
+      if(trialPlaced>bestPlaced||(trialPlaced===bestPlaced&&trialKm<bestKm-1e-6)){
+        bestSc=JSON.parse(JSON.stringify(sc)); bestPlaced=trialPlaced; bestKm=trialKm; reward=3; stagnant=0;
+      } else { stagnant++; reward=better?2:(worseAccept?1:0); }
+
+      if(better||worseAccept){ curPlaced=trialPlaced; curKm=trialKm; }
+      else { for(const d of wdays) sc[d]=snapshot[d]; }
+
+      dOp.w=(1-REACT)*dOp.w+REACT*reward; rOp.w=(1-REACT)*rOp.w+REACT*reward;
+
+      if(stagnant>=STAGNATION_LIMIT){
+        // restart-on-stagnation: perturb from bestSc with a few forced random
+        // relocations, resume search from there.
+        for(const d of wdays) sc[d]=JSON.parse(JSON.stringify(bestSc[d]));
+        for(let k=0;k<6;k++){
+          const ad=wdays.filter(d=>(sc[d]||[]).length>0); if(!ad.length) break;
+          const d1=ad[Math.floor(rng()*ad.length)]; const d2=wdays[Math.floor(rng()*wdays.length)];
+          if(d1===d2||!sc[d1].length) continue;
+          const idx=Math.floor(rng()*sc[d1].length); const moved=sc[d1][idx];
+          if(!isAvailable(moved.studentId,d2)) continue;
+          if((sc[d2]||[]).some(s=>s.studentId===moved.studentId)) continue;
+          const s1=sc[d1].filter((_,i)=>i!==idx);
+          const s2=[...(sc[d2]||[])]; s2.splice(Math.floor(rng()*(s2.length+1)),0,moved);
+          const r1=rebuildDay(s1,d1), r2=rebuildDay(s2,d2);
+          if(r2!=null){ sc[d1]=r1||s1; sc[d2]=r2; }
+        }
+        curPlaced=placedCount(sc); curKm=calcKm(sc);
+        stagnant=0;
+      }
+    }
+
+    // Write back: best feasible schedule found, converted to the app's slot format
+    for(const d of wdays){
+      const out=(bestSc[d]||[]).map(s=>{
+        const student=studentsById[s.studentId];
+        return {studentId:s.studentId, studentName:student.name, subject:student.subject||'—',
+          address:s.address, color:student.color||0, start:this.toTime(s.start), end:this.toTime(s.end),
+          duration:student.lessonDuration, mergedCount:1, merged:false};
+      });
+      schedule[d]=[...out, ...merged[d]].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+    }
+  },
+
   // Phase 4: after SA, try to slot in students that weren't placed
   saRepair(schedule, students, settings, schedulerResult){
     // Group members must only ever be placed together — never solo-repair one half of a group
@@ -4009,18 +4297,16 @@ const App = {
       r = result;
     }catch(e){ console.error('Scheduler error',e); }
 
-    // Phase 2: geo-optimize
+    // Phase 2+3: route optimization (ALNS — destroy/repair with adaptive
+    // operator weights, replaces the old geoOptimize+SA two-step pipeline;
+    // optimizes against real road distance via travelEstKm/travelEstMin
+    // instead of straight-line distance)
     schedProgress(35,t('phase2_title'),t('phase2_sub'),'🗺️');
     await new Promise(r=>setTimeout(r,40));
-    try{ Scheduler.geoOptimize(state.schedule, state.students, state.settings, state.coords); }catch(e){}
-
-    // Phase 3: Simulated Annealing
     schedProgress(55,t('phase3_title'),t('phase3_sub_short'),'🔥');
-    await new Promise(r=>setTimeout(r,40));
     try{
-      const travelMinFn = null; // uses state.travelMatrixPeak via travelEstMin
-      await Scheduler.saOptimize(state.schedule, state.students, state.settings, state.coords, travelMinFn, 25000);
-    }catch(e){}
+      await Scheduler.alnsOptimize(state.schedule, state.students, state.settings, state.coords, 25000);
+    }catch(e){ console.error('alnsOptimize error', e); }
 
     // Phase 4: repair
     schedProgress(82,t('phase4b_title'),t('phase4b_sub'),'🔧');
