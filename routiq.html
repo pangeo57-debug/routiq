@@ -1438,6 +1438,20 @@ const Scheduler = {
     return { lat: 38.20 + (seed % 200)/1000, lon: 21.70 + ((seed*7) % 200)/1000 };
   },
 
+  // A stored coordinate can exist (truthy object) but still be unusable —
+  // e.g. {lat: NaN, lon: NaN} from a failed geocode that wasn't caught before
+  // being saved. `coords[id] || fallback` doesn't catch this: the object
+  // itself is truthy, so the fallback never triggers, and NaN then silently
+  // propagates through every downstream distance/time calculation. Use this
+  // wherever a raw coordinate is read, instead of a plain `||`.
+  validCoord(c){
+    return !!c && Number.isFinite(c.lat) && Number.isFinite(c.lon);
+  },
+  safeCoord(coordsObj, id, addr){
+    const c = coordsObj && coordsObj[id];
+    return this.validCoord(c) ? c : this.coordsHash(addr||'');
+  },
+
   // Estimated travel minutes between two slots/addresses using geocoords.
   // day: 1-5 = weekday (peak matrix), 6 = Saturday (off-peak matrix), undefined = peak
   travelEstMin(fromId, fromAddr, toId, toAddr, day){
@@ -1453,8 +1467,8 @@ const Scheduler = {
       }
     }
     const coords = (typeof state !== 'undefined' && state.coords) || {};
-    const cA = coords[fromId] || this.coordsHash(fromAddr||'');
-    const cB = coords[toId]   || this.coordsHash(toAddr||'');
+    const cA = this.safeCoord(coords, fromId, fromAddr);
+    const cB = this.safeCoord(coords, toId, toAddr);
     const km = this.haversineKm(cA, cB) * 1.4;
     const spd = (typeof state!=='undefined'&&state.settings&&state.settings.avgCitySpeedKmh)||25;
     return Math.max(1, Math.round(km / spd * 60));
@@ -1500,14 +1514,14 @@ const Scheduler = {
       }
     }
     const coords = (typeof state !== 'undefined' && state.coords) || {};
-    const cA = coords[fromId] || this.coordsHash(fromAddr||'');
-    const cB = coords[toId]   || this.coordsHash(toAddr||'');
+    const cA = this.safeCoord(coords, fromId, fromAddr);
+    const cB = this.safeCoord(coords, toId, toAddr);
     return this.haversineKm(cA, cB) * 1.4;
   },
 
   // Geographic centroid of a day's lessons
   dayCentroid(daySlots, coords){
-    const pts = daySlots.map(s=>coords[s.studentId]||this.coordsHash(s.address)).filter(Boolean);
+    const pts = daySlots.map(s=>this.safeCoord(coords, s.studentId, s.address)).filter(Boolean);
     if(!pts.length) return null;
     return { lat: pts.reduce((a,p)=>a+p.lat,0)/pts.length, lon: pts.reduce((a,p)=>a+p.lon,0)/pts.length };
   },
@@ -2033,8 +2047,8 @@ const Scheduler = {
   // Phase 2: nearest-neighbor reorder within each day for min km
   // Keeps original order if any availability window is violated after reorder
   geoOptimize(schedule, students, settings, coords, travelMinFn=null){
-    const HOME=coords['home']||this.coordsHash((settings&&settings.homeAddress)||'Πάτρα');
-    const getC=(slot)=>coords[slot.studentId]||this.coordsHash(slot.address||'');
+    const HOME=this.safeCoord(coords, 'home', (settings&&settings.homeAddress)||'Πάτρα');
+    const getC=(slot)=>this.safeCoord(coords, slot.studentId, slot.address||'');
     const distKm=(a,b)=>this.haversineKm(a,b)*1.4;
     const trvMin=(a,b)=>travelMinFn?travelMinFn(a,b):Math.max(1,Math.round(distKm(a,b)/((settings&&settings.avgCitySpeedKmh)||25)*60));
 
@@ -2796,8 +2810,8 @@ const Scheduler = {
             if(!(avA[dayB]&&avA[dayB].on)) continue;
             if(!(avB[dayA]&&avB[dayA].on)) continue;
             // Calc current vs swapped geo spread
-            const cA = coords[slotA.studentId]||this.coordsHash(slotA.address);
-            const cB = coords[slotB.studentId]||this.coordsHash(slotB.address);
+            const cA = this.safeCoord(coords, slotA.studentId, slotA.address);
+            const cB = this.safeCoord(coords, slotB.studentId, slotB.address);
             const centA = this.dayCentroid(schedule[dayA].filter((_,i)=>i!==si), coords)||cA;
             const centB = this.dayCentroid(schedule[dayB].filter((_,i)=>i!==sj), coords)||cB;
             const before = this.dist(cA,centA) + this.dist(cB,centB);
