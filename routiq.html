@@ -3294,6 +3294,12 @@ const Router = {
   NOMINATIM: 'https://nominatim.openstreetmap.org',
   OSRM:      'https://router.project-osrm.org',
 
+  // Address search/reverse-geocode results (street names, POI labels) should be
+  // in the app's current UI language, not hardcoded Greek.
+  _geoLang(){
+    return (typeof curLang === 'function') ? curLang() : 'el';
+  },
+
   // Bias results toward the user's actual working area (±~30km around home) so an
   // ambiguous street name doesn't accidentally resolve to a same-named street elsewhere in Greece.
   _viewboxParam(){
@@ -3339,7 +3345,7 @@ const Router = {
     if(!address) return null;
     try{
       const q = encodeURIComponent(address);
-      const url = `https://geocode.search.hereapi.com/v1/geocode?q=${q}&in=countryCode:GRC&limit=1&lang=el&apiKey=${key}`;
+      const url = `https://geocode.search.hereapi.com/v1/geocode?q=${q}&in=countryCode:GRC&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
       const r = await fetch(url);
       if(!r.ok) return null;
       const d = await r.json();
@@ -4627,7 +4633,7 @@ const App = {
   async _searchHere(val, key){
     const home = (state.coords && state.coords['home']) || {lat:38.2466, lon:21.7346};
     const q = encodeURIComponent(val.trim());
-    const url = `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${home.lat},${home.lon}&limit=8&lang=el&apiKey=${key}`;
+    const url = `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${home.lat},${home.lon}&limit=8&lang=${Router._geoLang()}&apiKey=${key}`;
     const r = await fetch(url);
     if(!r.ok) throw new Error(`HERE Autosuggest ${r.status}`);
     const d = await r.json();
@@ -4646,12 +4652,12 @@ const App = {
     // Nominatim then has to match "Ελλάδα" as a literal token too.
     const q = encodeURIComponent(val.trim());
     const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1${Router._viewboxParam()}`;
-    const r = await fetch(url, {headers:{'Accept-Language':'el'}});
+    const r = await fetch(url, {headers:{'Accept-Language':Router._geoLang()}});
     if(!r.ok) throw new Error(`Nominatim ${r.status}`);
     let results = await r.json();
     if((!Array.isArray(results) || results.length===0) && Router._viewboxParam()){
       const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1`;
-      const r2 = await fetch(url2, {headers:{'Accept-Language':'el'}});
+      const r2 = await fetch(url2, {headers:{'Accept-Language':Router._geoLang()}});
       if(r2.ok) results = await r2.json();
     }
     if(!Array.isArray(results)) results = [];
@@ -4728,7 +4734,7 @@ const App = {
   async _reverseGeocode(lat, lon){
     const hereKey = state.settings && state.settings.hereApiKey;
     if(hereKey){
-      const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=el&apiKey=${hereKey}`;
+      const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=${Router._geoLang()}&apiKey=${hereKey}`;
       const r = await fetch(url);
       if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
       const d = await r.json();
@@ -4736,7 +4742,7 @@ const App = {
       return item && (item.address ? item.address.label : item.title);
     }
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
-    const r = await fetch(url, {headers:{'Accept-Language':'el','User-Agent':'RoutePal/1.0'}});
+    const r = await fetch(url, {headers:{'Accept-Language':Router._geoLang(),'User-Agent':'RoutePal/1.0'}});
     const d = await r.json();
     return d && d.display_name;
   },
