@@ -3273,7 +3273,7 @@ const Scheduler = {
   // were only ever comparing straight-line distance internally even when a real
   // OSRM/HERE road matrix was already fetched — this routes every comparison
   // through travelEstKm/travelEstMin so it optimizes against actual roads.
-  async alnsOptimize(schedule, students, settings, coords, budgetMs=25000){
+  async alnsOptimize(schedule, students, settings, coords, budgetMs=25000, onTick=null){
     const wdays = settings.workDays;
     const dayHours = settings.dayHours;
     const HOME_ID='home', HOME_ADDR=settings.homeAddress||'';
@@ -3494,10 +3494,15 @@ const Scheduler = {
     const REACT=0.3;
     const STAGNATION_LIMIT=300; let stagnant=0;
 
-    const t0=Date.now(); let iter=0;
+    const t0=Date.now(); let iter=0; let lastTick=t0;
     while(Date.now()-t0<budgetMs){
       if(++iter%80===0) await new Promise(r=>setTimeout(r,0));
-      const T=Math.max(0.01, 2.0*(1-(Date.now()-t0)/budgetMs));
+      const now=Date.now();
+      // Report real search progress (not just elapsed-time) so the UI can show
+      // actual movement instead of a fake creep — throttled to ~4/sec so it
+      // doesn't spam DOM updates.
+      if(onTick && now-lastTick>250){ lastTick=now; onTick((now-t0)/budgetMs, bestKm, bestPlaced); }
+      const T=Math.max(0.01, 2.0*(1-(now-t0)/budgetMs));
       const snapshot=JSON.parse(JSON.stringify(sc));
       const nTotal=placedCount(sc);
       const q=Math.max(1,Math.min(5,Math.floor(nTotal*(0.1+rng()*0.2))));
@@ -4305,7 +4310,11 @@ const App = {
     await new Promise(r=>setTimeout(r,40));
     schedProgress(55,t('phase3_title'),t('phase3_sub_short'),'🔥');
     try{
-      await Scheduler.alnsOptimize(state.schedule, state.students, state.settings, state.coords, 25000);
+      // Drive the bar from real search progress (fraction of the ALNS time
+      // budget actually used) instead of leaving it to the fake creep — the
+      // creep alone visibly stalls over a single ~25s phase.
+      const onTick = (frac)=> schedProgress(55 + Math.min(1,frac)*27, t('phase3_title'), t('phase3_sub_short'), '🔥');
+      await Scheduler.alnsOptimize(state.schedule, state.students, state.settings, state.coords, 25000, onTick);
     }catch(e){ console.error('alnsOptimize error', e); }
 
     // Phase 4: repair
