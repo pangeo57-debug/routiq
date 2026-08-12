@@ -657,6 +657,7 @@ function defaultSettings(){
 const I18N = {
   el: {
     days:['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'],
+    subjects:{'Μαθηματικά':'Μαθηματικά','Φυσική':'Φυσική','Χημεία':'Χημεία','Βιολογία':'Βιολογία','Αγγλικά':'Αγγλικά','Ιστορία':'Ιστορία','Γεωγραφία':'Γεωγραφία','Λογοτεχνία':'Λογοτεχνία','Πληροφορική':'Πληροφορική','Άλγεβρα':'Άλγεβρα','Γεωμετρία':'Γεωμετρία','Άλλο':'Άλλο'},
     daysFull:['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'],
     nav_home:'Home', nav_students:'Μαθητές', nav_schedule:'Πρόγραμμα', nav_route:'Διαδρομή', nav_settings:'Ρυθμίσεις',
     home_title:'Εβδομαδιαίο Πρόγραμμα', home_today:'Σήμερα', home_no_lessons_today:'Δεν υπάρχουν μαθήματα σήμερα',
@@ -831,6 +832,7 @@ const I18N = {
   },
   en: {
     days:['','Mon','Tue','Wed','Thu','Fri','Sat'],
+    subjects:{'Μαθηματικά':'Math','Φυσική':'Physics','Χημεία':'Chemistry','Βιολογία':'Biology','Αγγλικά':'English','Ιστορία':'History','Γεωγραφία':'Geography','Λογοτεχνία':'Literature','Πληροφορική':'Computer Science','Άλγεβρα':'Algebra','Γεωμετρία':'Geometry','Άλλο':'Other'},
     daysFull:['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
     nav_home:'Home', nav_students:'Students', nav_schedule:'Schedule', nav_route:'Route', nav_settings:'Settings',
     home_title:'Weekly Schedule', home_today:'Today', home_no_lessons_today:'No lessons today',
@@ -1005,6 +1007,7 @@ const I18N = {
   },
   fr: {
     days:['','Lun','Mar','Mer','Jeu','Ven','Sam'],
+    subjects:{'Μαθηματικά':'Mathématiques','Φυσική':'Physique','Χημεία':'Chimie','Βιολογία':'Biologie','Αγγλικά':'Anglais','Ιστορία':'Histoire','Γεωγραφία':'Géographie','Λογοτεχνία':'Littérature','Πληροφορική':'Informatique','Άλγεβρα':'Algèbre','Γεωμετρία':'Géométrie','Άλλο':'Autre'},
     daysFull:['','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'],
     nav_home:'Accueil', nav_students:'Élèves', nav_schedule:'Programme', nav_route:'Itinéraire', nav_settings:'Réglages',
     home_title:'Programme Hebdomadaire', home_today:"Aujourd'hui", home_no_lessons_today:"Pas de cours aujourd'hui",
@@ -1179,6 +1182,7 @@ const I18N = {
   },
   de: {
     days:['','Mo','Di','Mi','Do','Fr','Sa'],
+    subjects:{'Μαθηματικά':'Mathematik','Φυσική':'Physik','Χημεία':'Chemie','Βιολογία':'Biologie','Αγγλικά':'Englisch','Ιστορία':'Geschichte','Γεωγραφία':'Geografie','Λογοτεχνία':'Literatur','Πληροφορική':'Informatik','Άλγεβρα':'Algebra','Γεωμετρία':'Geometrie','Άλλο':'Sonstiges'},
     daysFull:['','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],
     nav_home:'Start', nav_students:'Schüler', nav_schedule:'Stundenplan', nav_route:'Route', nav_settings:'Einstellungen',
     home_title:'Wochenplan', home_today:'Heute', home_no_lessons_today:'Heute keine Stunden',
@@ -1379,6 +1383,16 @@ function applyLanguageArrays(){
   const d = (I18N[lang]&&I18N[lang].days) || I18N.el.days;
   const df = (I18N[lang]&&I18N[lang].daysFull) || I18N.el.daysFull;
   for(let i=0;i<7;i++){ DAYS[i]=d[i]; DAYS_FULL[i]=df[i]; }
+}
+
+// Students' `subject` field is always stored as one of the fixed Greek
+// SUBJECTS values (the <select> in the student form never lets free text
+// through), so switching UI language only needs to translate it for display
+// — the stored value never changes, so existing student data never migrates.
+function subjectLabel(subj){
+  const lang = curLang();
+  const map = (I18N[lang]&&I18N[lang].subjects) || I18N.el.subjects;
+  return (map && map[subj]) || subj;
 }
 
 // ============================================================
@@ -4102,7 +4116,7 @@ const App = {
             <div class="pdf-slot-time">${esc(sl.start)}–${esc(sl.end)}</div>
             <div class="pdf-slot-info">
               <div class="pdf-slot-name">${esc(sl.studentName)}${badge}</div>
-              <div class="pdf-slot-meta">${esc(sl.subject||'')} · ${esc(sl.address||'')}</div>
+              <div class="pdf-slot-meta">${esc(subjectLabel(sl.subject||''))} · ${esc(sl.address||'')}</div>
             </div>
           </div>`;
         });
@@ -4510,7 +4524,7 @@ const App = {
         <div class="slot-time">${slot.start} – ${slot.end}</div>
         <div class="slot-name">${esc(slot.studentName)} ${mergeTag}</div>
         <div class="slot-meta">
-          <span class="chip chip-gray">${esc(slot.subject)}</span>
+          <span class="chip chip-gray">${esc(subjectLabel(slot.subject))}</span>
           <span class="chip chip-gray">${slot.duration}${t('unit_min')}</span>
         </div>
       </div>`;
@@ -4643,7 +4657,7 @@ const App = {
           <div class="student-avatar" style="background:${bg}20;color:${bg};border:1px solid ${bg}40">${initials}</div>
           <div class="student-info">
             <div class="student-name">${esc(st.name)}</div>
-            <div class="student-sub">${esc(st.subject)} · ${st.lessonsPerWeek}${t('student_per_week_suffix')} · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
+            <div class="student-sub">${esc(subjectLabel(st.subject))} · ${st.lessonsPerWeek}${t('student_per_week_suffix')} · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
@@ -4733,7 +4747,7 @@ const App = {
       <div class="form-group">
         <label>${L.session}</label>
         <select id="st-subject">
-          ${SUBJECTS.map(sub=>`<option value="${sub}" ${st?.subject===sub?'selected':''}>${sub}</option>`).join('')}
+          ${SUBJECTS.map(sub=>`<option value="${sub}" ${st?.subject===sub?'selected':''}>${subjectLabel(sub)}</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
@@ -5606,7 +5620,7 @@ const App = {
           <div class="slot-time">${slot.start} – ${displayEnd}</div>
           <div class="slot-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${esc(slot.studentName)}${mergeTag}${slot.isGroup?`<span style="font-size:10px;background:rgba(139,92,246,.2);color:#a78bfa;padding:1px 6px;border-radius:10px;margin-left:4px">${t('form_type_group').toLowerCase()}</span>`:''}</div>
           <div class="slot-meta">
-            <span class="chip chip-gray">${esc(slot.subject)}</span>
+            <span class="chip chip-gray">${esc(subjectLabel(slot.subject))}</span>
             <span class="chip chip-gray">${slot._totalDur}${t('unit_min')}</span>
             <span class="chip chip-gray" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis">${esc(slot.address)}</span>
           </div>
@@ -5909,7 +5923,7 @@ const App = {
           <div class="stop-info">
             <div class="stop-name">${stop.studentName||'—'}</div>
             <div class="stop-addr">${stop.address||'—'}</div>
-            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${stop._end||stop.end} · ${stop.subject||''}</span>${travelRow}</div>
+            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${stop._end||stop.end} · ${subjectLabel(stop.subject)||''}</span>${travelRow}</div>
           </div>
         </div>
         ${i<stops.length-1?'<div class="stop-connector" style="margin-left:29px"></div>':''}
