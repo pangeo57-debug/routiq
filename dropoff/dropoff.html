@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#fff7ed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="DropOff">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>DropOff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --primary: #ea580c;
+  --primary-dark: #c2410c;
+  --bg: #fdf8f4;
+  --bg2: #ffffff;
+  --bg3: #f6efe8;
+  --bg4: #efe4d9;
+  --border: #e7dcd0;
+  --text: #241c14;
+  --text2: #6b6055;
+  --text3: #a29585;
+  --red: #dc2626;
+  --green: #059669;
+  --orange: #d97706;
+  --blue: #2563eb;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --nav-h: 64px;
+  --max-w: 430px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%;font-size:16px;-webkit-tap-highlight-color:transparent}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-weight:400;
+  height:100%;max-width:var(--max-w);margin:0 auto;
+  overflow-x:hidden;overscroll-behavior:none;
+  position:relative;
+}
+h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+#app{display:flex;flex-direction:column;height:100dvh;height:100vh;overflow:hidden}
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:calc(var(--nav-h) + 16px);display:none;animation:fadeIn .2s ease}
+.screen.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+nav{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:var(--max-w);
+  height:var(--nav-h);
+  background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-around;
+  z-index:100;padding:0 8px;
+  backdrop-filter:blur(12px);
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:8px 4px;border:none;background:transparent;color:var(--text3);
+  cursor:pointer;transition:color .2s;font-size:10px;font-family:'DM Sans',sans-serif;
+}
+.nav-btn svg{width:22px;height:22px;transition:transform .2s}
+.nav-btn.active{color:var(--primary)}
+.nav-btn.active svg{transform:scale(1.1)}
+
+.topbar{padding:52px 20px 16px;background:var(--bg);position:sticky;top:0;z-index:10}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+.logo span{color:var(--primary)}
+.topbar-sub{color:var(--text2);font-size:13px;margin-top:2px}
+
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:0 16px 12px}
+.card-sm{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px}
+.section-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);padding:0 16px;margin:20px 0 8px}
+.empty-state{text-align:center;padding:40px 24px;color:var(--text3)}
+.empty-state svg{width:40px;height:40px;margin-bottom:10px;opacity:.5}
+.empty-state p{font-size:13px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{background:var(--bg4);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg3)}
+.btn-danger{background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.25)}
+.btn-danger:hover{background:rgba(220,38,38,.18)}
+.btn-icon{width:36px;height:36px;padding:0;border-radius:var(--radius-sm);background:var(--bg4);border:1px solid var(--border);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.btn-icon:hover{background:var(--bg3);color:var(--text)}
+.btn-full{width:100%}
+.btn svg{width:16px;height:16px}
+
+.form-group{margin-bottom:14px;position:relative}
+label{display:block;font-size:13px;color:var(--text2);margin-bottom:6px;font-weight:500}
+input,select,textarea{
+  width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:10px 12px;font-family:'DM Sans',sans-serif;
+  font-size:14px;color:var(--text);outline:none;transition:border-color .15s;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--primary)}
+textarea{resize:vertical;min-height:60px}
+
+.suggest-box{position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-top:4px;max-height:220px;overflow-y:auto;z-index:50;display:none;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+
+.order-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin:0 16px 10px;display:flex;gap:12px;align-items:flex-start}
+.order-item.delivered{opacity:.55}
+.order-item.delivered .order-item-name{text-decoration:line-through}
+.order-item-body{flex:1;min-width:0}
+.order-item-name{font-weight:600;font-size:14px}
+.order-item-addr{font-size:12.5px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.order-item-notes{font-size:12px;color:var(--text3);margin-top:4px;font-style:italic}
+.order-item-actions{display:flex;gap:6px;flex-shrink:0}
+.badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px;margin-top:6px}
+.badge-pending{background:rgba(217,119,6,.12);color:var(--orange)}
+.badge-assigned{background:rgba(37,99,235,.12);color:var(--blue)}
+.badge-delivered{background:rgba(5,150,105,.12);color:var(--green)}
+.badge-nogeo{background:rgba(220,38,38,.12);color:var(--red)}
+
+.savings-card{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border-radius:var(--radius);margin:0 16px 14px;padding:14px 16px}
+.savings-card-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;opacity:.85}
+.savings-card-row{display:flex;gap:8px;margin-top:8px}
+.savings-stat{flex:1;text-align:center;background:rgba(255,255,255,.14);border-radius:var(--radius-sm);padding:8px 4px}
+.savings-stat-n{font-family:'Syne',sans-serif;font-size:17px;font-weight:800}
+.savings-stat-l{font-size:10px;opacity:.85;margin-top:2px}
+.savings-card-sub{font-size:11px;opacity:.85;margin-top:8px;line-height:1.4}
+.driver-route-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin:0 16px 12px;overflow:hidden}
+.driver-route-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.driver-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.driver-route-head-name{font-weight:700;font-size:14px;flex:1}
+.driver-route-stats{font-size:12px;color:var(--text2);white-space:nowrap}
+.stop-row{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.stop-row:last-child{border-bottom:none}
+.stop-num{width:22px;height:22px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.stop-body{flex:1;min-width:0}
+.stop-name{font-size:13.5px;font-weight:600}
+.stop-addr{font-size:12px;color:var(--text2);margin-top:1px}
+.stop-row.delivered .stop-name{text-decoration:line-through;color:var(--text3)}
+.stop-check{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:transparent}
+.stop-check.done{background:var(--green);border-color:var(--green);color:#fff}
+.stop-check svg{width:14px;height:14px}
+
+#routes-map{height:220px;border-radius:var(--radius);margin:0 16px 12px;border:1px solid var(--border);overflow:hidden}
+.route-hint{font-size:11.5px;color:var(--text3);padding:0 16px 12px}
+
+.driver-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin:0 16px 10px;display:flex;align-items:center;gap:10px}
+.driver-item-name{flex:1;font-weight:600;font-size:14px}
+.driver-item.inactive{opacity:.5}
+
+.drawer-overlay{position:fixed;inset:0;background:rgba(20,14,8,.45);z-index:300;display:none;align-items:flex-end;justify-content:center}
+.drawer-overlay.open{display:flex}
+.drawer{background:var(--bg2);width:100%;max-width:var(--max-w);border-radius:20px 20px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;animation:slideUp .25s ease}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.drawer-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700}
+.drawer-actions{display:flex;gap:10px;margin-top:6px}
+
+.toast-container{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:500;width:100%;max-width:calc(var(--max-w) - 32px);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:var(--text);color:#fff;padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:fadeIn .2s ease}
+.toast-error{background:var(--red)}
+.toast-warning{background:var(--orange)}
+.toast-success{background:var(--green)}
+
+.fab-add{display:flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="screen active" id="screen-orders">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <div class="logo">Drop<span>Off</span></div>
+          <div class="topbar-sub" id="orders-subtitle"></div>
+        </div>
+        <button class="btn btn-primary fab-add" onclick="App.openOrderModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span id="orders-new-label"></span>
+        </button>
+      </div>
+    </div>
+    <div id="orders-list"></div>
+  </div>
+
+  <div class="screen" id="screen-routes">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <div class="logo" id="routes-title"></div>
+          <div class="topbar-sub" id="routes-subtitle"></div>
+        </div>
+        <button class="btn btn-primary" id="optimize-btn" onclick="App.runOptimize()"></button>
+      </div>
+    </div>
+    <div id="routes-map"></div>
+    <div id="routes-list"></div>
+  </div>
+
+  <div class="screen" id="screen-drivers">
+    <div class="topbar">
+      <div class="logo" id="drivers-title"></div>
+      <div class="topbar-sub" id="drivers-subtitle"></div>
+    </div>
+    <div class="card">
+      <div class="form-group" style="margin-bottom:10px">
+        <input type="text" id="new-driver-name" placeholder="">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.addDriver()" id="add-driver-btn"></button>
+    </div>
+    <div id="drivers-list"></div>
+  </div>
+
+  <div class="screen" id="screen-settings">
+    <div class="topbar">
+      <div class="logo" id="settings-title"></div>
+    </div>
+    <div class="card">
+      <div class="form-group">
+        <label id="lbl-depot"></label>
+        <input type="text" id="settings-depot-addr" oninput="App.onAddrInput(this.value,'settings-addr-suggest')" autocomplete="off">
+        <div class="suggest-box" id="settings-addr-suggest"></div>
+      </div>
+      <div class="form-group">
+        <label id="lbl-here-key"></label>
+        <input type="text" id="settings-here-key" placeholder="hereApiKey">
+        <div class="topbar-sub" id="lbl-here-key-sub" style="margin-top:4px"></div>
+      </div>
+      <div class="form-group">
+        <label id="lbl-fuel-consumption"></label>
+        <input type="number" step="0.1" min="0" id="settings-fuel-consumption">
+      </div>
+      <div class="form-group">
+        <label id="lbl-fuel-price"></label>
+        <input type="number" step="0.01" min="0" id="settings-fuel-price">
+      </div>
+      <div class="form-group">
+        <label id="lbl-language"></label>
+        <select id="settings-language" onchange="App.setLanguage(this.value)">
+          <option value="el">Ελληνικά</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveSettingsForm()" id="settings-save-btn"></button>
+    </div>
+  </div>
+
+  <nav>
+    <button class="nav-btn active" id="nav-orders" onclick="App.switchScreen('orders')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
+      <span id="navlbl-orders"></span>
+    </button>
+    <button class="nav-btn" id="nav-routes" onclick="App.switchScreen('routes')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8.5 17.5 15 8c1-1.5 2.5-2 4-1.5"/></svg>
+      <span id="navlbl-routes"></span>
+    </button>
+    <button class="nav-btn" id="nav-drivers" onclick="App.switchScreen('drivers')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="10" cy="8" r="3.5"/><path d="M22 20v-1a4 4 0 0 0-3-3.87"/><path d="M16 4.5a3.5 3.5 0 0 1 0 6.8"/></svg>
+      <span id="navlbl-drivers"></span>
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="App.switchScreen('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+      <span id="navlbl-settings"></span>
+    </button>
+  </nav>
+</div>
+
+<!-- ORDER DRAWER -->
+<div class="drawer-overlay" id="order-drawer-overlay" onclick="if(event.target===this) App.closeOrderModal()">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div class="drawer-title" id="order-drawer-title"></div>
+      <button class="btn-icon" onclick="App.closeOrderModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="form-group">
+      <label id="lbl-order-name"></label>
+      <input type="text" id="order-name" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label id="lbl-order-addr"></label>
+      <input type="text" id="order-addr" oninput="App.onAddrInput(this.value,'order-addr-suggest')" autocomplete="off">
+      <div class="suggest-box" id="order-addr-suggest"></div>
+    </div>
+    <div class="form-group">
+      <label id="lbl-order-notes"></label>
+      <textarea id="order-notes"></textarea>
+    </div>
+    <div class="drawer-actions">
+      <button class="btn btn-primary btn-full" onclick="App.saveOrder()" id="order-save-btn"></button>
+    </div>
+    <div class="drawer-actions" id="order-delete-row" style="display:none">
+      <button class="btn btn-danger btn-full" onclick="App.deleteOrder(App._editingOrderId)" id="order-delete-btn"></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ============================================================
+// SECURITY UTILS
+// ============================================================
+function esc(str){
+  if(str==null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ============================================================
+// STORAGE
+// ============================================================
+const Storage = {
+  KEYS: { settings:'do_settings', orders:'do_orders', drivers:'do_drivers', routes:'do_routes', routeStats:'do_route_stats' },
+  get(k){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):null }catch(e){return null} },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)) }catch(e){} },
+  loadSettings(){ return Object.assign(defaultSettings(), this.get(this.KEYS.settings) || {}) },
+  saveSettings(s){ this.set(this.KEYS.settings,s) },
+  loadOrders(){ return this.get(this.KEYS.orders) || [] },
+  saveOrders(o){ this.set(this.KEYS.orders,o) },
+  loadDrivers(){ return this.get(this.KEYS.drivers) || [] },
+  saveDrivers(d){ this.set(this.KEYS.drivers,d) },
+  loadRoutes(){ return this.get(this.KEYS.routes) || null },
+  saveRoutes(r){ this.set(this.KEYS.routes,r) },
+  loadRouteStats(){ return this.get(this.KEYS.routeStats) || null },
+  saveRouteStats(s){ this.set(this.KEYS.routeStats,s) },
+  clear(){ Object.values(this.KEYS).forEach(k=>localStorage.removeItem(k)) }
+};
+
+function defaultSettings(){
+  return {
+    shopName:'',
+    depotAddress:'',
+    depotCoord:null,
+    hereApiKey:'',
+    language:'el',
+    avgCitySpeedKmh:22,
+    fuelConsumptionL100km:4.5,
+    fuelPricePerLiter:1.8,
+  };
+}
+
+function uid(prefix){
+  return prefix+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+}
+
+// ============================================================
+// I18N
+// ============================================================
+const I18N = {
+  el: {
+    nav_orders:'Παραγγελίες', nav_routes:'Διαδρομές', nav_drivers:'Οδηγοί', nav_settings:'Ρυθμίσεις',
+    orders_subtitle_n:'{n} ενεργές παραγγελίες', orders_subtitle_0:'Καμία ενεργή παραγγελία',
+    orders_new:'Νέα', orders_empty_title:'Δεν υπάρχουν παραγγελίες', orders_empty_sub:'Πάτησε "+ Νέα" για να προσθέσεις την πρώτη',
+    orders_delivered_at:'Παραδόθηκε', orders_mark_delivered:'Παράδοση', orders_delete:'Διαγραφή',
+    status_pending:'Εκκρεμεί', status_assigned:'Ανατέθηκε', status_delivered:'Παραδόθηκε', status_nogeo:'Χωρίς διεύθυνση',
+    order_new_title:'Νέα παραγγελία', order_edit_title:'Επεξεργασία παραγγελίας',
+    lbl_order_name:'Όνομα πελάτη', lbl_order_addr:'Διεύθυνση', lbl_order_notes:'Σημειώσεις (προαιρετικό)',
+    order_save:'Αποθήκευση', order_delete:'Διαγραφή παραγγελίας',
+    toast_order_saved:'Η παραγγελία αποθηκεύτηκε', toast_order_deleted:'Η παραγγελία διαγράφηκε',
+    toast_order_delivered:'Σημειώθηκε ως παραδομένη', toast_need_name_addr:'Συμπλήρωσε όνομα και διεύθυνση',
+    toast_geocode_failed:'Δεν βρέθηκε η διεύθυνση στον χάρτη — θα προστεθεί χωρίς συντεταγμένες',
+    toast_inserted_live:'Μπήκε στη διαδρομή του {driver} (~εκτίμηση, πάτησε Βελτιστοποίηση για ακριβή στοιχεία)',
+    routes_title:'Διαδρομές', routes_subtitle:'Καταμερισμός & σειρά στάσεων ανά οδηγό',
+    routes_optimize:'Βελτιστοποίηση', routes_optimizing:'Υπολογισμός…',
+    routes_no_drivers:'Πρόσθεσε τουλάχιστον έναν οδηγό πρώτα', routes_no_depot:'Ρύθμισε τη διεύθυνση του μαγαζιού στις Ρυθμίσεις πρώτα',
+    routes_no_orders:'Δεν υπάρχουν εκκρεμείς παραγγελίες', routes_ungeocoded_warning:'{n} παραγγελία(ες) δεν βρέθηκαν στον χάρτη και δεν εντάχθηκαν',
+    routes_km:'χλμ', routes_min:'λεπτά', routes_stops:'στάσεις', routes_unassigned_title:'Δεν εντάχθηκαν (χωρίς διεύθυνση)',
+    routes_empty_title:'Δεν έχει υπολογιστεί διαδρομή ακόμα', routes_empty_sub:'Πάτησε "Βελτιστοποίηση" πάνω δεξιά',
+    routes_approx_hint:'~εκτίμηση — πάτησε Βελτιστοποίηση για ακριβή στοιχεία',
+    routes_savings_title:'Εξοικονόμηση με Clarke-Wright', routes_savings_percent:'λιγότερα χλμ',
+    routes_savings_fuel:'βενζίνη', routes_savings_sub:'Σε σύγκριση με το να πηγαίνει κάθε ντελιβεράς μόνος του, γύρο-γύρο, για κάθε παραγγελία ξεχωριστά.',
+    drivers_title:'Οδηγοί', drivers_subtitle_n:'{n} ντελιβεράδες', drivers_subtitle_0:'Κανένας ντελιβεράς ακόμα',
+    drivers_name_placeholder:'Όνομα οδηγού', drivers_add:'Προσθήκη οδηγού',
+    drivers_empty_title:'Δεν έχεις προσθέσει οδηγούς', drivers_empty_sub:'Πρόσθεσε τουλάχιστον έναν παραπάνω',
+    toast_driver_added:'Ο οδηγός προστέθηκε', toast_driver_deleted:'Ο οδηγός αφαιρέθηκε', toast_need_driver_name:'Γράψε όνομα οδηγού',
+    settings_title:'Ρυθμίσεις', lbl_depot:'Διεύθυνση μαγαζιού (depot)', lbl_here_key:'HERE API key (προαιρετικό)',
+    lbl_here_key_sub:'Βελτιώνει την ακρίβεια αναζήτησης διευθύνσεων — χωρίς αυτό χρησιμοποιείται το δωρεάν OpenStreetMap',
+    lbl_fuel_consumption:'Κατανάλωση καυσίμου (L/100χλμ)', lbl_fuel_price:'Τιμή καυσίμου (€/L)',
+    lbl_language:'Γλώσσα', settings_save:'Αποθήκευση ρυθμίσεων', toast_settings_saved:'Οι ρυθμίσεις αποθηκεύτηκαν',
+    search_searching:'Αναζήτηση…', search_no_results:'Δεν βρέθηκαν αποτελέσματα', search_error:'Σφάλμα αναζήτησης',
+    confirm_delete_order:'Διαγραφή αυτής της παραγγελίας;', confirm_delete_driver:'Αφαίρεση αυτού του οδηγού;',
+    unit_meter:'μ', unit_km:'χλμ',
+  },
+  en: {
+    nav_orders:'Orders', nav_routes:'Routes', nav_drivers:'Drivers', nav_settings:'Settings',
+    orders_subtitle_n:'{n} active orders', orders_subtitle_0:'No active orders',
+    orders_new:'New', orders_empty_title:'No orders yet', orders_empty_sub:'Tap "+ New" to add the first one',
+    orders_delivered_at:'Delivered', orders_mark_delivered:'Mark delivered', orders_delete:'Delete',
+    status_pending:'Pending', status_assigned:'Assigned', status_delivered:'Delivered', status_nogeo:'No address match',
+    order_new_title:'New order', order_edit_title:'Edit order',
+    lbl_order_name:'Customer name', lbl_order_addr:'Address', lbl_order_notes:'Notes (optional)',
+    order_save:'Save', order_delete:'Delete order',
+    toast_order_saved:'Order saved', toast_order_deleted:'Order deleted',
+    toast_order_delivered:'Marked as delivered', toast_need_name_addr:'Fill in name and address',
+    toast_geocode_failed:'Could not find this address on the map — it will be added without coordinates',
+    toast_inserted_live:"Inserted into {driver}'s route (~estimate, tap Optimize for exact figures)",
+    routes_title:'Routes', routes_subtitle:'Assignment & stop order per driver',
+    routes_optimize:'Optimize', routes_optimizing:'Computing…',
+    routes_no_drivers:'Add at least one driver first', routes_no_depot:'Set the shop address in Settings first',
+    routes_no_orders:'No pending orders', routes_ungeocoded_warning:'{n} order(s) could not be located and were skipped',
+    routes_km:'km', routes_min:'min', routes_stops:'stops', routes_unassigned_title:'Not assigned (no address match)',
+    routes_empty_title:'No route computed yet', routes_empty_sub:'Tap "Optimize" top right',
+    routes_approx_hint:'~estimate — tap Optimize for exact figures',
+    routes_savings_title:'Savings with Clarke-Wright', routes_savings_percent:'fewer km',
+    routes_savings_fuel:'fuel', routes_savings_sub:"Compared to every driver making their own separate round trip for each order.",
+    drivers_title:'Drivers', drivers_subtitle_n:'{n} drivers', drivers_subtitle_0:'No drivers yet',
+    drivers_name_placeholder:'Driver name', drivers_add:'Add driver',
+    drivers_empty_title:"You haven't added any drivers", drivers_empty_sub:'Add at least one above',
+    toast_driver_added:'Driver added', toast_driver_deleted:'Driver removed', toast_need_driver_name:'Enter a driver name',
+    settings_title:'Settings', lbl_depot:'Shop address (depot)', lbl_here_key:'HERE API key (optional)',
+    lbl_here_key_sub:'Improves address search accuracy — without it, free OpenStreetMap search is used',
+    lbl_fuel_consumption:'Fuel consumption (L/100km)', lbl_fuel_price:'Fuel price (€/L)',
+    lbl_language:'Language', settings_save:'Save settings', toast_settings_saved:'Settings saved',
+    search_searching:'Searching…', search_no_results:'No results found', search_error:'Search error',
+    confirm_delete_order:'Delete this order?', confirm_delete_driver:'Remove this driver?',
+    unit_meter:'m', unit_km:'km',
+  }
+};
+
+function t(key){
+  const lang = (typeof state!=='undefined' && state.settings && state.settings.language) || 'el';
+  const dict = I18N[lang] || I18N.el;
+  return dict[key] != null ? dict[key] : (I18N.el[key] != null ? I18N.el[key] : key);
+}
+function tf(key, params){
+  let s = t(key);
+  Object.keys(params||{}).forEach(k=>{ s = s.replace('{'+k+'}', params[k]); });
+  return s;
+}
+
+// ============================================================
+// GEO UTILS
+// ============================================================
+function toRad(d){ return d*Math.PI/180; }
+function haversineKm(a,b){
+  if(!a||!b) return Infinity;
+  const R=6371;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+  const lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(Math.min(1,h)));
+}
+const DRIVER_COLORS = ['#2563eb','#dc2626','#059669','#7c3aed','#d97706','#0891b2','#db2777','#65a30d','#0f766e','#9333ea'];
+function colorForIndex(i){ return DRIVER_COLORS[i % DRIVER_COLORS.length]; }
+
+// ============================================================
+// ROUTER — geocoding (Nominatim/HERE) + real road matrix (OSRM)
+// ============================================================
+const Router = {
+  NOMINATIM: 'https://nominatim.openstreetmap.org',
+  OSRM:      'https://router.project-osrm.org',
+
+  async geocode(address){
+    if(!address) return null;
+    try{
+      const q = encodeURIComponent(address);
+      const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&addressdetails=1`;
+      const r = await fetch(url, {headers:{'Accept-Language':'el', 'User-Agent':'DropOff/1.0'}});
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(d && d.length>0) return {lat:parseFloat(d[0].lat), lon:parseFloat(d[0].lon)};
+    }catch(e){}
+    return null;
+  },
+
+  // OSRM Table API — real driving durations (s) and distances (m) between all points.
+  async getMatrix(points){
+    if(!points || points.length < 2) return null;
+    try{
+      const pts = points.map(c=>`${c.lon},${c.lat}`).join(';');
+      const url = `${this.OSRM}/table/v1/driving/${pts}?annotations=duration,distance`;
+      const r = await fetch(url);
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(d.code !== 'Ok') return null;
+      return { durations: d.durations, distances: d.distances };
+    }catch(e){ return null }
+  },
+
+  async getRouteGeometry(points){
+    if(!points || points.length < 2) return null;
+    try{
+      const pts = points.map(c=>`${c.lon},${c.lat}`).join(';');
+      const url = `${this.OSRM}/route/v1/driving/${pts}?overview=full&geometries=geojson`;
+      const r = await fetch(url);
+      if(!r.ok) return null;
+      const d = await r.json();
+      if(d.code !== 'Ok' || !d.routes?.[0]) return null;
+      return d.routes[0].geometry.coordinates.map(([lon,lat])=>[lat,lon]);
+    }catch(e){ return null }
+  },
+
+  async _searchHere(val, key){
+    const q = encodeURIComponent(val.trim());
+    const at = (typeof state!=='undefined' && state.settings.depotCoord) ? `${state.settings.depotCoord.lat},${state.settings.depotCoord.lon}` : '38.2466,21.7346';
+    const url = `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${at}&limit=8&lang=el&apiKey=${key}`;
+    const r = await fetch(url);
+    if(!r.ok) throw new Error(`HERE Autosuggest ${r.status}`);
+    const d = await r.json();
+    const items = (d.items||[]).filter(it=>it.position);
+    return items.map(it=>{
+      const label = (it.address && it.address.label) || it.title || '';
+      const name = (it.title && !label.startsWith(it.title)) ? `${it.title}, ${label}` : label;
+      return { name, poiName: it.title, lat: it.position.lat, lon: it.position.lng };
+    });
+  },
+
+  async _searchNominatim(val){
+    const q = encodeURIComponent(val.trim());
+    const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=8&addressdetails=1&namedetails=1`;
+    const r = await fetch(url, {headers:{'Accept-Language':'el'}});
+    if(!r.ok) throw new Error(`Nominatim ${r.status}`);
+    let results = await r.json();
+    if(!Array.isArray(results)) results = [];
+    return results.map(res=>({
+      name: res.display_name,
+      poiName: res.namedetails && res.namedetails.name,
+      lat: parseFloat(res.lat), lon: parseFloat(res.lon)
+    }));
+  }
+};
+
+// ============================================================
+// VRP — multi-driver order assignment + per-driver route optimization
+// ============================================================
+const VRP = {
+  // Clarke & Wright (1964) Savings algorithm — the classic construction
+  // heuristic for exactly this problem (N stops, K vehicles, one depot).
+  // Start with every order as its own depot round-trip, then repeatedly
+  // merge the two routes whose join saves the most combined distance:
+  //   saving(i,j) = dist(depot,i) + dist(depot,j) - dist(i,j)
+  // A merge is only legal when i and j each sit at an outer end of their
+  // route (so joining them doesn't require detouring through the middle of
+  // either route) and the two routes aren't already the same one. Merging
+  // stops once route count reaches `driverCount` — with no real vehicle
+  // capacity to respect, that's the natural stopping condition here — and a
+  // route-size cap keeps one greedy chain from swallowing most of the orders
+  // and leaving other drivers idle.
+  clarkeWrightSavings(orders, driverCount, depot, distFn){
+    if(driverCount<=0) return [];
+    if(orders.length===0) return Array.from({length:driverCount},()=>[]);
+
+    let routes = orders.map(o=>({stops:[o]}));
+    const routeOf = new Map();
+    routes.forEach(r=>routeOf.set(r.stops[0].id, r));
+
+    const savings = [];
+    for(let i=0;i<orders.length;i++){
+      for(let j=i+1;j<orders.length;j++){
+        const a=orders[i], b=orders[j];
+        savings.push({a, b, s: distFn(depot,a)+distFn(depot,b)-distFn(a,b)});
+      }
+    }
+    savings.sort((x,y)=>y.s-x.s);
+
+    // Balance guard: without this a savings-only run will happily chain
+    // almost every stop onto one route before touching the rest.
+    const maxPerRoute = Math.max(1, Math.ceil(orders.length/driverCount*1.4));
+
+    for(const {a,b} of savings){
+      if(routes.length<=driverCount) break;
+      const ra = routeOf.get(a.id), rb = routeOf.get(b.id);
+      if(!ra || !rb || ra===rb) continue;
+      const aAtEnd = ra.stops[0]===a || ra.stops[ra.stops.length-1]===a;
+      const bAtEnd = rb.stops[0]===b || rb.stops[rb.stops.length-1]===b;
+      if(!aAtEnd || !bAtEnd) continue;
+      if(ra.stops.length + rb.stops.length > maxPerRoute) continue;
+
+      let stopsA = ra.stops.slice();
+      if(stopsA[0]===a) stopsA.reverse(); // orient so `a` is the tail of A
+      let stopsB = rb.stops.slice();
+      if(stopsB[stopsB.length-1]===b) stopsB.reverse(); // orient so `b` is the head of B
+      const merged = { stops: stopsA.concat(stopsB) };
+      routes = routes.filter(r=>r!==ra && r!==rb);
+      routes.push(merged);
+      merged.stops.forEach(o=>routeOf.set(o.id, merged));
+    }
+
+    // Savings alone can stall above `driverCount` routes (every remaining
+    // pair blocked by the size cap or already merged) — finish the job with
+    // cheapest-insertion so every driver still ends up with a route.
+    while(routes.length > driverCount){
+      routes.sort((x,y)=>x.stops.length-y.stops.length);
+      const victim = routes.shift();
+      victim.stops.forEach(o=>{
+        const asObj = {}; routes.forEach((r,i)=>{ asObj[i]=r.stops; });
+        const best = this.cheapestInsertion(o, asObj, depot, distFn);
+        if(best) routes[Number(best.driverId)].stops.splice(best.pos, 0, o);
+        else routes[0].stops.push(o);
+      });
+    }
+    while(routes.length < driverCount) routes.push({stops:[]});
+
+    return routes.map(r=>r.stops);
+  },
+
+  // Total round-trip cost of depot -> route[0] -> ... -> route[n-1] -> depot.
+  routeCost(route, depot, distFn){
+    if(route.length===0) return 0;
+    let total = distFn(depot, route[0]);
+    for(let i=0;i<route.length-1;i++) total += distFn(route[i], route[i+1]);
+    total += distFn(route[route.length-1], depot);
+    return total;
+  },
+
+  // Classic 2-opt: repeatedly reverse a segment if doing so shortens the round trip.
+  twoOpt(route, depot, distFn, maxIter=150){
+    if(route.length<3) return route.slice();
+    let best = route.slice();
+    let bestCost = this.routeCost(best, depot, distFn);
+    let improved = true, iter=0;
+    while(improved && iter<maxIter){
+      improved = false; iter++;
+      for(let i=0;i<best.length-1;i++){
+        for(let j=i+1;j<best.length;j++){
+          const candidate = best.slice(0,i).concat(best.slice(i,j+1).reverse(), best.slice(j+1));
+          const cost = this.routeCost(candidate, depot, distFn);
+          if(cost < bestCost - 1e-9){
+            best = candidate; bestCost = cost; improved = true;
+          }
+        }
+      }
+    }
+    return best;
+  },
+
+  // Cheapest-insertion: for a single new stop, find the (driver, position) that
+  // adds the least extra distance to that driver's existing route — used to
+  // slot a live incoming order into an already-optimized set of routes
+  // without re-running the full assignment+2-opt from scratch.
+  cheapestInsertion(point, driverRoutes, depot, distFn){
+    let best = null;
+    for(const driverId of Object.keys(driverRoutes)){
+      const route = driverRoutes[driverId];
+      for(let pos=0; pos<=route.length; pos++){
+        const prev = pos===0 ? depot : route[pos-1];
+        const next = pos===route.length ? depot : route[pos];
+        const added = distFn(prev,point) + distFn(point,next) - distFn(prev,next);
+        if(!best || added < best.added) best = { driverId, pos, added };
+      }
+    }
+    return best;
+  },
+
+  // Wraps an OSRM matrix (indices aligned with `points`) as a distFn(a,b)->seconds,
+  // falling back to a haversine-based estimate for any point missing from the matrix.
+  makeMatrixDistFn(points, matrix, avgSpeedKmh){
+    const idx = new Map();
+    points.forEach((p,i)=>idx.set(p,i));
+    const speed = avgSpeedKmh || 22;
+    return (a,b)=>{
+      const i=idx.get(a), j=idx.get(b);
+      if(i!=null && j!=null && matrix && matrix.durations && matrix.durations[i] && matrix.durations[i][j]!=null){
+        return matrix.durations[i][j];
+      }
+      return haversineKm(a,b) / speed * 3600; // seconds, road-factor-free fallback
+    };
+  }
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  settings: defaultSettings(),
+  orders: [],
+  drivers: [],
+  routes: null,
+  routeStats: null,
+};
+
+// ============================================================
+// TOAST
+// ============================================================
+const Toast = {
+  show(msg, type='info', duration=3000){
+    const container = document.getElementById('toast-container');
+    if(!container) return;
+    const el = document.createElement('div');
+    el.className = 'toast' + (type!=='info' ? ' toast-'+type : '');
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(()=>{ el.remove(); }, duration);
+  }
+};
+
+// ============================================================
+// APP
+// ============================================================
+const App = {
+  _pendingCoords: {},
+  _editingOrderId: null,
+  _map: null,
+  _layerGroup: null,
+  _addrTimer: null,
+
+  init(){
+    state.settings = Storage.loadSettings();
+    state.orders = Storage.loadOrders();
+    state.drivers = Storage.loadDrivers();
+    state.routes = Storage.loadRoutes();
+    state.routeStats = Storage.loadRouteStats();
+    document.documentElement.lang = state.settings.language;
+    this.applyStaticLabels();
+    this.renderOrders();
+    this.renderDriversScreen();
+    this.renderSettingsScreen();
+    this.renderRoutes();
+    this.registerSW();
+  },
+
+  applyStaticLabels(){
+    const map = {
+      'navlbl-orders':'nav_orders', 'navlbl-routes':'nav_routes', 'navlbl-drivers':'nav_drivers', 'navlbl-settings':'nav_settings',
+      'orders-new-label':'orders_new', 'routes-title':'routes_title', 'routes-subtitle':'routes_subtitle',
+      'optimize-btn':'routes_optimize', 'drivers-title':'drivers_title', 'add-driver-btn':'drivers_add',
+      'settings-title':'settings_title', 'lbl-depot':'lbl_depot', 'lbl-here-key':'lbl_here_key',
+      'lbl-here-key-sub':'lbl_here_key_sub', 'lbl-language':'lbl_language', 'settings-save-btn':'settings_save',
+      'lbl-fuel-consumption':'lbl_fuel_consumption', 'lbl-fuel-price':'lbl_fuel_price',
+      'lbl-order-name':'lbl_order_name', 'lbl-order-addr':'lbl_order_addr', 'lbl-order-notes':'lbl_order_notes',
+      'order-save-btn':'order_save', 'order-delete-btn':'order_delete',
+    };
+    Object.keys(map).forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.textContent = t(map[id]);
+    });
+    const driverNameInput = document.getElementById('new-driver-name');
+    if(driverNameInput) driverNameInput.placeholder = t('drivers_name_placeholder');
+    const langSelect = document.getElementById('settings-language');
+    if(langSelect) langSelect.value = state.settings.language;
+  },
+
+  switchScreen(name){
+    ['orders','routes','drivers','settings'].forEach(s=>{
+      const scr = document.getElementById('screen-'+s), navBtn = document.getElementById('nav-'+s);
+      if(scr) scr.classList.toggle('active', s===name);
+      if(navBtn) navBtn.classList.toggle('active', s===name);
+    });
+    if(name==='routes') setTimeout(()=>this.renderMap(), 50);
+  },
+
+  // ---- ORDERS ----
+  renderOrders(){
+    const list = document.getElementById('orders-list');
+    if(!list) return;
+    const active = state.orders.filter(o=>o.status!=='delivered');
+    const subtitle = document.getElementById('orders-subtitle');
+    if(subtitle) subtitle.textContent = active.length>0 ? tf('orders_subtitle_n',{n:active.length}) : t('orders_subtitle_0');
+    if(state.orders.length===0){
+      list.innerHTML = `<div class="empty-state"><p style="font-weight:600">${esc(t('orders_empty_title'))}</p><p>${esc(t('orders_empty_sub'))}</p></div>`;
+      return;
+    }
+    const sorted = state.orders.slice().sort((a,b)=>{
+      const aDone = a.status==='delivered', bDone = b.status==='delivered';
+      if(aDone !== bDone) return aDone ? 1 : -1;
+      return b.createdAt - a.createdAt;
+    });
+    list.innerHTML = sorted.map(o=>{
+      const delivered = o.status==='delivered';
+      const badgeClass = o.lat==null ? 'badge-nogeo' : 'badge-'+o.status;
+      const badgeText = o.lat==null ? t('status_nogeo') : t('status_'+o.status);
+      return `<div class="order-item ${delivered?'delivered':''}">
+        <div class="order-item-body" onclick="App.openOrderModal('${esc(o.id)}')">
+          <div class="order-item-name">${esc(o.customerName)}</div>
+          <div class="order-item-addr">${esc(o.address)}</div>
+          ${o.notes ? `<div class="order-item-notes">${esc(o.notes)}</div>` : ''}
+          <span class="badge ${badgeClass}">${esc(badgeText)}</span>
+        </div>
+        <div class="order-item-actions">
+          ${!delivered ? `<button class="btn-icon" title="${esc(t('orders_mark_delivered'))}" onclick="App.markDelivered('${esc(o.id)}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>` : ''}
+          <button class="btn-icon" title="${esc(t('orders_delete'))}" onclick="App.deleteOrder('${esc(o.id)}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  openOrderModal(id){
+    this._editingOrderId = id || null;
+    this._pendingCoords['order-addr-suggest'] = null;
+    const overlay = document.getElementById('order-drawer-overlay');
+    const order = id ? state.orders.find(o=>o.id===id) : null;
+    document.getElementById('order-drawer-title').textContent = order ? t('order_edit_title') : t('order_new_title');
+    document.getElementById('order-name').value = order ? order.customerName : '';
+    document.getElementById('order-addr').value = order ? order.address : '';
+    document.getElementById('order-notes').value = order ? (order.notes||'') : '';
+    document.getElementById('order-delete-row').style.display = order ? 'flex' : 'none';
+    if(order && order.lat!=null) this._pendingCoords['order-addr-suggest'] = {lat:order.lat, lon:order.lon};
+    overlay.classList.add('open');
+  },
+
+  closeOrderModal(){
+    const overlay = document.getElementById('order-drawer-overlay');
+    if(overlay) overlay.classList.remove('open');
+    this._editingOrderId = null;
+  },
+
+  async saveOrder(){
+    const name = document.getElementById('order-name').value.trim();
+    const address = document.getElementById('order-addr').value.trim();
+    const notes = document.getElementById('order-notes').value.trim();
+    if(!name || !address){ Toast.show(t('toast_need_name_addr'),'error'); return; }
+    let coord = this._pendingCoords['order-addr-suggest'];
+    if(!coord) coord = await Router.geocode(address);
+    if(!coord) Toast.show(t('toast_geocode_failed'),'warning');
+
+    if(this._editingOrderId){
+      const order = state.orders.find(o=>o.id===this._editingOrderId);
+      if(order){
+        order.customerName = name; order.address = address; order.notes = notes;
+        order.lat = coord ? coord.lat : null; order.lon = coord ? coord.lon : null;
+      }
+      Storage.saveOrders(state.orders);
+      Toast.show(t('toast_order_saved'),'success');
+    } else {
+      const order = {
+        id: uid('o'), source:'manual', externalId:null,
+        customerName:name, address, notes,
+        lat: coord?coord.lat:null, lon: coord?coord.lon:null,
+        status:'pending', driverId:null, createdAt: Date.now(), deliveredAt:null,
+      };
+      state.orders.push(order);
+      Storage.saveOrders(state.orders);
+      Toast.show(t('toast_order_saved'),'success');
+      if(coord) this.tryLiveInsert(order);
+    }
+    this.closeOrderModal();
+    this.renderOrders();
+    this.renderRoutes();
+  },
+
+  // Slot a newly-created order into an already-optimized route via cheapest
+  // insertion (haversine-based, no network round trip) instead of forcing a
+  // full re-optimize on every single incoming order.
+  tryLiveInsert(order){
+    if(!state.routes) return;
+    const driverIds = Object.keys(state.routes);
+    if(driverIds.length===0) return;
+    const depot = state.settings.depotCoord;
+    if(!depot) return;
+    const ordersById = new Map(state.orders.map(o=>[o.id,o]));
+    const driverRoutes = {};
+    driverIds.forEach(did=>{ driverRoutes[did] = state.routes[did].orderIds.map(id=>ordersById.get(id)).filter(Boolean); });
+    const best = VRP.cheapestInsertion(order, driverRoutes, depot, haversineKm);
+    if(!best) return;
+    const route = state.routes[best.driverId];
+    route.orderIds.splice(best.pos, 0, order.id);
+    const speed = state.settings.avgCitySpeedKmh || 22;
+    route.totalKm = (route.totalKm||0) + best.added;
+    route.totalMin = (route.totalMin||0) + (best.added/speed*60);
+    route.approx = true;
+    order.status='assigned'; order.driverId=best.driverId;
+    Storage.saveRoutes(state.routes);
+    Storage.saveOrders(state.orders);
+    const driver = state.drivers.find(d=>d.id===best.driverId);
+    Toast.show(tf('toast_inserted_live',{driver: driver?driver.name:'?'}),'info');
+  },
+
+  deleteOrder(id){
+    if(typeof confirm==='function' && !confirm(t('confirm_delete_order'))) return;
+    state.orders = state.orders.filter(o=>o.id!==id);
+    Storage.saveOrders(state.orders);
+    if(state.routes){
+      Object.keys(state.routes).forEach(did=>{
+        state.routes[did].orderIds = state.routes[did].orderIds.filter(oid=>oid!==id);
+      });
+      Storage.saveRoutes(state.routes);
+    }
+    Toast.show(t('toast_order_deleted'),'success');
+    this.closeOrderModal();
+    this.renderOrders();
+    this.renderRoutes();
+  },
+
+  markDelivered(id){
+    const order = state.orders.find(o=>o.id===id);
+    if(!order) return;
+    order.status='delivered'; order.deliveredAt=Date.now();
+    Storage.saveOrders(state.orders);
+    Toast.show(t('toast_order_delivered'),'success');
+    this.renderOrders();
+    this.renderRoutes();
+  },
+
+  // ---- ADDRESS AUTOCOMPLETE (shared by order + settings depot fields) ----
+  onAddrInput(val, boxId){
+    this._pendingCoords[boxId] = null;
+    clearTimeout(this._addrTimer);
+    const box = document.getElementById(boxId);
+    if(!box) return;
+    if(val.length < 3){ box.style.display='none'; return; }
+    box.style.display='block';
+    box.innerHTML = `<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${esc(t('search_searching'))}</div>`;
+    const hereKey = state.settings.hereApiKey;
+    this._addrTimer = setTimeout(async ()=>{
+      try{
+        const results = hereKey ? await Router._searchHere(val, hereKey) : await Router._searchNominatim(val);
+        const b = document.getElementById(boxId);
+        if(!b) return;
+        if(!results || results.length===0){
+          b.innerHTML = `<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${esc(t('search_no_results'))}</div>`;
+          return;
+        }
+        const depot = state.settings.depotCoord;
+        if(depot){
+          results.forEach(res=>{ const dx=res.lon-depot.lon, dy=res.lat-depot.lat; res._distKm = Math.sqrt(dx*dx+dy*dy)*111; });
+          results.sort((a,b)=>a._distKm-b._distKm);
+        }
+        const shown = results.slice(0,5);
+        // Suggestion names come from an external geocoder (Nominatim/HERE) — never
+        // interpolate them into an inline event-handler attribute string (that's
+        // both a quoting minefield and a JS-injection vector). Stash the raw
+        // name/coords as data-* attributes instead and read them back on click.
+        b.innerHTML = shown.map((res,i)=>{
+          const short = res.poiName || res.name.split(',').slice(0,3).join(',');
+          const distTag = res._distKm!=null ? `<span style="color:var(--primary);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
+          return `<div class="addr-suggest-item" data-idx="${i}" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4">
+            <div style="font-weight:500;color:var(--text)">${esc(short)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(res.name)}</div>
+          </div>`;
+        }).join('');
+        const pick = (e)=>{
+          const item = e.target.closest('.addr-suggest-item');
+          if(!item) return;
+          const res = shown[parseInt(item.dataset.idx,10)];
+          if(res) App.selectAddr(res.name, res.lat, res.lon, boxId);
+        };
+        b.onmousedown = pick;
+        b.ontouchstart = pick;
+      }catch(e){
+        console.warn('Address search failed:', e);
+        const b = document.getElementById(boxId);
+        if(b) b.innerHTML = `<div style="padding:10px 14px;font-size:12px;color:var(--red)">${esc(t('search_error'))}</div>`;
+      }
+    }, 500);
+  },
+
+  selectAddr(name, lat, lon, boxId){
+    const coord = {lat:parseFloat(lat), lon:parseFloat(lon)};
+    const short = name.split(',').slice(0,3).join(',').trim();
+    this._pendingCoords[boxId] = coord;
+    const inputId = boxId==='order-addr-suggest' ? 'order-addr' : (boxId==='settings-addr-suggest' ? 'settings-depot-addr' : null);
+    if(inputId){ const inp=document.getElementById(inputId); if(inp) inp.value = short; }
+    const box = document.getElementById(boxId);
+    if(box) box.style.display='none';
+  },
+
+  // ---- DRIVERS ----
+  addDriver(){
+    const inp = document.getElementById('new-driver-name');
+    const name = inp.value.trim();
+    if(!name){ Toast.show(t('toast_need_driver_name'),'error'); return; }
+    const driver = { id: uid('d'), name, color: colorForIndex(state.drivers.length), active:true };
+    state.drivers.push(driver);
+    Storage.saveDrivers(state.drivers);
+    inp.value='';
+    Toast.show(t('toast_driver_added'),'success');
+    this.renderDriversScreen();
+  },
+
+  deleteDriver(id){
+    if(typeof confirm==='function' && !confirm(t('confirm_delete_driver'))) return;
+    state.drivers = state.drivers.filter(d=>d.id!==id);
+    Storage.saveDrivers(state.drivers);
+    if(state.routes && state.routes[id]){
+      state.routes[id].orderIds.forEach(oid=>{
+        const o = state.orders.find(x=>x.id===oid);
+        if(o){ o.status='pending'; o.driverId=null; }
+      });
+      delete state.routes[id];
+      Storage.saveRoutes(state.routes);
+      Storage.saveOrders(state.orders);
+    }
+    Toast.show(t('toast_driver_deleted'),'success');
+    this.renderDriversScreen();
+    this.renderOrders();
+    this.renderRoutes();
+  },
+
+  toggleDriverActive(id){
+    const d = state.drivers.find(x=>x.id===id);
+    if(!d) return;
+    d.active = !d.active;
+    Storage.saveDrivers(state.drivers);
+    this.renderDriversScreen();
+  },
+
+  renderDriversScreen(){
+    const list = document.getElementById('drivers-list');
+    if(!list) return;
+    const subtitle = document.getElementById('drivers-subtitle');
+    if(subtitle) subtitle.textContent = state.drivers.length>0 ? tf('drivers_subtitle_n',{n:state.drivers.length}) : t('drivers_subtitle_0');
+    if(state.drivers.length===0){
+      list.innerHTML = `<div class="empty-state"><p style="font-weight:600">${esc(t('drivers_empty_title'))}</p><p>${esc(t('drivers_empty_sub'))}</p></div>`;
+      return;
+    }
+    list.innerHTML = state.drivers.map(d=>`
+      <div class="driver-item ${d.active===false?'inactive':''}">
+        <div class="driver-dot" style="background:${esc(d.color)}"></div>
+        <div class="driver-item-name">${esc(d.name)}</div>
+        <button class="btn-icon" onclick="App.toggleDriverActive('${esc(d.id)}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d.active===false?'<circle cx="12" cy="12" r="9"/>':'<polyline points="20 6 9 17 4 12"/>'}</svg>
+        </button>
+        <button class="btn-icon" onclick="App.deleteDriver('${esc(d.id)}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>`).join('');
+  },
+
+  // ---- SETTINGS ----
+  renderSettingsScreen(){
+    const depotInput = document.getElementById('settings-depot-addr');
+    const keyInput = document.getElementById('settings-here-key');
+    const langSelect = document.getElementById('settings-language');
+    const fuelConsInput = document.getElementById('settings-fuel-consumption');
+    const fuelPriceInput = document.getElementById('settings-fuel-price');
+    if(depotInput) depotInput.value = state.settings.depotAddress || '';
+    if(keyInput) keyInput.value = state.settings.hereApiKey || '';
+    if(langSelect) langSelect.value = state.settings.language || 'el';
+    if(fuelConsInput) fuelConsInput.value = state.settings.fuelConsumptionL100km;
+    if(fuelPriceInput) fuelPriceInput.value = state.settings.fuelPricePerLiter;
+  },
+
+  setLanguage(lang){
+    state.settings.language = lang;
+    Storage.saveSettings(state.settings);
+    document.documentElement.lang = lang;
+    this.applyStaticLabels();
+    this.renderOrders();
+    this.renderDriversScreen();
+    this.renderRoutes();
+  },
+
+  saveSettingsForm(){
+    const addr = document.getElementById('settings-depot-addr').value.trim();
+    const key = document.getElementById('settings-here-key').value.trim();
+    const fuelCons = parseFloat(document.getElementById('settings-fuel-consumption').value);
+    const fuelPrice = parseFloat(document.getElementById('settings-fuel-price').value);
+    const prevAddr = state.settings.depotAddress;
+    state.settings.depotAddress = addr;
+    state.settings.hereApiKey = key;
+    state.settings.fuelConsumptionL100km = Number.isFinite(fuelCons) && fuelCons>=0 ? fuelCons : defaultSettings().fuelConsumptionL100km;
+    state.settings.fuelPricePerLiter = Number.isFinite(fuelPrice) && fuelPrice>=0 ? fuelPrice : defaultSettings().fuelPricePerLiter;
+    const pending = this._pendingCoords['settings-addr-suggest'];
+    const persist = ()=>{ Storage.saveSettings(state.settings); Toast.show(t('toast_settings_saved'),'success'); };
+    if(pending){
+      state.settings.depotCoord = pending;
+      persist();
+    } else if(addr && addr!==prevAddr){
+      Router.geocode(addr).then(c=>{ if(c) state.settings.depotCoord=c; persist(); });
+    } else {
+      persist();
+    }
+  },
+
+  // ---- ROUTES / OPTIMIZATION ----
+  async runOptimize(){
+    const drivers = state.drivers.filter(d=>d.active!==false);
+    if(drivers.length===0){ Toast.show(t('routes_no_drivers'),'error'); return; }
+    const depot = state.settings.depotCoord;
+    if(!depot){ Toast.show(t('routes_no_depot'),'error'); return; }
+    const candidates = state.orders.filter(o=>o.status!=='delivered');
+    const geocoded = candidates.filter(o=>o.lat!=null && o.lon!=null);
+    const ungeocoded = candidates.filter(o=>o.lat==null || o.lon==null);
+    if(geocoded.length===0){ Toast.show(t('routes_no_orders'),'error'); return; }
+    if(ungeocoded.length>0) Toast.show(tf('routes_ungeocoded_warning',{n:ungeocoded.length}),'warning');
+
+    const btn = document.getElementById('optimize-btn');
+    if(btn){ btn.disabled = true; btn.textContent = t('routes_optimizing'); }
+
+    const allPoints = [depot, ...geocoded];
+    const matrix = await Router.getMatrix(allPoints).catch(()=>null);
+    const speed = state.settings.avgCitySpeedKmh || 22;
+    const distFn = matrix ? VRP.makeMatrixDistFn(allPoints, matrix, speed)
+                          : (a,b)=>haversineKm(a,b)/speed*3600;
+
+    const groups = VRP.clarkeWrightSavings(geocoded, drivers.length, depot, distFn);
+    const newRoutes = {};
+    let actualKm = 0, actualSec = 0;
+    drivers.forEach((driver,i)=>{
+      const stops = groups[i]||[];
+      const optimized = stops.length>1 ? VRP.twoOpt(stops, depot, distFn) : stops.slice();
+      const totalSec = VRP.routeCost(optimized, depot, distFn);
+      const totalKm = matrix ? this._sumRouteKm(optimized, depot, allPoints, matrix)
+                             : VRP.routeCost(optimized, depot, (a,b)=>haversineKm(a,b));
+      optimized.forEach(o=>{ o.status='assigned'; o.driverId=driver.id; });
+      newRoutes[driver.id] = {
+        orderIds: optimized.map(o=>o.id),
+        totalKm: totalKm,
+        totalMin: totalSec/60,
+        approx: !matrix,
+      };
+      actualKm += totalKm;
+      actualSec += totalSec;
+    });
+    state.routes = newRoutes;
+
+    // Savings vs. the naive baseline (every order as its own solo depot round
+    // trip) — this is the actual value Clarke-Wright is buying you, made
+    // visible instead of staying an invisible implementation detail.
+    let naiveKm = 0, naiveSec = 0;
+    geocoded.forEach(o=>{
+      naiveKm += matrix ? this._sumRouteKm([o], depot, allPoints, matrix) : haversineKm(depot,o)*2;
+      naiveSec += VRP.routeCost([o], depot, distFn);
+    });
+    const kmSaved = Math.max(0, naiveKm - actualKm);
+    const minSaved = Math.max(0, naiveSec/60 - actualSec/60);
+    const fuelL100 = state.settings.fuelConsumptionL100km || 4.5;
+    const fuelPrice = state.settings.fuelPricePerLiter || 1.8;
+    const fuelSavedL = kmSaved * fuelL100 / 100;
+    state.routeStats = {
+      naiveKm, actualKm, kmSaved,
+      naiveMin: naiveSec/60, actualMin: actualSec/60, minSaved,
+      percentSaved: naiveKm>0 ? (kmSaved/naiveKm*100) : 0,
+      fuelSavedL, costSavedEur: fuelSavedL*fuelPrice,
+      computedAt: Date.now(),
+    };
+
+    Storage.saveOrders(state.orders);
+    Storage.saveRoutes(state.routes);
+    Storage.saveRouteStats(state.routeStats);
+    if(btn){ btn.disabled=false; btn.textContent = t('routes_optimize'); }
+    this.renderRoutes();
+    this.renderOrders();
+  },
+
+  _sumRouteKm(route, depot, allPoints, matrix){
+    const idx = new Map(); allPoints.forEach((p,i)=>idx.set(p,i));
+    const seq = [depot, ...route, depot];
+    let km=0;
+    for(let i=0;i<seq.length-1;i++){
+      const a=idx.get(seq[i]), b=idx.get(seq[i+1]);
+      const meters = (a!=null && b!=null && matrix.distances[a] && matrix.distances[a][b]!=null)
+        ? matrix.distances[a][b] : haversineKm(seq[i],seq[i+1])*1000;
+      km += meters/1000;
+    }
+    return km;
+  },
+
+  renderRoutes(){
+    const list = document.getElementById('routes-list');
+    if(!list) return;
+    if(!state.routes){
+      list.innerHTML = `<div class="empty-state"><p style="font-weight:600">${esc(t('routes_empty_title'))}</p><p>${esc(t('routes_empty_sub'))}</p></div>`;
+      this.renderMap();
+      return;
+    }
+    const ordersById = new Map(state.orders.map(o=>[o.id,o]));
+    let html='';
+    if(state.routeStats){
+      const s = state.routeStats;
+      html += `<div class="savings-card">
+        <div class="savings-card-title">${esc(t('routes_savings_title'))}</div>
+        <div class="savings-card-row">
+          <div class="savings-stat"><div class="savings-stat-n">${s.kmSaved.toFixed(1)}</div><div class="savings-stat-l">${esc(t('routes_km'))}</div></div>
+          <div class="savings-stat"><div class="savings-stat-n">${Math.round(s.minSaved)}</div><div class="savings-stat-l">${esc(t('routes_min'))}</div></div>
+          <div class="savings-stat"><div class="savings-stat-n">${Math.round(s.percentSaved)}%</div><div class="savings-stat-l">${esc(t('routes_savings_percent'))}</div></div>
+          <div class="savings-stat"><div class="savings-stat-n">€${s.costSavedEur.toFixed(2)}</div><div class="savings-stat-l">${esc(t('routes_savings_fuel'))}</div></div>
+        </div>
+        <div class="savings-card-sub">${esc(t('routes_savings_sub'))}</div>
+      </div>`;
+    }
+    state.drivers.forEach(driver=>{
+      const route = state.routes[driver.id];
+      if(!route) return;
+      const stops = route.orderIds.map(id=>ordersById.get(id)).filter(Boolean);
+      html += `<div class="driver-route-card">
+        <div class="driver-route-head">
+          <div class="driver-dot" style="background:${esc(driver.color)}"></div>
+          <div class="driver-route-head-name">${esc(driver.name)}</div>
+          <div class="driver-route-stats">${route.totalKm.toFixed(1)} ${esc(t('routes_km'))} · ${Math.round(route.totalMin)} ${esc(t('routes_min'))} · ${stops.length} ${esc(t('routes_stops'))}</div>
+        </div>
+        ${stops.map((o,i)=>`
+          <div class="stop-row ${o.status==='delivered'?'delivered':''}">
+            <div class="stop-num" style="background:${esc(driver.color)}">${i+1}</div>
+            <div class="stop-body">
+              <div class="stop-name">${esc(o.customerName)}</div>
+              <div class="stop-addr">${esc(o.address)}</div>
+            </div>
+            <div class="stop-check ${o.status==='delivered'?'done':''}" onclick="App.markDelivered('${esc(o.id)}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>`).join('')}
+        ${route.approx ? `<div class="route-hint">${esc(t('routes_approx_hint'))}</div>` : ''}
+      </div>`;
+    });
+    const unassigned = state.orders.filter(o=>o.status==='pending' && (o.lat==null||o.lon==null));
+    if(unassigned.length>0){
+      html += `<div class="section-title">${esc(t('routes_unassigned_title'))}</div>`;
+      html += unassigned.map(o=>`<div class="order-item" onclick="App.openOrderModal('${esc(o.id)}')">
+        <div class="order-item-body">
+          <div class="order-item-name">${esc(o.customerName)}</div>
+          <div class="order-item-addr">${esc(o.address)}</div>
+          <span class="badge badge-nogeo">${esc(t('status_nogeo'))}</span>
+        </div>
+      </div>`).join('');
+    }
+    list.innerHTML = html || `<div class="empty-state"><p>${esc(t('routes_no_orders'))}</p></div>`;
+    this.renderMap();
+  },
+
+  renderMap(){
+    if(typeof L === 'undefined') return;
+    const el = document.getElementById('routes-map');
+    if(!el) return;
+    const depot = state.settings.depotCoord;
+    const center = depot || {lat:37.9838, lon:23.7275};
+    if(!this._map){
+      this._map = L.map(el, {zoomControl:false, attributionControl:false}).setView([center.lat, center.lon], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this._map);
+      this._layerGroup = L.layerGroup().addTo(this._map);
+    } else {
+      this._map.invalidateSize();
+    }
+    this._layerGroup.clearLayers();
+    const bounds = [];
+    if(depot){
+      L.marker([depot.lat, depot.lon], {icon:L.divIcon({className:'', html:'<div style="width:16px;height:16px;background:#241c14;border-radius:4px;border:2px solid #fff"></div>', iconSize:[16,16], iconAnchor:[8,8]})}).addTo(this._layerGroup);
+      bounds.push([depot.lat, depot.lon]);
+    }
+    if(state.routes && depot){
+      const ordersById = new Map(state.orders.map(o=>[o.id,o]));
+      state.drivers.forEach(driver=>{
+        const route = state.routes[driver.id];
+        if(!route) return;
+        const stops = route.orderIds.map(id=>ordersById.get(id)).filter(o=>o && o.lat!=null);
+        if(stops.length===0) return;
+        const latlngs = [[depot.lat,depot.lon], ...stops.map(o=>[o.lat,o.lon]), [depot.lat,depot.lon]];
+        L.polyline(latlngs, {color:driver.color, weight:3, opacity:.7}).addTo(this._layerGroup);
+        stops.forEach((o,i)=>{
+          L.marker([o.lat,o.lon], {icon:L.divIcon({className:'', html:`<div style="width:20px;height:20px;border-radius:50%;background:${driver.color};color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff">${i+1}</div>`, iconSize:[20,20], iconAnchor:[10,10]})}).addTo(this._layerGroup);
+          bounds.push([o.lat,o.lon]);
+        });
+      });
+    }
+    if(bounds.length>1) this._map.fitBounds(bounds, {padding:[24,24]});
+    else if(bounds.length===1) this._map.setView(bounds[0], 14);
+  },
+
+  // ---- SERVICE WORKER ----
+  registerSW(){
+    if('serviceWorker' in navigator){
+      const CACHE_VER = 'dropoff-v1';
+      const swBlob = new Blob([`
+        const CACHE='${CACHE_VER}';
+        self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([]))); self.skipWaiting();});
+        self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+        self.addEventListener('fetch',e=>e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))));
+      `],{type:'application/javascript'});
+      const swUrl = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl).catch(()=>{});
+    }
+  }
+};
+
+document.addEventListener('DOMContentLoaded', ()=>App.init());
+</script>
+</body>
+</html>
