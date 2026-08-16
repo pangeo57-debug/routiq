@@ -6396,8 +6396,17 @@ const App = {
     Toast.show(t('toast_applies_next_refresh'),'info');
   },
 
-  saveSettings(){
-    if(state._schedulingInProgress){ Toast.show(t('toast_settings_blocked_calc'),'error'); return; }
+  async saveSettings(){
+    // Changing settings (work days/hours especially) mid-calculation means
+    // whatever's running is now computing against stale input — stop it and
+    // restart fresh with the new settings, instead of blocking the save or
+    // silently finishing a run the user no longer wants.
+    const wasRunning = state._schedulingInProgress;
+    if(wasRunning){
+      this.cancelScheduling();
+      const cancelStart=Date.now();
+      while(state._schedulingInProgress && Date.now()-cancelStart<3000){ await new Promise(r=>setTimeout(r,50)); }
+    }
     const s = state.settings;
     const prevHome = s.homeAddress;
     s.teacherName = document.getElementById('set-name')?.value?.trim()||'';
@@ -6433,11 +6442,16 @@ const App = {
     });
 
     Storage.saveSettings(s);
-    // Mark stale — don't auto-recalculate. The user regenerates explicitly
-    // via "Ανανέωση" whenever they're ready, not on every settings save.
+    // Mark stale — don't auto-recalculate on an ordinary settings save. The
+    // user regenerates explicitly via "Ανανέωση" whenever they're ready.
+    // Exception: a calculation we just interrupted above DOES restart
+    // automatically — the user was actively correcting input mid-run, not
+    // idly tweaking a setting, so leaving them with a stale/cancelled
+    // schedule and no calculation running would be a worse outcome.
     state._scheduleStale = true;
     if(state.currentScreen==='home') this.renderHome();
     Toast.show(t('toast_settings_saved'),'success');
+    if(wasRunning) this.runAndNotify();
   },
 
   openBlockDrawer(){
