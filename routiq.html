@@ -3640,9 +3640,11 @@ const Router = {
   async geocode(address){
     if(!address) return null;
     try{
-      const q = encodeURIComponent(address + ', Ελλάδα');
-      const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr&addressdetails=1${this._viewboxParam()}`;
-      const r = await fetch(url, {headers:{'Accept-Language':'el'}});
+      // No forced country — worldwide search, biased (not restricted) toward
+      // the tutor's home area via the viewbox param below when one is set.
+      const q = encodeURIComponent(address);
+      const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&addressdetails=1${this._viewboxParam()}`;
+      const r = await fetch(url, {headers:{'Accept-Language':this._geoLang()}});
       if(!r.ok){
         console.warn(`Nominatim geocode failed for "${address}": HTTP ${r.status} ${r.statusText}`);
         return null;
@@ -3650,8 +3652,8 @@ const Router = {
       let d = await r.json();
       // Bounded search found nothing (e.g. address genuinely outside the home area) — retry unbounded
       if((!Array.isArray(d) || d.length===0) && this._viewboxParam()){
-        const url2 = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&countrycodes=gr&addressdetails=1`;
-        const r2 = await fetch(url2, {headers:{'Accept-Language':'el'}});
+        const url2 = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&addressdetails=1`;
+        const r2 = await fetch(url2, {headers:{'Accept-Language':this._geoLang()}});
         if(!r2.ok){
           console.warn(`Nominatim geocode (unbounded retry) failed for "${address}": HTTP ${r2.status} ${r2.statusText}`);
           return null;
@@ -3673,7 +3675,7 @@ const Router = {
     if(!address) return null;
     try{
       const q = encodeURIComponent(address);
-      const url = `https://geocode.search.hereapi.com/v1/geocode?q=${q}&in=countryCode:GRC&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
+      const url = `https://geocode.search.hereapi.com/v1/geocode?q=${q}&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
       const r = await fetch(url);
       if(!r.ok) return null;
       const d = await r.json();
@@ -5027,17 +5029,17 @@ const App = {
   },
 
   async _searchNominatim(val){
-    // Search the raw text as typed — no forced ", Ελλάδα" suffix. countrycodes=gr
-    // already scopes results to Greece; appending the country name to the query
-    // string was hurting POI/business-name matches (e.g. "Starbucks Πάτρα") since
-    // Nominatim then has to match "Ελλάδα" as a literal token too.
+    // Search the raw text as typed, worldwide — no country restriction, only
+    // a soft bias toward the tutor's home area via the viewbox param (falls
+    // through to an unbounded retry below when nothing matches nearby, e.g.
+    // the student genuinely lives outside that area or in another country).
     const q = encodeURIComponent(val.trim());
-    const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1${Router._viewboxParam()}`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&addressdetails=1&namedetails=1${Router._viewboxParam()}`;
     const r = await fetch(url, {headers:{'Accept-Language':Router._geoLang()}});
     if(!r.ok) throw new Error(`Nominatim ${r.status}`);
     let results = await r.json();
     if((!Array.isArray(results) || results.length===0) && Router._viewboxParam()){
-      const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&countrycodes=gr&addressdetails=1&namedetails=1`;
+      const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&addressdetails=1&namedetails=1`;
       const r2 = await fetch(url2, {headers:{'Accept-Language':Router._geoLang()}});
       if(r2.ok) results = await r2.json();
     }
