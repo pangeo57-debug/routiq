@@ -494,6 +494,7 @@ input[type=time]{color-scheme:light}
       </div>
     </div>
     <div id="sched-pct" style="font-size:11px;color:var(--text3,#888);font-weight:700;flex-shrink:0">0%</div>
+    <button id="sched-cancel-btn" onclick="App.cancelScheduling()" style="flex-shrink:0;width:26px;height:26px;border-radius:50%;border:none;background:var(--bg3,#f0f0f0);color:var(--text2,#666);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Stop">✕</button>
   </div>
   <div id="sched-warn" style="font-size:10.5px;color:var(--orange,#d97706);text-align:center;margin-top:6px;font-weight:600"></div>
 </div>
@@ -815,6 +816,7 @@ const I18N = {
     phase_done_title:'Ολοκληρώθηκε', phase_done_sub:'Αποθήκευση προγράμματος…',
     sched_dont_change_settings:'Παρακαλώ περιμένετε, μην αλλάζετε ρυθμίσεις μέχρι να τελειώσει ο υπολογισμός',
     toast_settings_blocked_calc:'Δεν μπορείς να αποθηκεύσεις ρυθμίσεις όσο τρέχει ο υπολογισμός προγράμματος',
+    sched_cancelling:'Διακοπή...', toast_scheduling_cancelled:'Ο υπολογισμός διακόπηκε — κρατήσαμε το προηγούμενο πρόγραμμα',
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Το πρόγραμμα είναι έτοιμο ✓',
     phase_km_title:'Υπολογισμός διαδρομής', phase_km_sub:'Υπολογίζουμε την πραγματική απόσταση…',
     phase_persist_title:'Αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — μη κλείνετε την εφαρμογή…',
@@ -990,6 +992,7 @@ const I18N = {
     phase_done_title:'Complete', phase_done_sub:'Saving schedule…',
     sched_dont_change_settings:"Please wait, don't change settings until the calculation finishes",
     toast_settings_blocked_calc:"Can't save settings while a schedule calculation is running",
+    sched_cancelling:'Stopping...', toast_scheduling_cancelled:'Calculation stopped — kept your previous schedule',
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Your schedule is ready ✓',
     phase_km_title:'Calculating your route', phase_km_sub:'Working out the real distance…',
     phase_persist_title:'Looking for a solution', phase_persist_sub:"{n} student(s) left — don't close the app…",
@@ -1165,6 +1168,7 @@ const I18N = {
     phase_done_title:'Terminé', phase_done_sub:'Enregistrement du programme…',
     sched_dont_change_settings:"Veuillez patienter, ne modifiez pas les réglages avant la fin du calcul",
     toast_settings_blocked_calc:"Impossible d'enregistrer les réglages pendant un calcul de programme",
+    sched_cancelling:'Arrêt...', toast_scheduling_cancelled:'Calcul arrêté — ancien programme conservé',
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Votre programme est prêt ✓',
     phase_km_title:'Calcul de votre itinéraire', phase_km_sub:'Nous calculons la distance réelle…',
     phase_persist_title:'Recherche d\'une solution', phase_persist_sub:'{n} élève(s) restant(s) — ne fermez pas l\'application…',
@@ -1340,6 +1344,7 @@ const I18N = {
     phase_done_title:'Abgeschlossen', phase_done_sub:'Plan wird gespeichert…',
     sched_dont_change_settings:'Bitte warten, ändern Sie keine Einstellungen bis die Berechnung fertig ist',
     toast_settings_blocked_calc:'Einstellungen können nicht gespeichert werden, während eine Berechnung läuft',
+    sched_cancelling:'Wird gestoppt...', toast_scheduling_cancelled:'Berechnung gestoppt — vorheriger Plan beibehalten',
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Ihr Stundenplan ist fertig ✓',
     phase_km_title:'Route wird berechnet', phase_km_sub:'Die tatsächliche Entfernung wird ermittelt…',
     phase_persist_title:'Lösung wird gesucht', phase_persist_sub:'noch {n} Schüler — App bitte nicht schließen…',
@@ -3218,6 +3223,7 @@ const Scheduler = {
       // minutes when there are still unplaced students) never looks frozen.
       if(++iter%200===0){
         await new Promise(r=>setTimeout(r,0));
+        if(typeof state!=='undefined' && state._schedulingCancelled) break;
         const now=Date.now();
         if(onProgress && now-lastProgress>1000){ lastProgress=now; onProgress(bestU, now-t0, budgetMs); }
       }
@@ -3511,6 +3517,7 @@ const Scheduler = {
     const t0=Date.now(); let iter=0; let lastTick=t0;
     while(Date.now()-t0<budgetMs){
       if(++iter%80===0) await new Promise(r=>setTimeout(r,0));
+      if(typeof state!=='undefined' && state._schedulingCancelled) break;
       const now=Date.now();
       // Report real search progress (not just elapsed-time) so the UI can show
       // actual movement instead of a fake creep — throttled to ~4/sec so it
@@ -4200,10 +4207,45 @@ const App = {
     }
   },
 
+  // Called by the ✕ button on the progress overlay. Just flips a flag — the
+  // long-running phases (alnsOptimize's loop, lnsRepair's loop) poll it and
+  // return early, and runAndNotify itself checks it between phases. Actually
+  // restoring the previous schedule happens once control gets back to
+  // runAndNotify's cleanup, not here, since a phase mid-mutation can't be
+  // safely interrupted from outside.
+  cancelScheduling(){
+    if(!state._schedulingInProgress) return;
+    state._schedulingCancelled = true;
+    const btn = document.getElementById('sched-cancel-btn');
+    if(btn){ btn.disabled=true; btn.style.opacity='0.5'; }
+    const sb = document.getElementById('sched-sub');
+    if(sb) sb.textContent = t('sched_cancelling');
+  },
+
   async runAndNotify(){
     const btn = document.querySelector('.btn[onclick*="runAndNotify"]');
     if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.innerHTML = btn.innerHTML.replace(new RegExp(t('schedule_refresh')+'|<svg[^>]*>.*?<\\/svg>\\s*','s'),'') ; btn.textContent = t('debug_geocoding'); }
     state._schedulingInProgress = true;
+    state._schedulingCancelled = false;
+    // Keep a snapshot to restore if the user cancels — a half-optimized
+    // schedule from an interrupted run is worse than just keeping what was
+    // there before "Ανανέωση" was pressed.
+    const scheduleBackup = JSON.parse(JSON.stringify(state.schedule));
+    const kmBeforeBackup = state.scheduleKmBefore, kmAfterBackup = state.scheduleKmAfter;
+    const cancelledCleanup = ()=>{
+      state.schedule = scheduleBackup;
+      state.scheduleKmBefore = kmBeforeBackup;
+      state.scheduleKmAfter = kmAfterBackup;
+      Storage.saveSchedule(state.schedule);
+      state._schedulingCancelled = false;
+      state._schedulingInProgress = false;
+      clearTimeout(this._schedulingWatchdog);
+      schedProgress(null,null,null,null);
+      if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
+      if(state.currentScreen==='schedule') this.renderSchedule();
+      else if(state.currentScreen==='home') this.renderHome();
+      Toast.show(t('toast_scheduling_cancelled'), 'error');
+    };
     // Safety net: if something throws outside the phases' own try/catch guards
     // and this never gets to its normal cleanup, don't leave Settings blocked
     // forever — force-clear after longer than any legitimate run could take.
@@ -4296,6 +4338,8 @@ const App = {
       }
     }catch(e){ console.warn('Matrix pre-fetch failed, using straight-line estimates:', e); }
 
+    if(state._schedulingCancelled) return cancelledCleanup();
+
     // Phase 1: backtracking CSP — multiple randomized attempts, keep the one that
     // places the most students (km is only a tie-breaker, never sacrifices a student)
     const attemptCount = state.settings.scheduleQuality==='thorough' ? 8 : 6;
@@ -4303,7 +4347,11 @@ const App = {
     await new Promise(r=>setTimeout(r,40));
     let r;
     try{
-      if(state.students.length===0){ schedProgress(null); return; }
+      if(state.students.length===0){
+        schedProgress(null); state._schedulingInProgress=false; clearTimeout(this._schedulingWatchdog);
+        if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
+        return;
+      }
       const result = Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
       state.scheduleAttempts = [result];
       state.scheduleAttemptIdx = 0;
@@ -4315,6 +4363,8 @@ const App = {
       state.routeResults = {};
       r = result;
     }catch(e){ console.error('Scheduler error',e); }
+
+    if(state._schedulingCancelled) return cancelledCleanup();
 
     // Phase 2+3: route optimization (ALNS — destroy/repair with adaptive
     // operator weights, replaces the old geoOptimize+SA two-step pipeline;
@@ -4331,10 +4381,14 @@ const App = {
       await Scheduler.alnsOptimize(state.schedule, state.students, state.settings, state.coords, 25000, onTick);
     }catch(e){ console.error('alnsOptimize error', e); }
 
+    if(state._schedulingCancelled) return cancelledCleanup();
+
     // Phase 4: repair
     schedProgress(82,t('phase4b_title'),t('phase4b_sub'),'🔧');
     await new Promise(r=>setTimeout(r,40));
     try{ Scheduler.saRepair(state.schedule, state.students, state.settings, state.schedulerResult); }catch(e){}
+
+    if(state._schedulingCancelled) return cancelledCleanup();
 
     // Phase 5: LNS
     schedProgress(92,t('phase5_title'),t('phase5b_sub'),'🔍');
@@ -4348,6 +4402,8 @@ const App = {
       if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
     }catch(e){}
 
+    if(state._schedulingCancelled) return cancelledCleanup();
+
     // Still someone unplaced after the normal 10s pass? Keep trying with a much
     // longer budget (up to 7 min) instead of giving up — a short search can miss
     // a real, valid slot on a lightly-loaded day. Only runs when actually needed.
@@ -4360,6 +4416,8 @@ const App = {
         if(fixResult2.repaired) console.warn(`⚠ enforceConstraints (after persistent search): repaired ${fixResult2.repaired-fixResult2.dropped}, dropped ${fixResult2.dropped}`);
       }catch(e){}
     }
+
+    if(state._schedulingCancelled) return cancelledCleanup();
 
     // Verify constraints — surfaced to the user, not just the console, so a
     // scheduling bug that violates someone's availability doesn't ship silently.
