@@ -4962,6 +4962,7 @@ const App = {
 
   onAddrInput(val, boxId='addr-suggest'){
     if(boxId==='addr-suggest') this._addrPendingCoord = null;
+    else if(boxId==='set-home-suggest') this._homeAddrPendingCoord = null;
     else this._obCoord = null;
     clearTimeout(this._addrTimer);
     const box = document.getElementById(boxId);
@@ -4997,7 +4998,7 @@ const App = {
           const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
           return `<div class="addr-suggest-item" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4"
             onmousedown="App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')"
-            ontouchstart="App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')">
+            ontouchstart="event.preventDefault(); App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')">
             <div style="font-weight:500;color:var(--text)">${esc(short)}</div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(res.name)}</div>
           </div>`;
