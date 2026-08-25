@@ -5005,6 +5005,18 @@ const App = {
     Storage.saveSettings(state.settings);
     this._homeAddrPendingCoord = null;
     this.updateHomeLocationMapMarker(coord);
+    // Surgical DOM update instead of a full renderSettings() — that would
+    // rebuild the whole screen (losing scroll position/keyboard focus) just
+    // to refresh this one "✓ geocoded" label.
+    const statusEl = document.getElementById('set-home-geo-status');
+    if(statusEl) statusEl.innerHTML = this._homeGeoStatusHtml();
+  },
+
+  _homeGeoStatusHtml(){
+    const c = state.coords['home'];
+    return c
+      ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_geocoded')} ${c.lat.toFixed(4)}, ${c.lon.toFixed(4)}</span>`
+      : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_not_geocoded')}</span>`;
   },
 
   toggleGroupField(){
@@ -6245,9 +6257,7 @@ const App = {
         </div>
         <div class="form-group" style="margin:0;position:relative">
           <label>${t('settings_home_address')}
-            ${state.coords['home']
-              ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_geocoded')} ${state.coords['home'].lat.toFixed(4)}, ${state.coords['home'].lon.toFixed(4)}</span>`
-              : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_not_geocoded')}</span>`}
+            <span id="set-home-geo-status">${this._homeGeoStatusHtml()}</span>
           </label>
           <div style="display:flex;gap:6px">
             <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="${t('settings_home_placeholder')}" autocomplete="off" style="flex:1"
