@@ -710,6 +710,8 @@ const I18N = {
     toast_location_picked:'Η τοποθεσία επιλέχθηκε',
     toast_home_location_saved:'Η διεύθυνσή σου αποθηκεύτηκε',
     form_times_per_week:'Φορές/εβδ.', form_merge_label:'Ενιαίο block (δίωρο κ.λπ.)',
+    form_merge_2x_question:'Θέλεις και τα 2 μαθήματα την ίδια μέρα, ή σε 2 διαφορετικές μέρες;',
+    form_merge_2x_sameday:'Ίδια μέρα — δίωρο, χωρίς διάλειμμα ανάμεσα', form_merge_2x_separate:'2 διαφορετικές μέρες',
     form_merge_off:'Ποτέ — πάντα ξεχωριστά μαθήματα', form_merge_always:'Πάντα — ένα συνεχόμενο block',
     form_merge_auto:'Αυτόματα — ο αλγόριθμος αποφασίζει ό,τι ταιριάζει καλύτερα',
     form_merge_auto_hint:'Στο "Αυτόματα", δοκιμάζονται και οι δύο επιλογές και κρατιέται όποια χωράει καλύτερα με τους υπόλοιπους μαθητές',
@@ -888,6 +890,8 @@ const I18N = {
     toast_location_picked:'Location selected',
     toast_home_location_saved:'Your address was saved',
     form_times_per_week:'Times/wk', form_merge_label:'Single block (double lesson etc.)',
+    form_merge_2x_question:'Do you want both lessons on the same day, or on 2 different days?',
+    form_merge_2x_sameday:'Same day — back-to-back, no break in between', form_merge_2x_separate:'2 different days',
     form_merge_off:'Never — always separate lessons', form_merge_always:'Always — one continuous block',
     form_merge_auto:'Auto — the algorithm decides what fits best',
     form_merge_auto_hint:'On "Auto", both options are tried and the one that fits best with the other students is kept',
@@ -1066,6 +1070,8 @@ const I18N = {
     toast_location_picked:'Emplacement sélectionné',
     toast_home_location_saved:'Votre adresse a été enregistrée',
     form_times_per_week:'Fois/sem.', form_merge_label:'Bloc unique (double cours, etc.)',
+    form_merge_2x_question:'Voulez-vous les 2 cours le même jour, ou sur 2 jours différents ?',
+    form_merge_2x_sameday:'Même jour — d\'affilée, sans pause entre les deux', form_merge_2x_separate:'2 jours différents',
     form_merge_off:'Jamais — toujours des cours séparés', form_merge_always:'Toujours — un bloc continu',
     form_merge_auto:"Auto — l'algorithme décide ce qui convient le mieux",
     form_merge_auto_hint:'En mode "Auto", les deux options sont testées et celle qui convient le mieux avec les autres élèves est retenue',
@@ -1244,6 +1250,8 @@ const I18N = {
     toast_location_picked:'Standort ausgewählt',
     toast_home_location_saved:'Deine Adresse wurde gespeichert',
     form_times_per_week:'Mal/Woche', form_merge_label:'Einzelblock (Doppelstunde usw.)',
+    form_merge_2x_question:'Möchtest du beide Stunden am selben Tag, oder an 2 verschiedenen Tagen?',
+    form_merge_2x_sameday:'Selber Tag — direkt hintereinander, ohne Pause dazwischen', form_merge_2x_separate:'2 verschiedene Tage',
     form_merge_off:'Nie — immer getrennte Stunden', form_merge_always:'Immer — ein durchgehender Block',
     form_merge_auto:'Auto — der Algorithmus entscheidet, was am besten passt',
     form_merge_auto_hint:'Bei "Auto" werden beide Optionen ausprobiert und die am besten passende beibehalten',
@@ -4847,20 +4855,7 @@ const App = {
         </div>
       </div>
       <div class="form-group" id="merge-field" style="margin-top:14px;display:${(st?.lessonsPerWeek||1)>=2?'block':'none'}">
-        <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">${t('form_merge_label')}</label>
-        <select id="st-mergemode" onchange="App.toggleMergeSizeField()" style="margin-bottom:0">
-          <option value="off" ${!st?.mergeMode||st?.mergeMode==='off'?'selected':''}>${t('form_merge_off')}</option>
-          <option value="always" ${st?.mergeMode==='always'||(st?.forceMerge&&!st?.mergeMode)?'selected':''}>${t('form_merge_always')}</option>
-          <option value="auto" ${st?.mergeMode==='auto'?'selected':''}>${t('form_merge_auto')}</option>
-        </select>
-        <div class="settings-sub" style="margin-top:4px">${t('form_merge_auto_hint')}</div>
-        <div id="merge-size-field" style="margin-top:8px;display:${(st?.mergeMode==='always'||st?.mergeMode==='auto'||(st?.forceMerge&&!st?.mergeMode))?'block':'none'}">
-          <label style="font-size:12px">${t('form_max_per_block')} — <span id="st-mergesize-val">${st?.maxMergeSessions||st?.lessonsPerWeek||2}</span>× (${((st?.maxMergeSessions||st?.lessonsPerWeek||2)*(st?.lessonDuration??(state.settings.defaultLessonDuration||60)))}${t('unit_min')})</label>
-          <input type="range" id="st-mergesize" min="2" max="${st?.lessonsPerWeek||5}" step="1" value="${st?.maxMergeSessions||st?.lessonsPerWeek||2}"
-            style="width:100%;accent-color:var(--primary)"
-            oninput="document.getElementById('st-mergesize-val').textContent=this.value; App._updateMergeSizeLabel()">
-          <div class="settings-sub" style="margin-top:2px">${t('form_max_per_block_hint')}</div>
-        </div>
+        ${this._mergeFieldHtml(st?.lessonsPerWeek||1, st)}
       </div>
       <div class="form-row" style="margin-top:14px">
         <div class="form-group" style="margin:0">
@@ -5028,9 +5023,44 @@ const App = {
   toggleMergeField(){
     const freq = Number(document.getElementById('st-freq')?.value)||1;
     const mf = document.getElementById('merge-field');
-    if(mf) mf.style.display = freq>=2?'block':'none';
-    const range = document.getElementById('st-mergesize');
-    if(range) range.max = freq;
+    if(!mf) return;
+    mf.style.display = freq>=2?'block':'none';
+    if(freq>=2) mf.innerHTML = this._mergeFieldHtml(freq, null);
+  },
+
+  // For exactly 2x/week, "same day as a double lesson, or two separate
+  // days?" is a genuinely binary choice — a 3-option dropdown with jargon
+  // ("block", "Auto") just makes the tutor guess what those mean. 3x/week+
+  // keeps the full dropdown since "same day" isn't a single well-defined
+  // choice anymore (which days, how many together?).
+  _mergeFieldHtml(freq, st){
+    if(freq===2){
+      const isMerged = st ? (st.mergeMode==='always' || (st.forceMerge && !st.mergeMode)) : false;
+      return `
+        <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">${t('form_merge_2x_question')}</label>
+        <select id="st-mergemode" onchange="App.toggleMergeSizeField()" style="margin-bottom:0">
+          <option value="always" ${isMerged?'selected':''}>${t('form_merge_2x_sameday')}</option>
+          <option value="off" ${!isMerged?'selected':''}>${t('form_merge_2x_separate')}</option>
+        </select>
+        <input type="hidden" id="st-mergesize" value="2">
+      `;
+    }
+    return `
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">${t('form_merge_label')}</label>
+      <select id="st-mergemode" onchange="App.toggleMergeSizeField()" style="margin-bottom:0">
+        <option value="off" ${!st?.mergeMode||st?.mergeMode==='off'?'selected':''}>${t('form_merge_off')}</option>
+        <option value="always" ${st?.mergeMode==='always'||(st?.forceMerge&&!st?.mergeMode)?'selected':''}>${t('form_merge_always')}</option>
+        <option value="auto" ${st?.mergeMode==='auto'?'selected':''}>${t('form_merge_auto')}</option>
+      </select>
+      <div class="settings-sub" style="margin-top:4px">${t('form_merge_auto_hint')}</div>
+      <div id="merge-size-field" style="margin-top:8px;display:${(st?.mergeMode==='always'||st?.mergeMode==='auto'||(st?.forceMerge&&!st?.mergeMode))?'block':'none'}">
+        <label style="font-size:12px">${t('form_max_per_block')} — <span id="st-mergesize-val">${st?.maxMergeSessions||st?.lessonsPerWeek||2}</span>× (${((st?.maxMergeSessions||st?.lessonsPerWeek||2)*(st?.lessonDuration??(state.settings.defaultLessonDuration||60)))}${t('unit_min')})</label>
+        <input type="range" id="st-mergesize" min="2" max="${st?.lessonsPerWeek||5}" step="1" value="${st?.maxMergeSessions||st?.lessonsPerWeek||2}"
+          style="width:100%;accent-color:var(--primary)"
+          oninput="document.getElementById('st-mergesize-val').textContent=this.value; App._updateMergeSizeLabel()">
+        <div class="settings-sub" style="margin-top:2px">${t('form_max_per_block_hint')}</div>
+      </div>
+    `;
   },
 
   toggleMergeSizeField(){
