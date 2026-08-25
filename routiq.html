@@ -3612,6 +3612,20 @@ const Scheduler = {
   }
 };
 
+// TEMPORARY: a shared HERE API key, embedded directly in this public,
+// client-side file — visible to anyone who opens dev tools or views source.
+// Every user of the app currently shares this one key's free quota, and
+// anyone could technically copy it and use it elsewhere. This is a known,
+// deliberate trade-off to give every user better geocoding accuracy without
+// each of them having to sign up for their own key — NOT a real secret.
+// Remove this once the backend proxy phase lands (roadmap item), which will
+// hold the key server-side instead. A user's own key, entered in Settings,
+// always takes priority over this one (see getHereKey()).
+const SHARED_HERE_KEY = 'ZYbtkcLwZXstiGaBGzxJHCuHiA-wFqW41iTCJe0y_6g';
+function getHereKey(){
+  return (state.settings && state.settings.hereApiKey) || SHARED_HERE_KEY;
+}
+
 // ============================================================
 // ROUTER (OpenRouteService)
 // ============================================================
@@ -4264,7 +4278,7 @@ const App = {
       if(st.address && !state.coords[st.id]) toGeocode.push({ id:st.id, addr:st.address });
     }
     if(toGeocode.length > 0){
-      const hereKey = state.settings && state.settings.hereApiKey;
+      const hereKey = getHereKey();
       let updated = false, failed = 0;
       // Home first, awaited alone — Nominatim biases every later search
       // toward it via Router._viewboxParam(), which only works once home's
@@ -4311,7 +4325,7 @@ const App = {
     state.travelMatrixOffPeak = null;
     state.travelMatrix = null;
     try{
-      const hereKey = state.settings && state.settings.hereApiKey;
+      const hereKey = getHereKey();
       const allStudentIds = state.students.map(s=>s.id);
       const allIds = ['home', ...allStudentIds];
       const matCoords = allIds.map(id=>state.coords[id]).filter(Boolean);
@@ -4970,7 +4984,7 @@ const App = {
     if(val.length < 3){ box.style.display='none'; return; }
     box.style.display='block';
     box.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_searching')}</div>`;
-    const hereKey = state.settings && state.settings.hereApiKey;
+    const hereKey = getHereKey();
     this._addrTimer = setTimeout(async ()=>{
       try{
         const results = hereKey ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
@@ -5116,7 +5130,7 @@ const App = {
   // Shared reverse-geocode: HERE when a key is configured, else free Nominatim.
   // Returns the full display string, or null on failure.
   async _reverseGeocode(lat, lon){
-    const hereKey = state.settings && state.settings.hereApiKey;
+    const hereKey = getHereKey();
     if(hereKey){
       const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=${Router._geoLang()}&apiKey=${hereKey}`;
       const r = await fetch(url);
