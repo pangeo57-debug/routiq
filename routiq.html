@@ -697,6 +697,7 @@ const I18N = {
     students_map_locations_count:'τοποθεσίες', students_map_no_geocoded:'Δεν υπάρχουν geocoded τοποθεσίες',
     home_marker_tooltip:'🏠 Σπίτι', student_per_week_suffix:'x/εβδ', student_placed_suffix:'τοποθ.',
     student_address_label:'Διεύθυνση', student_geocoded_title:'Geocoded', student_not_geocoded_title:'Δεν έχει γίνει geocoding',
+    student_far_from_home_title:'Ύποπτο: {km}χλμ από το σπίτι σου — πιθανή λάθος διεύθυνση, έλεγξε την στον χάρτη',
     student_duration_label:'Διάρκεια', student_minutes_suffix:'λεπτά', student_type_label:'Τύπος',
     student_type_group_prefix:'Ομάδα', student_type_solo:'Ατομικό', student_paired_label:'Ζεύγος με',
     student_unknown_partner:'⚠ άγνωστος μαθητής', student_not_mutual:'⚠ μη αμφίδρομο',
@@ -877,6 +878,7 @@ const I18N = {
     students_map_locations_count:'locations', students_map_no_geocoded:'No geocoded locations',
     home_marker_tooltip:'🏠 Home', student_per_week_suffix:'x/wk', student_placed_suffix:'placed',
     student_address_label:'Address', student_geocoded_title:'Geocoded', student_not_geocoded_title:'Not geocoded yet',
+    student_far_from_home_title:'Suspicious: {km}km from your home — likely a wrong address, check it on the map',
     student_duration_label:'Duration', student_minutes_suffix:'minutes', student_type_label:'Type',
     student_type_group_prefix:'Group', student_type_solo:'Individual', student_paired_label:'Paired with',
     student_unknown_partner:'⚠ unknown student', student_not_mutual:'⚠ not mutual',
@@ -1057,6 +1059,7 @@ const I18N = {
     students_map_locations_count:'lieux', students_map_no_geocoded:'Aucun lieu géocodé',
     home_marker_tooltip:'🏠 Domicile', student_per_week_suffix:'x/sem', student_placed_suffix:'placé',
     student_address_label:'Adresse', student_geocoded_title:'Géocodé', student_not_geocoded_title:'Pas encore géocodé',
+    student_far_from_home_title:'Suspect : {km}km de votre domicile — adresse probablement erronée, vérifiez sur la carte',
     student_duration_label:'Durée', student_minutes_suffix:'minutes', student_type_label:'Type',
     student_type_group_prefix:'Groupe', student_type_solo:'Individuel', student_paired_label:'Associé à',
     student_unknown_partner:'⚠ élève inconnu', student_not_mutual:'⚠ non réciproque',
@@ -1237,6 +1240,7 @@ const I18N = {
     students_map_locations_count:'Standorte', students_map_no_geocoded:'Keine geocodierten Standorte',
     home_marker_tooltip:'🏠 Zuhause', student_per_week_suffix:'x/Wo', student_placed_suffix:'platziert',
     student_address_label:'Adresse', student_geocoded_title:'Geocodiert', student_not_geocoded_title:'Noch nicht geocodiert',
+    student_far_from_home_title:'Verdächtig: {km}km von deinem Zuhause entfernt — vermutlich falsche Adresse, auf der Karte prüfen',
     student_duration_label:'Dauer', student_minutes_suffix:'Minuten', student_type_label:'Typ',
     student_type_group_prefix:'Gruppe', student_type_solo:'Einzeln', student_paired_label:'Gepaart mit',
     student_unknown_partner:'⚠ unbekannter Schüler', student_not_mutual:'⚠ nicht gegenseitig',
@@ -4761,13 +4765,13 @@ const App = {
         <div class="student-header" onclick="App.toggleStudent('${st.id}')">
           <div class="student-avatar" style="background:${bg}20;color:${bg};border:1px solid ${bg}40">${initials}</div>
           <div class="student-info">
-            <div class="student-name">${esc(st.name)}</div>
+            <div class="student-name">${esc(st.name)} ${this._farFromHomeWarning(st.id)}</div>
             <div class="student-sub">${esc(subjectLabel(st.subject))} · ${st.lessonsPerWeek}${t('student_per_week_suffix')} · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="student-body" id="sb-${st.id}">
-          <div class="student-detail-row"><span class="student-detail-label">${t('student_address_label')}</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="${t('student_geocoded_title')} ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="${t('student_not_geocoded_title')}"> ○</span>`}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">${t('student_address_label')}</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="${t('student_geocoded_title')} ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="${t('student_not_geocoded_title')}"> ○</span>`} ${this._farFromHomeWarning(st.id)}</span></div>
           <div class="student-detail-row"><span class="student-detail-label">${t('student_duration_label')}</span><span>${st.lessonDuration} ${t('student_minutes_suffix')}</span></div>
           <div class="student-detail-row"><span class="student-detail-label">${t('student_type_label')}</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?t('student_type_group_prefix')+': '+esc(st.group):t('student_type_solo')}</span></div>
           ${st.pairedWith ? (()=>{
@@ -5027,6 +5031,22 @@ const App = {
     return c
       ? `<span style="color:var(--green);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_geocoded')} ${c.lat.toFixed(4)}, ${c.lon.toFixed(4)}</span>`
       : `<span style="color:var(--orange);font-size:11px;font-weight:400;margin-left:6px">${t('settings_home_not_geocoded')}</span>`;
+  },
+
+  // A bad geocode match (wrong-city same-named street, a POI that matched
+  // something in an entirely different town) can silently place a student
+  // dozens of km away — nothing else surfaces this until the route/map
+  // visibly detours there. 40km is generous for a home-tutoring radius
+  // (Patras itself is ~10km across); flag anything past that so a bad match
+  // gets noticed and fixed via the map picker instead of shipping silently.
+  _FAR_FROM_HOME_KM: 40,
+  _farFromHomeWarning(studentId){
+    const home = state.coords['home'];
+    const c = state.coords[studentId];
+    if(!home || !c) return '';
+    const km = Scheduler.haversineKm(home, c);
+    if(km <= this._FAR_FROM_HOME_KM) return '';
+    return `<span style="color:var(--orange);font-size:10px" title="${tf('student_far_from_home_title',{km:Math.round(km)})}">⚠ ${Math.round(km)}km</span>`;
   },
 
   toggleGroupField(){
