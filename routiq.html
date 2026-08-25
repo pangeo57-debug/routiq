@@ -3371,6 +3371,16 @@ const Scheduler = {
       return true;
     };
     const WEEKEND_PENALTY=2;
+    // Nothing in the placement/repair logic actually prefers an early start —
+    // findSlotFixed/rebuildDay both already CAN start a day's first lesson
+    // exactly at dayHours.start with no travel-from-home buffer, but nothing
+    // rewards doing so over leaving unused time at the front of the day, so
+    // the search can settle on a valid-but-needlessly-late first lesson. A
+    // small per-minute-of-gap penalty (km-equivalent, same unit as the rest
+    // of this objective) nudges destroy/repair toward packing each day's
+    // first lesson as close to its actual opening time as the student's own
+    // availability allows, without overriding genuine travel-distance cost.
+    const GAP_PENALTY_PER_MIN=0.05;
     const calcKm=(schObj)=>{
       let km=0;
       for(const d of wdays){
@@ -3379,6 +3389,11 @@ const Scheduler = {
         for(const s of slots){ if(!prevS||prevS.studentId!==s.studentId) km+=roadKm(prevId,prevAddr,s.studentId,s.address,d); prevId=s.studentId; prevAddr=s.address; prevS=s; }
         km+=roadKm(prevId,prevAddr,HOME_ID,HOME_ADDR,d);
         if(Number(d)===6) km+=slots.length*WEEKEND_PENALTY;
+        const dh=dayHours[d];
+        if(dh){
+          const gap = slots[0].start - this.toMin(dh.start);
+          if(gap>0) km += gap*GAP_PENALTY_PER_MIN;
+        }
       }
       return km;
     };
