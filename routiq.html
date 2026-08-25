@@ -762,6 +762,7 @@ const I18N = {
     settings_fuel_consumption_label:'Κατανάλωση (L/100km)', settings_margin_label:'Margin ασφαλείας (λεπτά)',
     settings_avg_speed_label:'Μέση ταχύτητα πόλης (km/h)', settings_here_key_label:'HERE Maps API Key',
     settings_here_key_hint:'Προαιρετικό — βελτιώνει την ακρίβεια αναζήτησης διεύθυνσης/μαγαζιού και ενεργοποιεί live traffic χρόνους.',
+    settings_here_key_shared_active:'Βελτιωμένη ακρίβεια διευθύνσεων ενεργή',
     settings_here_key_placeholder:'Προαιρετικό — για traffic-aware χρόνους', settings_lunch_label:'Διάλειμμα μεσημεριού',
     settings_lunch_none:'Κανένα', settings_lunch_30:'30 λεπτά', settings_lunch_60:'1 ώρα',
     settings_add_block:'Προσθήκη μπλοκαρίσματος', settings_maps_title:'Χάρτες &amp; Δρομολόγηση',
@@ -938,6 +939,7 @@ const I18N = {
     settings_fuel_consumption_label:'Consumption (L/100km)', settings_margin_label:'Safety margin (minutes)',
     settings_avg_speed_label:'Average city speed (km/h)', settings_here_key_label:'HERE Maps API Key',
     settings_here_key_hint:'Optional — improves address/place search accuracy and enables live traffic times.',
+    settings_here_key_shared_active:'Improved address accuracy active',
     settings_here_key_placeholder:'Optional — for traffic-aware times', settings_lunch_label:'Lunch break',
     settings_lunch_none:'None', settings_lunch_30:'30 minutes', settings_lunch_60:'1 hour',
     settings_add_block:'Add blocked time', settings_maps_title:'Maps &amp; Routing',
@@ -1114,6 +1116,7 @@ const I18N = {
     settings_fuel_consumption_label:'Consommation (L/100km)', settings_margin_label:'Marge de sécurité (minutes)',
     settings_avg_speed_label:'Vitesse moyenne en ville (km/h)', settings_here_key_label:'Clé API HERE Maps',
     settings_here_key_hint:'Optionnel — améliore la précision de recherche d\'adresse/lieu et active les temps de trajet en temps réel.',
+    settings_here_key_shared_active:'Précision d\'adresse améliorée active',
     settings_here_key_placeholder:'Facultatif — pour des temps tenant compte du trafic', settings_lunch_label:'Pause déjeuner',
     settings_lunch_none:'Aucune', settings_lunch_30:'30 minutes', settings_lunch_60:'1 heure',
     settings_add_block:'Ajouter un blocage', settings_maps_title:'Cartes &amp; Itinéraires',
@@ -1290,6 +1293,7 @@ const I18N = {
     settings_fuel_consumption_label:'Verbrauch (L/100km)', settings_margin_label:'Sicherheitsmarge (Minuten)',
     settings_avg_speed_label:'Durchschnittliche Stadtgeschwindigkeit (km/h)', settings_here_key_label:'HERE Maps API-Schlüssel',
     settings_here_key_hint:'Optional — verbessert die Genauigkeit der Adress-/Ortssuche und aktiviert Live-Verkehrszeiten.',
+    settings_here_key_shared_active:'Verbesserte Adressgenauigkeit aktiv',
     settings_here_key_placeholder:'Optional — für verkehrsbasierte Zeiten', settings_lunch_label:'Mittagspause',
     settings_lunch_none:'Keine', settings_lunch_30:'30 Minuten', settings_lunch_60:'1 Stunde',
     settings_add_block:'Blockierung hinzufügen', settings_maps_title:'Karten &amp; Routing',
@@ -6241,7 +6245,9 @@ const App = {
         <div class="form-group">
           <label>${t('settings_here_key_label')}</label>
           <input type="text" id="set-here-key" placeholder="${t('settings_here_key_placeholder')}" value="${esc(st.hereApiKey||'')}">
-          <div class="settings-sub" style="margin-top:4px">${t('settings_here_key_hint')}</div>
+          <div class="settings-sub" style="margin-top:4px">
+            ${st.hereApiKey ? t('settings_here_key_hint') : `<span style="color:var(--green)">✓ ${t('settings_here_key_shared_active')}</span>`}
+          </div>
         </div>
         <div class="form-group" style="margin:0">
           <label>${t('settings_lunch_label')}</label>
