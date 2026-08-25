@@ -708,6 +708,7 @@ const I18N = {
     form_location_map_label:'Τοποθεσία στον χάρτη',
     form_location_map_hint:'Σύρε το pin ή πάτα στον χάρτη για να διορθώσεις την ακριβή τοποθεσία.',
     toast_location_picked:'Η τοποθεσία επιλέχθηκε',
+    toast_home_location_saved:'Η διεύθυνσή σου αποθηκεύτηκε',
     form_times_per_week:'Φορές/εβδ.', form_merge_label:'Ενιαίο block (δίωρο κ.λπ.)',
     form_merge_off:'Ποτέ — πάντα ξεχωριστά μαθήματα', form_merge_always:'Πάντα — ένα συνεχόμενο block',
     form_merge_auto:'Αυτόματα — ο αλγόριθμος αποφασίζει ό,τι ταιριάζει καλύτερα',
@@ -885,6 +886,7 @@ const I18N = {
     form_location_map_label:'Location on map',
     form_location_map_hint:'Drag the pin or tap the map to fine-tune the exact location.',
     toast_location_picked:'Location selected',
+    toast_home_location_saved:'Your address was saved',
     form_times_per_week:'Times/wk', form_merge_label:'Single block (double lesson etc.)',
     form_merge_off:'Never — always separate lessons', form_merge_always:'Always — one continuous block',
     form_merge_auto:'Auto — the algorithm decides what fits best',
@@ -1062,6 +1064,7 @@ const I18N = {
     form_location_map_label:'Emplacement sur la carte',
     form_location_map_hint:'Faites glisser le repère ou touchez la carte pour ajuster l\'emplacement exact.',
     toast_location_picked:'Emplacement sélectionné',
+    toast_home_location_saved:'Votre adresse a été enregistrée',
     form_times_per_week:'Fois/sem.', form_merge_label:'Bloc unique (double cours, etc.)',
     form_merge_off:'Jamais — toujours des cours séparés', form_merge_always:'Toujours — un bloc continu',
     form_merge_auto:"Auto — l'algorithme décide ce qui convient le mieux",
@@ -1239,6 +1242,7 @@ const I18N = {
     form_location_map_label:'Standort auf der Karte',
     form_location_map_hint:'Ziehen Sie den Pin oder tippen Sie auf die Karte, um den genauen Standort anzupassen.',
     toast_location_picked:'Standort ausgewählt',
+    toast_home_location_saved:'Deine Adresse wurde gespeichert',
     form_times_per_week:'Mal/Woche', form_merge_label:'Einzelblock (Doppelstunde usw.)',
     form_merge_off:'Nie — immer getrennte Stunden', form_merge_always:'Immer — ein durchgehender Block',
     form_merge_auto:'Auto — der Algorithmus entscheidet, was am besten passt',
@@ -4948,6 +4952,61 @@ const App = {
     el._leaflet_map.setView([coord.lat, coord.lon], 16);
   },
 
+  // Same inline draggable-pin map as the student form, for the tutor's own
+  // home address in Settings — shown even before a coord exists (defaults to
+  // Patras) so the field never looks broken/empty.
+  initHomeLocationMap(){
+    const el = document.getElementById('set-home-map');
+    if(!el || typeof L === 'undefined') return;
+    if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    const existing = state.coords['home'];
+    const start = existing || {lat:38.2466, lon:21.7346};
+    const map = L.map(el, {zoomControl:true, attributionControl:false}).setView([start.lat, start.lon], existing?16:13);
+    el._leaflet_map = map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    const marker = L.marker([start.lat, start.lon], {
+      draggable:true,
+      icon:L.divIcon({className:'',html:'<div style="width:22px;height:22px;background:#059669;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
+    }).addTo(map);
+    el._leaflet_marker = marker;
+    const onPin = async (lat, lon)=>{
+      this.commitHomeLocation({lat, lon});
+      await this.reverseGeocodeIntoField(lat, lon, 'set-home');
+      // Sync the resolved display text back into the saved address too —
+      // reverseGeocodeIntoField only updates the input's visible value.
+      const inp = document.getElementById('set-home');
+      if(inp) this.commitHomeLocation({lat, lon}, inp.value);
+    };
+    marker.on('dragend', ()=>{ const p=marker.getLatLng(); onPin(p.lat, p.lng); });
+    map.on('click', (e)=>{ marker.setLatLng(e.latlng); onPin(e.latlng.lat, e.latlng.lng); });
+  },
+
+  updateHomeLocationMapMarker(coord){
+    const el = document.getElementById('set-home-map');
+    if(!el || !el._leaflet_map || !el._leaflet_marker) return;
+    el._leaflet_marker.setLatLng([coord.lat, coord.lon]);
+    el._leaflet_map.setView([coord.lat, coord.lon], 16);
+  },
+
+  // Saves the home address/coord immediately, without waiting for the
+  // Settings screen's own "Αποθήκευση" — picking a location (search
+  // suggestion, map tap/drag, full-screen picker) is a complete action on
+  // its own, not a draft that should be lost if the tab closes before the
+  // rest of the form is saved.
+  commitHomeLocation(coord, addressText){
+    state.coords['home'] = coord;
+    if(addressText != null) state.settings.homeAddress = addressText;
+    // A new home location invalidates any cached routing matrix (it was
+    // built around the old one) — same reset saveSettings already does.
+    state.travelMatrix = null;
+    state.travelMatrixPeak = null;
+    state.travelMatrixOffPeak = null;
+    Storage.saveCoords(state.coords);
+    Storage.saveSettings(state.settings);
+    this._homeAddrPendingCoord = null;
+    this.updateHomeLocationMapMarker(coord);
+  },
+
   toggleGroupField(){
     const type = document.getElementById('st-type')?.value;
     const gf = document.getElementById('group-field');
@@ -5080,7 +5139,12 @@ const App = {
     } else if(boxId==='set-home-suggest'){
       const inp = document.getElementById('set-home');
       if(inp) inp.value = short;
-      this._homeAddrPendingCoord = coord;
+      // Saved immediately — picking an address is a complete action, not a
+      // draft waiting on the rest of the Settings form's own Save button.
+      // Updates the inline map marker in place (no full re-render, so
+      // scroll position/keyboard focus aren't disturbed).
+      this.commitHomeLocation(coord, short);
+      Toast.show(t('toast_home_location_saved'), 'success');
     } else {
       const inp = document.getElementById('st-addr');
       if(inp) inp.value = short;
@@ -5186,7 +5250,7 @@ const App = {
     const input = document.getElementById(this._mapPickerTarget);
     if(input) input.value = short;
     if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
-    else if(this._mapPickerTarget === 'set-home') this._homeAddrPendingCoord = coord;
+    else if(this._mapPickerTarget === 'set-home') this.commitHomeLocation(coord, short);
     else { this._addrPendingCoord = coord; this.updateStudentLocationMapMarker(coord); }
     Toast.show(t('toast_location_picked'), 'success');
     this.closeMapPicker();
@@ -6193,6 +6257,7 @@ const App = {
             </button>
           </div>
           <div id="set-home-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+          <div id="set-home-map" style="height:170px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate;margin-top:8px"></div>
         </div>
       </div>
 
@@ -6246,7 +6311,8 @@ const App = {
           <label>${t('settings_here_key_label')}</label>
           <input type="text" id="set-here-key" placeholder="${t('settings_here_key_placeholder')}" value="${esc(st.hereApiKey||'')}">
           <div class="settings-sub" style="margin-top:4px">
-            ${st.hereApiKey ? t('settings_here_key_hint') : `<span style="color:var(--green)">✓ ${t('settings_here_key_shared_active')}</span>`}
+            <span style="color:var(--green)">✓ ${t('settings_here_key_shared_active')}</span>
+            ${st.hereApiKey ? `<br>${t('settings_here_key_hint')}` : ''}
           </div>
         </div>
         <div class="form-group" style="margin:0">
@@ -6367,6 +6433,7 @@ const App = {
       </div>
       <div style="height:16px"></div>
     `;
+    this.initHomeLocationMap();
   },
 
   openInSafari(){
