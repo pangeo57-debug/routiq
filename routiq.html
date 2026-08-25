@@ -6458,13 +6458,11 @@ const App = {
         <p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">${t('settings_demo_samples_desc')}</p>
         ${[
           {key:'patra',  label:t('city_patra')},
-          {key:'athens', label:t('city_athens')},
-          {key:'volos',  label:t('city_volos')},
         ].map(city=>`
           <div style="margin-bottom:10px">
             <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${city.label}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              ${[30,32,34,36,40].map(hrs=>`
+              ${[30,35,40].map(hrs=>`
                 <button class="btn btn-secondary" style="flex:1;min-width:56px;padding:8px 4px;font-size:12px" onclick="App.loadDemoSample('${city.key}',${hrs})">${hrs}${t('unit_hr')}</button>
               `).join('')}
             </div>
@@ -6668,10 +6666,24 @@ const App = {
   // Showcase datasets for demos: 3 cities × 5 ascending weekly-hour loads (30-40h)
   // each, so a link recipient can click through and see the algorithm handle
   // realistic, growing complexity in different real cities, not just Patras.
+  // Real Patras neighborhoods spanning west-to-east across the city — Άγιος
+  // Βασίλειος down through the centre to Εγλυκάδα — so a demo sample's
+  // addresses are actually scattered across the city instead of clustered
+  // on a handful of central streets.
   _DEMO_CITIES: {
-    patra:  { home:'Πλατεία Γεωργίου 1, Πάτρα', streets:['Κορίνθου','Γούναρη','Αγίου Ανδρέου','Μαιζώνος','Ρήγα Φεραίου','Κανακάρη','Αμαλίας','Αράτου','Παντανάσσης','Ελ. Βενιζέλου','Αθηνών','Ζαΐμη','Κολοκοτρώνη','Σαχτούρη','Ναυαρίνου'] },
-    athens: { home:'Πλατεία Συντάγματος, Αθήνα', streets:['Ερμού','Πανεπιστημίου','Σταδίου','Ακαδημίας','Πατησίων','Αλεξάνδρας','Κηφισίας','Βασιλίσσης Σοφίας','Ιπποκράτους','Σόλωνος','Ομήρου','Σκουφά','Συγγρού','Πειραιώς','Ιουλιανού'] },
-    volos:  { home:'Πλατεία Ρήγα Φεραίου, Βόλος', streets:['Δημητριάδος','Ιάσονος','Αναλήψεως','Αργοναυτών','28ης Οκτωβρίου','Ερμού','Κουμουνδούρου','Αλεξάνδρας','Γαζή','Μαγνήτων','Παγασών','Γαμβέτα','Κύπρου','Λαρίσης','Ρήγα Φεραίου'] },
+    patra: {
+      home:'Πλατεία Γεωργίου 1, Πάτρα',
+      areas:[
+        { name:'Άγιος Βασίλειος', streets:['Ερεσού','Αγίου Βασιλείου','Κρέσνας'] },
+        { name:'Οβρυά',           streets:['Οβρυάς','Δωδεκανήσου'] },
+        { name:'Ζαρουχλέικα',     streets:['Ζαρουχλεΐκων','Πηνειού'] },
+        { name:'Κέντρο',          streets:['Κορίνθου','Γούναρη','Μαιζώνος','Ρήγα Φεραίου','Κανακάρη','Αγίου Ανδρέου'] },
+        { name:'Άνω Πόλη',        streets:['Παντοκράτορος','Αγίου Νικολάου'] },
+        { name:'Ριγανόκαμπος',    streets:['Ριγανοκάμπου'] },
+        { name:'Βραχναίικα',      streets:['Βραχναιίκων'] },
+        { name:'Εγλυκάδα',        streets:['Εγλυκάδας','Ακτής Δυμαίων'] },
+      ],
+    },
   },
 
   loadDemoSample(cityKey, targetHours){
@@ -6686,25 +6698,54 @@ const App = {
         const LAST=['Παπαδόπουλος','Κωνσταντίνου','Αθανασίου','Δημητρίου','Οικονόμου','Γεωργίου','Λάμπρου','Μαντζώρου','Σπηλιόπουλος','Καραγιάννης','Αλεξόπουλος','Παπανικολάου','Καλογερόπουλος','Θεοδωρίδου','Κυριακόπουλος','Σταμάτης','Μπέης','Παπαχρήστου','Νικολάου','Βλάχος'];
         const SUBJ=['Μαθηματικά','Φυσική','Χημεία','Βιολογία','Αγγλικά','Ιστορία','Γεωγραφία','Λογοτεχνία','Πληροφορική','Άλγεβρα'];
         const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+        const addrFor=()=>{ const a=pick(city.areas); return `${pick(a.streets)} ${1+Math.floor(Math.random()*140)}, ${a.name}, ${cityLabel}`; };
+        const availFor=days=>{
+          const av={};
+          days.forEach(d=>{
+            const dayStart=d===6?10:15, dayEnd=d===6?18:22;
+            av[d]={on:true,start:`${String(dayStart).padStart(2,'0')}:00`,end:`${String(dayEnd).padStart(2,'0')}:00`};
+          });
+          return av;
+        };
+        const nowTag = Date.now();
         const seeded=[];
         let totalHours=0, i=0;
+
+        // Guaranteed variety: a group lesson (two students paired at one
+        // address) and a δίωρο (2x/week merged into one back-to-back block)
+        // — every demo sample exercises both features instead of leaving it
+        // to random chance, which could easily generate neither.
+        const groupAddr = addrFor();
+        const groupDays = [1,3].sort(()=>Math.random()-0.5).slice(0,1+Math.floor(Math.random()*2));
+        const pairA = { id:'demoPairA_'+nowTag, name:`${pick(FIRST)} ${pick(LAST)}`, address:groupAddr,
+          subject:pick(SUBJ), lessonDuration:60, lessonsPerWeek:groupDays.length, color:i%10, notes:'',
+          pairedWith:'demoPairB_'+nowTag, availability:availFor(groupDays) };
+        const pairB = { id:'demoPairB_'+nowTag, name:`${pick(FIRST)} ${pick(LAST)}`, address:groupAddr,
+          subject:pairA.subject, lessonDuration:60, lessonsPerWeek:groupDays.length, color:(i+1)%10, notes:'',
+          pairedWith:pairA.id, availability:availFor(groupDays) };
+        seeded.push(pairA, pairB);
+        totalHours += (pairA.lessonDuration*pairA.lessonsPerWeek/60);
+        i += 2;
+
+        const mergeDur=pick([60,90]);
+        const mergeStudent = { id:'demo'+i+'_'+nowTag, name:`${pick(FIRST)} ${pick(LAST)}`, address:addrFor(),
+          subject:pick(SUBJ), lessonDuration:mergeDur, lessonsPerWeek:2, mergeMode:'always', forceMerge:true,
+          color:i%10, notes:'', availability:availFor([2,5].sort(()=>Math.random()-0.5).slice(0,1)) };
+        seeded.push(mergeStudent);
+        totalHours += mergeDur*2/60;
+        i++;
+
         while(totalHours < targetHours && i < 60){
           const lessonDuration=pick([60,60,90]);
           const lessonsPerWeek=Math.random()<0.7?1:2;
           const hrs=lessonDuration*lessonsPerWeek/60;
           if(seeded.length>0 && totalHours+hrs>targetHours+2) break;
-          const addr=`${pick(city.streets)} ${1+Math.floor(Math.random()*140)}, ${cityLabel}`;
           const numDays=Math.min(6,lessonsPerWeek+3+Math.floor(Math.random()*2));
           const days=[1,2,3,4,5,6].sort(()=>Math.random()-0.5).slice(0,numDays);
-          const availability={};
-          days.forEach(d=>{
-            const dayStart=d===6?10:15, dayEnd=d===6?18:22;
-            availability[d]={on:true,start:`${String(dayStart).padStart(2,'0')}:00`,end:`${String(dayEnd).padStart(2,'0')}:00`};
-          });
           seeded.push({
-            id:'demo'+i+'_'+Date.now(), name:`${pick(FIRST)} ${pick(LAST)}`, address:addr,
+            id:'demo'+i+'_'+nowTag, name:`${pick(FIRST)} ${pick(LAST)}`, address:addrFor(),
             subject:pick(SUBJ), lessonDuration, lessonsPerWeek, color:i%10, notes:'',
-            availability
+            availability:availFor(days)
           });
           totalHours+=hrs; i++;
         }
