@@ -4505,7 +4505,7 @@ const App = {
     const s = document.getElementById('screen-home');
     const today = new Date();
     const todayNum = today.getDay()===0?7:today.getDay();
-    const todaySlots = state.schedule[todayNum]||[];
+    const todaySlots = (state.schedule[todayNum]||[]).slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
     const totalLessons = state.students.reduce((a,s)=>a+s.lessonsPerWeek,0);
     const placedCount = Scheduler.countTotal(state.schedule);
     const allFit = totalLessons > 0 && placedCount >= totalLessons;
