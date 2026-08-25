@@ -5079,19 +5079,41 @@ const App = {
           results.sort((a,b)=>a._distKm-b._distKm);
         }
         const shown = results.slice(0,5);
-        b.innerHTML = shown.map((res)=>{
+        // Results are looked up by index from this closure array at selection
+        // time — NOT embedded into inline onclick/ontouchstart attribute
+        // strings. A place name containing a quote character (real addresses
+        // do: "Ο Καφές" etc.) would silently corrupt an inline handler
+        // string, breaking the attribute (and the tap) with no visible error.
+        b._suggestResults = shown;
+        b.innerHTML = shown.map((res, i)=>{
           // Named places (shops, cafes, landmarks — e.g. searching "Starbucks" instead of
           // a street address) show their actual name as the headline, with the full
           // address as context underneath, instead of a raw address fragment.
           const short = res.poiName || res.name.split(',').slice(0,3).join(',');
           const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
-          return `<div class="addr-suggest-item" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4"
-            onmousedown="App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')"
-            ontouchstart="event.preventDefault(); App.selectAddr(${JSON.stringify(res.name)},${res.lat},${res.lon},'${boxId}')">
+          return `<div class="addr-suggest-item" data-idx="${i}" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4">
             <div style="font-weight:500;color:var(--text)">${esc(short)}</div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(res.name)}</div>
           </div>`;
         }).join('');
+        // One delegated listener per box (bound once, reused across re-renders
+        // via the _suggestResults closure above) using Pointer Events — a
+        // single unified model for mouse/touch/pen, avoiding the classic
+        // "input blur hides the list before the click registers" race that
+        // separate onmousedown/ontouchstart/onclick handling is prone to.
+        // preventDefault() here stops the input from blurring at all, so the
+        // list never gets hidden out from under the tap.
+        if(!b._suggestBound){
+          b._suggestBound = true;
+          b.addEventListener('pointerdown', (e)=>{
+            const item = e.target.closest('.addr-suggest-item');
+            if(!item) return;
+            e.preventDefault();
+            const res = b._suggestResults && b._suggestResults[Number(item.dataset.idx)];
+            if(!res) return;
+            App.selectAddr(res.name, res.lat, res.lon, boxId);
+          });
+        }
       }catch(e){
         console.warn('Address search failed:', e);
         const b = document.getElementById(boxId);
