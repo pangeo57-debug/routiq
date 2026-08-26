@@ -817,7 +817,8 @@ const I18N = {
     profession_cleaning_label:'Οικιακός καθαρισμός', profession_cleaning_client:'Πελάτης', profession_cleaning_clients:'Πελάτες', profession_cleaning_session:'Επίσκεψη', profession_cleaning_sessions:'Επισκέψεις',
     profession_pet_label:'Εκπαιδευτής / Groomer κατοικιδίων', profession_pet_client:'Ιδιοκτήτης', profession_pet_clients:'Ιδιοκτήτες', profession_pet_session:'Ραντεβού', profession_pet_sessions:'Ραντεβού',
     profession_repair_label:'Τεχνικός / Επισκευαστής', profession_repair_client:'Πελάτης', profession_repair_clients:'Πελάτες', profession_repair_session:'Επίσκεψη', profession_repair_sessions:'Επισκέψεις',
-    profession_other_label:'Άλλο (ελεύθερος επαγγελματίας)', profession_other_client:'Πελάτης', profession_other_clients:'Πελάτες', profession_other_session:'Ραντεβού', profession_other_sessions:'Ραντεβού',
+    profession_freelancer_label:'Ελεύθερος επαγγελματίας', profession_freelancer_client:'Πελάτης', profession_freelancer_clients:'Πελάτες', profession_freelancer_session:'Ραντεβού', profession_freelancer_sessions:'Ραντεβού',
+    profession_other_label:'Άλλο', profession_other_client:'Πελάτης', profession_other_clients:'Πελάτες', profession_other_session:'Ραντεβού', profession_other_sessions:'Ραντεβού',
     debug_calc_prefix:'Υπολογισμός...', debug_geocoding:'Προετοιμασία...',
     phase1_title:'Δημιουργία προγράμματος', phase1_sub:'Τοποθετούμε τους μαθητές σας…',
     phase1b_title:'Δημιουργία προγράμματος', phase1b_sub:'Εξετάζουμε πολλούς συνδυασμούς…',
@@ -998,7 +999,8 @@ const I18N = {
     profession_cleaning_label:'House Cleaning', profession_cleaning_client:'Client', profession_cleaning_clients:'Clients', profession_cleaning_session:'Visit', profession_cleaning_sessions:'Visits',
     profession_pet_label:'Pet Trainer / Groomer', profession_pet_client:'Owner', profession_pet_clients:'Owners', profession_pet_session:'Appointment', profession_pet_sessions:'Appointments',
     profession_repair_label:'Technician / Repair Person', profession_repair_client:'Client', profession_repair_clients:'Clients', profession_repair_session:'Visit', profession_repair_sessions:'Visits',
-    profession_other_label:'Other (freelancer)', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Appointment', profession_other_sessions:'Appointments',
+    profession_freelancer_label:'Freelancer', profession_freelancer_client:'Client', profession_freelancer_clients:'Clients', profession_freelancer_session:'Appointment', profession_freelancer_sessions:'Appointments',
+    profession_other_label:'Other', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Appointment', profession_other_sessions:'Appointments',
     debug_calc_prefix:'Calculating...', debug_geocoding:'Getting ready...',
     phase1_title:'Building your schedule', phase1_sub:'Placing your students…',
     phase1b_title:'Building your schedule', phase1b_sub:'Trying lots of combinations…',
@@ -1179,7 +1181,8 @@ const I18N = {
     profession_cleaning_label:'Ménage à domicile', profession_cleaning_client:'Client', profession_cleaning_clients:'Clients', profession_cleaning_session:'Visite', profession_cleaning_sessions:'Visites',
     profession_pet_label:'Éducateur / Toiletteur canin', profession_pet_client:'Propriétaire', profession_pet_clients:'Propriétaires', profession_pet_session:'Rendez-vous', profession_pet_sessions:'Rendez-vous',
     profession_repair_label:'Technicien / Réparateur', profession_repair_client:'Client', profession_repair_clients:'Clients', profession_repair_session:'Visite', profession_repair_sessions:'Visites',
-    profession_other_label:'Autre (indépendant)', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Rendez-vous', profession_other_sessions:'Rendez-vous',
+    profession_freelancer_label:'Indépendant', profession_freelancer_client:'Client', profession_freelancer_clients:'Clients', profession_freelancer_session:'Rendez-vous', profession_freelancer_sessions:'Rendez-vous',
+    profession_other_label:'Autre', profession_other_client:'Client', profession_other_clients:'Clients', profession_other_session:'Rendez-vous', profession_other_sessions:'Rendez-vous',
     debug_calc_prefix:'Calcul en cours...', debug_geocoding:'Préparation...',
     phase1_title:'Création du programme', phase1_sub:'Nous plaçons vos élèves…',
     phase1b_title:'Création du programme', phase1b_sub:'Nous testons de nombreuses combinaisons…',
@@ -1360,7 +1363,8 @@ const I18N = {
     profession_cleaning_label:'Hausreinigung', profession_cleaning_client:'Kunde', profession_cleaning_clients:'Kunden', profession_cleaning_session:'Besuch', profession_cleaning_sessions:'Besuche',
     profession_pet_label:'Haustiertrainer / Groomer', profession_pet_client:'Besitzer', profession_pet_clients:'Besitzer', profession_pet_session:'Termin', profession_pet_sessions:'Termine',
     profession_repair_label:'Techniker / Reparaturdienst', profession_repair_client:'Kunde', profession_repair_clients:'Kunden', profession_repair_session:'Besuch', profession_repair_sessions:'Besuche',
-    profession_other_label:'Sonstiges (Freiberufler)', profession_other_client:'Kunde', profession_other_clients:'Kunden', profession_other_session:'Termin', profession_other_sessions:'Termine',
+    profession_freelancer_label:'Freiberufler', profession_freelancer_client:'Kunde', profession_freelancer_clients:'Kunden', profession_freelancer_session:'Termin', profession_freelancer_sessions:'Termine',
+    profession_other_label:'Sonstiges', profession_other_client:'Kunde', profession_other_clients:'Kunden', profession_other_session:'Termin', profession_other_sessions:'Termine',
     debug_calc_prefix:'Berechnung läuft...', debug_geocoding:'Wird vorbereitet...',
     phase1_title:'Stundenplan wird erstellt', phase1_sub:'Ihre Schüler werden eingeplant…',
     phase1b_title:'Stundenplan wird erstellt', phase1b_sub:'Viele Kombinationen werden geprüft…',
@@ -3911,7 +3915,7 @@ const Router = {
 // ============================================================
 // LABELS (profession-aware)
 // ============================================================
-const PROFESSION_VALUES = ['tutor','physiotherapy','massage','beauty','personal_training','music','speech','psychologist','cleaning','pet','repair','other'];
+const PROFESSION_VALUES = ['tutor','physiotherapy','massage','beauty','personal_training','music','speech','psychologist','cleaning','pet','repair','freelancer','other'];
 function getProfessions(){
   return PROFESSION_VALUES.map(value=>({
     value,
