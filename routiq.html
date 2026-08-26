@@ -5247,11 +5247,23 @@ const App = {
         // perfectly correct result whose formatted address has anything
         // else between those words (a postal code, "Ελλάδα", …), which is
         // normal and expected, not "the API returned something unrelated".
+        //
+        // House numbers are checked leniently, not required: a geocoder's
+        // exact-match data frequently doesn't cover every number on a
+        // street, so a real, correct search (e.g. "Γούναρη 58") often gets
+        // back just the street itself with no "58" anywhere in it — still
+        // the right street, and still useful (the pin can be fine-tuned on
+        // the map afterward), but a literal number match would throw it
+        // away as "no results" even though the street name matched exactly.
         const needleWords = normalizeSearchText(val.trim()).split(/\s+/).filter(Boolean);
+        const needleTextWords = needleWords.filter(w => !/^\d+$/.test(w));
         if(results && results.length && needleWords.length){
           results = results.filter(res => {
             const hay = normalizeSearchText(res.name) + ' ' + normalizeSearchText(res.poiName||'');
-            return needleWords.every(w => hay.includes(w));
+            // If the query is only numbers (rare), fall back to requiring
+            // all of them; otherwise numbers are a bonus match, not a gate.
+            const required = needleTextWords.length ? needleTextWords : needleWords;
+            return required.every(w => hay.includes(w));
           });
         }
         if(!results || results.length===0){
