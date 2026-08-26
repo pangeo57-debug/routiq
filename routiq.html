@@ -3248,8 +3248,11 @@ const Scheduler = {
     let iter=0, lastProgress=t0;
     while(Date.now()-t0<budgetMs && bestU>0){
       // Yield to the browser periodically so a long budget (this can run for
-      // minutes when there are still unplaced students) never looks frozen.
-      if(++iter%200===0){
+      // minutes when there are still unplaced students) never looks frozen —
+      // checked every 40 iterations (was 200) so pressing the ✕ cancel
+      // button on the progress overlay is noticed quickly even during the
+      // up-to-7-minute persistent search, not just at the end of a long batch.
+      if(++iter%40===0){
         await new Promise(r=>setTimeout(r,0));
         if(typeof state!=='undefined' && state._schedulingCancelled) break;
         const now=Date.now();
@@ -4312,6 +4315,12 @@ const App = {
     this._schedulingWatchdog = setTimeout(()=>{ state._schedulingInProgress=false; }, 9*60*1000);
     this.requestNotifyPermission(); // user-gesture-triggered, fine to ask here
 
+    // Show the overlay (and its ✕ cancel button) right away — it previously
+    // only appeared after geocoding finished, so pressing cancel wasn't even
+    // possible during that phase.
+    schedProgress(2,t('phase1_title'),t('phase1_sub'),'🧩');
+    await new Promise(r=>setTimeout(r,0));
+
     // Geocode any missing addresses before scheduling
     const toGeocode = [];
     if(!state.coords['home']){
@@ -4346,6 +4355,7 @@ const App = {
         // of the student's real location — exactly the "map shows the wrong
         // city" bug. Go one at a time instead.
         for(const {id,addr} of rest){
+          if(state._schedulingCancelled) break;
           const c = await Router.geocode(addr);
           if(c){ state.coords[id]=c; updated=true; } else failed++;
           await new Promise(r=>setTimeout(r,1100));
@@ -4358,6 +4368,8 @@ const App = {
       if(failed > 0) Toast.show(tf('toast_geocode_failures',{n:failed}), 'error');
     }
     /*i18n-note: default homeAddress fallback ("Πλατεία Γεωργίου 1, Πάτρα") intentionally kept as literal Greek demo address text*/
+
+    if(state._schedulingCancelled) return cancelledCleanup();
 
     if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('debug_calc_prefix')}`; }
     schedProgress(5,t('phase1_title'),t('phase1_sub'),'🧩');
