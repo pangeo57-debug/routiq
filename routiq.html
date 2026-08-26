@@ -7026,11 +7026,9 @@ const App = {
 
         <div style="margin-bottom:20px">
           <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('onboarding_profession_label')}</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ob-prof-grid">
-            ${[{v:'tutor',l:t('onboarding_role_tutor')},{v:'physio',l:t('onboarding_role_physio')},{v:'beautician',l:t('onboarding_role_beautician')},{v:'trainer',l:t('onboarding_role_trainer')}].map(p=>`
-              <button onclick="App._obSelectProf('${p.v}',this)" style="padding:12px;border:2px solid var(--border,#e2e0da);border-radius:12px;background:var(--bg2,#fff);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${p.l}</button>
-            `).join('')}
-          </div>
+          <select id="ob-prof-select" onchange="App._obProf=this.value" style="width:100%;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)">
+            ${getProfessions().map(p=>`<option value="${p.value}" ${p.value==='tutor'?'selected':''}>${p.label}</option>`).join('')}
+          </select>
         </div>
 
         <div style="margin-bottom:20px">
@@ -7066,12 +7064,6 @@ const App = {
     this._obProf = 'tutor';
     this._obDur = 60;
     this._obCoord = null;
-  },
-
-  _obSelectProf(v, btn){
-    this._obProf = v;
-    document.querySelectorAll('#ob-prof-grid button').forEach(b=>{ b.style.borderColor='var(--border,#e2e0da)'; b.style.background='var(--bg2,#fff)'; b.style.color='var(--text,#1c1c2e)'; });
-    btn.style.borderColor='#7c3aed'; btn.style.background='rgba(124,58,237,.08)'; btn.style.color='#7c3aed';
   },
 
   _obSelectDur(d, btn){
