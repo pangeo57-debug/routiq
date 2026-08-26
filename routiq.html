@@ -1669,8 +1669,10 @@ const Scheduler = {
     // ALSO get a separate solo forceMerge block — that double-counts their lessonsPerWeek
     // and produces extra sessions nobody asked for. Group phase (0b, below) handles them.
     const isGroupOrPaired = s => !!(s.pairedWith || (s.type==='group' && s.group));
+    const MAX_MERGE_BLOCK_MIN = 120; // a "δίωρο" tops out at 2 hours — never merge past that
     for(const s of students.filter(s => s.forceMerge && !isGroupOrPaired(s))){
-      const blockSize = Math.max(1, Math.min(s.maxMergeSessions||s.lessonsPerWeek, s.lessonsPerWeek));
+      const durationCap = Math.max(1, Math.floor(MAX_MERGE_BLOCK_MIN / s.lessonDuration));
+      const blockSize = Math.max(1, Math.min(s.maxMergeSessions||s.lessonsPerWeek, s.lessonsPerWeek, durationCap));
       let remaining = s.lessonsPerWeek;
       const usedDays = new Set();
       for(const day of settings.workDays){
@@ -3229,7 +3231,11 @@ const Scheduler = {
         const av = st.availability[d];
         // Only collapse if the clean straight block still fits — if it
         // wouldn't, leave the (still valid) fragments alone rather than
-        // trade a working placement for a broken one.
+        // trade a working placement for a broken one. Also never collapse
+        // into more than a 2-hour ("δίωρο") block — if fragments genuinely
+        // add up to more than that, they were placed that way for a reason
+        // and shouldn't be forced into one long block just for tidiness.
+        if(totalDur > 120) continue;
         if(dh && endMin > this.toMin(dh.end)+15) continue;
         if(av && endMin > this.toMin(av.end)+15) continue;
         for(const f of frags){
@@ -6871,7 +6877,10 @@ const App = {
         totalHours += (pairA.lessonDuration*pairA.lessonsPerWeek/60);
         i += 2;
 
-        const mergeDur=pick([60,90]);
+        // Fixed at 60 (not e.g. 90) — 2×60=120min is a real δίωρο; 2×90=180min
+        // is a 3-hour block, which is not what "δίωρο" means to a tutor even
+        // though it's a mathematically valid merge.
+        const mergeDur=60;
         const mergeStudent = { id:'demo'+i+'_'+nowTag, name:`${pick(FIRST)} ${pick(LAST)}`, address:addrFor(),
           subject:pick(SUBJ), lessonDuration:mergeDur, lessonsPerWeek:2, mergeMode:'always', forceMerge:true,
           color:i%10, notes:'', availability:availFor([2,5].sort(()=>Math.random()-0.5).slice(0,1)) };
@@ -6899,8 +6908,11 @@ const App = {
         Storage.saveCoords(state.coords);
         state.settings.homeAddress = city.home;
         Storage.saveSettings(state.settings);
+        // Load the data, don't calculate — same rule as everywhere else in
+        // the app: a schedule only gets (re)computed when Ανανέωση is
+        // pressed explicitly, never as a side effect of another action.
+        state._scheduleStale = true;
         Toast.show(tf('toast_demo_sample_loaded',{city:cityLabel, hours:targetHours, n:seeded.length}),'info');
-        this.runAndNotify();
         this.nav('schedule');
       }
     );
@@ -6949,7 +6961,11 @@ const App = {
           Storage.saveSettings(state.settings);
           Storage.saveCoords(state.coords);
           Storage.saveSchedule(state.schedule);
-          this.runAndNotify();
+          // Restore exactly what was in the backup — recalculating here would
+          // silently throw away the imported schedule and replace it with a
+          // fresh one nobody asked for.
+          this.renderSettings();
+          this.renderHome();
           Toast.show(t('toast_import_success'),'success');
         }catch(err){ Toast.show(t('toast_error_prefix')+': '+err.message,'error'); }
       };
