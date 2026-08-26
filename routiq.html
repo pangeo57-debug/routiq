@@ -5866,7 +5866,7 @@ const App = {
       const s = rawSlots[i];
       const prev = slots.length>0 ? slots[slots.length-1] : null;
       const prevRaw = rawSlots[i-1];
-      if(prev && prevRaw && s.studentId===prevRaw.studentId && Scheduler.toMin(s.start)<=Scheduler.toMin(prevRaw.end)+1){
+      if(prev && prevRaw && s.studentId===prevRaw.studentId && Scheduler.toMin(s.start)<=Scheduler.toMin(prevRaw.end)+15){
         // Extend the last display block
         prev._end = s.end;
         prev._totalDur = (prev._totalDur||prev.duration) + s.duration;
@@ -6114,6 +6114,28 @@ const App = {
     this.renderRoute();
   },
 
+  // Same "merge consecutive same-student slots" rule as the Schedule
+  // screen's renderDaySlots — stops are already in the schedule's fixed
+  // chronological order, so consecutive here really does mean "back to
+  // back", not just "same student somewhere in the list".
+  _mergeConsecutiveRouteStops(stops){
+    const merged=[];
+    for(let i=0;i<stops.length;i++){
+      const s=stops[i];
+      const prev=merged.length>0?merged[merged.length-1]:null;
+      const prevEnd = prev ? Scheduler.toMin(prev._mergedEnd||prev._end||prev.end) : null;
+      const sStart = Scheduler.toMin(s._start||s.start);
+      if(prev && prev.studentId===s.studentId && sStart<=prevEnd+15){
+        prev._mergedEnd = s._end||s.end;
+        prev._mergedDur = (prev._mergedDur||prev.duration) + s.duration;
+        prev._mergedCount = (prev._mergedCount||1) + 1;
+      } else {
+        merged.push({...s});
+      }
+    }
+    return merged;
+  },
+
   buildRouteContent(slots, rr){
     if(slots.length===0){
       return `<div class="empty-state" style="padding:32px 24px">
@@ -6132,11 +6154,12 @@ const App = {
     const homeC = state.coords['home'] || Scheduler.coordsHash(state.settings.homeAddress||'Πλατεία Γεωργίου 1, Πάτρα');
     let estKm = 0;
     let prev = homeC;
-    const pseudoOrder = [...slots];
-    // NN order using available coords or pseudo
-    const pts = [homeC, ...slots.map(s=>state.coords[s.studentId]||Scheduler.coordsHash(s.address))];
-    const nnOrder = Router.nnRoute(pts.slice(1));
-    const orderedEst = nnOrder.map(i=>slots[i]).filter(Boolean);
+    // Visit order MUST follow the already-scheduled lesson times (`slots` is
+    // sorted chronologically by the caller) — a "shortest driving route"
+    // reorder would happily visit a 20:00 lesson before a 15:00 one just
+    // because it's geographically closer, which is meaningless when lesson
+    // times are fixed and can't actually be swapped.
+    const orderedEst = slots;
     prev = homeC;
     for(const sl of orderedEst){
       const c = state.coords[sl.studentId]||Scheduler.coordsHash(sl.address);
@@ -6150,7 +6173,10 @@ const App = {
     const totalKm = hasReal ? rr.totalKm.toFixed(1) : estKm.toFixed(1);
     const totalMin = hasReal ? rr.totalMinutes : estMin;
     const totalFuel = hasReal ? rr.fuelCost : estFuel;
-    const stopsToShow = hasReal ? rr.stops : orderedEst;
+    // Consecutive same-student stops (e.g. a δίωρο/double lesson) show as one
+    // visit, not two separate numbered stops with a fake "trip" between them
+    // — the tutor never actually leaves and comes back.
+    const stopsToShow = this._mergeConsecutiveRouteStops(hasReal ? rr.stops : orderedEst);
 
     return `
       <div class="route-stats-row">
@@ -6188,13 +6214,15 @@ const App = {
     stops.forEach((stop, i) => {
       const travelRow = hasReal && stop.travelMin
         ? `<span class="stop-travel-row" style="color:var(--blue)">${stop.travelMin}${t('unit_min')} ${t('route_driving_suffix')} · ${Number(stop.travelKm||0).toFixed(1)}km</span>` : '';
+      const displayEnd = stop._mergedEnd || stop._end || stop.end;
+      const mergeTag = stop._mergedCount>1 ? `<span class="merge-badge" style="margin-left:6px">${stop._mergedCount}×${stop.duration}${t('unit_min')}</span>` : '';
       html += `
         <div class="stop-item">
           <div class="stop-num">${i+1}</div>
           <div class="stop-info">
-            <div class="stop-name">${stop.studentName||'—'}</div>
+            <div class="stop-name">${stop.studentName||'—'}${mergeTag}</div>
             <div class="stop-addr">${stop.address||'—'}</div>
-            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${stop._end||stop.end} · ${subjectLabel(stop.subject)||''}</span>${travelRow}</div>
+            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${displayEnd} · ${subjectLabel(stop.subject)||''}</span>${travelRow}</div>
           </div>
         </div>
         ${i<stops.length-1?'<div class="stop-connector" style="margin-left:29px"></div>':''}
@@ -6243,28 +6271,22 @@ const App = {
 
       let orderedSlots, totalKm=0, totalMin=0;
       if(matrix && matrix.durations){
-        // NN on real matrix (index 0 = home)
-        const n=allCoords.length, visited=new Array(n).fill(false), order=[0];
-        visited[0]=true;
-        for(let i=1;i<n;i++){
-          const last=order[order.length-1];
-          let best=-1,bestD=Infinity;
-          for(let j=1;j<n;j++){
-            if(visited[j]) continue;
-            const d=matrix.durations[last][j];
-            if(d<bestD){bestD=d;best=j}
-          }
-          if(best>=0){order.push(best);visited[best]=true}
-        }
-        orderedSlots = order.slice(1).map(i=>slots[i-1]).filter(Boolean);
-        // Calc per-stop travel (each leg's destination is orderedSlots[i] — every stop appears exactly once)
+        // Visit order follows the already-scheduled lesson times (`slots` is
+        // sorted chronologically), NOT a shortest-driving-route reorder —
+        // lesson times are fixed, so "visit the geographically nearest stop
+        // next" is meaningless when it would mean showing up before or long
+        // after that lesson's actual scheduled time. allCoords[i+1]
+        // corresponds to slots[i] index-for-index (allCoords[0] is home).
+        orderedSlots = slots;
         const processedStops=[];
-        for(let i=0;i<order.length-1;i++){
-          const from=order[i], to=order[i+1];
-          const tMin = Math.round((matrix.durations[from][to]||0)/60);
-          const tKm  = ((matrix.distances?.[from]?.[to]||0)/1000);
+        let prevIdx=0; // home
+        for(let i=0;i<orderedSlots.length;i++){
+          const toIdx=i+1;
+          const tMin = Math.round((matrix.durations[prevIdx][toIdx]||0)/60);
+          const tKm  = ((matrix.distances?.[prevIdx]?.[toIdx]||0)/1000);
           totalMin += tMin; totalKm += tKm;
           processedStops.push({...orderedSlots[i], travelMin:tMin, travelKm:tKm.toFixed(1)});
+          prevIdx = toIdx;
         }
         // Arrival time = previous stop's departure + real travel time + 2 min buffer
         // (first stop keeps its originally scheduled start as the anchor)
@@ -6280,9 +6302,8 @@ const App = {
           }
         }
         // Return home
-        const lastIdx=order[order.length-1];
-        totalKm += (matrix.distances?.[lastIdx]?.[0]||0)/1000;
-        totalMin += Math.round((matrix.durations[lastIdx][0]||0)/60);
+        totalKm += (matrix.distances?.[prevIdx]?.[0]||0)/1000;
+        totalMin += Math.round((matrix.durations[prevIdx][0]||0)/60);
 
         const fuel=state.settings.fuelConsumption||7;
         state.routeResults[day] = {
@@ -6291,9 +6312,8 @@ const App = {
         };
       } else {
         // Fallback: NN with estimate
-        const pts=[homeC,...slots.map(s=>state.coords[s.studentId]||Scheduler.coordsHash(s.address))];
-        const nnOrder=Router.nnRoute(pts.slice(1));
-        orderedSlots=nnOrder.map(i=>slots[i]).filter(Boolean);
+        // Same fixed-chronological-order rule as the matrix path above.
+        orderedSlots=slots;
         let prev=homeC;
         const ps=[];
         for(const sl of orderedSlots){
