@@ -614,6 +614,14 @@ function esc(str){
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Case- and accent-insensitive comparison text, e.g. "Ψαρων" and "Ψαρών" (or
+// "ψαρών") both normalize to the same string — Greek tonos marks and Latin
+// accents alike are stripped via Unicode decomposition, not a hand-picked
+// character map.
+function normalizeSearchText(str){
+  return String(str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+
 // ============================================================
 // STORAGE
 // ============================================================
@@ -5127,9 +5135,18 @@ const App = {
     const hereKey = getHereKey();
     this._addrTimer = setTimeout(async ()=>{
       try{
-        const results = hereKey ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
+        let results = hereKey ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
         const b = document.getElementById(boxId);
         if(!b) return;
+        // Both providers can return "fuzzy" matches — typo-corrected or
+        // semantically-related results that don't actually contain what was
+        // typed (e.g. sharing only a couple of letters). Keep only results
+        // whose name genuinely contains the typed text, accent/case-insensitive
+        // ("Ψαρων" without a tonos still matches "Ψαρών" with one).
+        const needle = normalizeSearchText(val.trim());
+        if(results && results.length){
+          results = results.filter(res => normalizeSearchText(res.name).includes(needle) || (res.poiName && normalizeSearchText(res.poiName).includes(needle)));
+        }
         if(!results || results.length===0){
           b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_no_results')}</div>`;
           return;
