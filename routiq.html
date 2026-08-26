@@ -5326,6 +5326,16 @@ const App = {
   // HERE Autosuggest — used when the user has set a HERE API key (Settings > Maps &
   // Routing), for Google-grade business/POI name matching. Falls back to Nominatim
   // (free, no key needed) when no key is configured — see _searchNominatim below.
+  // Both providers format their own display string in whatever order suits
+  // them (HERE and Nominatim don't agree with each other, let alone with
+  // what a tutor here actually wants). Build the display text ourselves, in
+  // a fixed order — street, number, area, city, postal code — from each
+  // provider's structured address fields instead of using their raw label.
+  _formatAddressOrdered(street, houseNumber, area, city, postalCode){
+    const streetPart = [street, houseNumber].filter(Boolean).join(' ');
+    return [streetPart, area, city, postalCode].filter(Boolean).join(', ');
+  },
+
   async _searchHere(val, key){
     const home = (state.coords && state.coords['home']) || {lat:38.2466, lon:21.7346};
     const q = encodeURIComponent(val.trim());
@@ -5335,9 +5345,13 @@ const App = {
     const d = await r.json();
     const items = (d.items||[]).filter(it=>it.position); // skip query-refinement items with no coordinates
     return items.map(it=>{
-      const label = (it.address && it.address.label) || it.title || '';
-      const name = (it.title && !label.startsWith(it.title)) ? `${it.title}, ${label}` : label;
-      return { name, poiName: it.title, lat: it.position.lat, lon: it.position.lng };
+      const a = it.address || {};
+      const ordered = this._formatAddressOrdered(a.street, a.houseNumber, a.district, a.city, a.postalCode);
+      // A named place (shop, café, landmark) keeps its title in front — "Starbucks,
+      // <ordered address>" — since that's what the tutor searched for, not the raw street.
+      const name = ordered || a.label || it.title || '';
+      const withTitle = (it.title && !name.startsWith(it.title)) ? `${it.title}, ${name}` : name;
+      return { name: withTitle, poiName: it.title, lat: it.position.lat, lon: it.position.lng };
     });
   },
 
@@ -5357,16 +5371,27 @@ const App = {
       if(r2.ok) results = await r2.json();
     }
     if(!Array.isArray(results)) results = [];
-    return results.map(res=>({
-      name: res.display_name,
-      poiName: res.namedetails && res.namedetails.name,
-      lat: parseFloat(res.lat), lon: parseFloat(res.lon)
-    }));
+    return results.map(res=>{
+      const a = res.address || {};
+      const street = a.road || a.pedestrian || a.footway || '';
+      const area = a.suburb || a.neighbourhood || a.quarter || a.city_district || '';
+      const city = a.city || a.town || a.village || a.municipality || '';
+      const ordered = this._formatAddressOrdered(street, a.house_number, area, city, a.postcode);
+      return {
+        name: ordered || res.display_name,
+        poiName: res.namedetails && res.namedetails.name,
+        lat: parseFloat(res.lat), lon: parseFloat(res.lon)
+      };
+    });
   },
 
   selectAddr(name, lat, lon, boxId='addr-suggest'){
     const coord = {lat:parseFloat(lat), lon:parseFloat(lon)};
-    const short = name.split(',').slice(0,3).join(',').trim();
+    // The name is already built in the fixed street/number/area/city/postal-
+    // code order (_formatAddressOrdered) — saved as-is, not truncated to the
+    // first 3 comma-parts like before, which would have silently dropped the
+    // postal code off the end.
+    const short = name.trim();
     if(boxId==='ob-addr-suggest'){
       const inp = document.getElementById('ob-addr');
       if(inp) inp.value = short;
@@ -5440,12 +5465,19 @@ const App = {
       if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
       const d = await r.json();
       const item = d.items && d.items[0];
-      return item && (item.address ? item.address.label : item.title);
+      if(!item) return null;
+      const a = item.address || {};
+      return this._formatAddressOrdered(a.street, a.houseNumber, a.district, a.city, a.postalCode) || (a.label || item.title);
     }
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
     const r = await fetch(url, {headers:{'Accept-Language':Router._geoLang(),'User-Agent':'RoutePal/1.0'}});
     const d = await r.json();
-    return d && d.display_name;
+    if(!d) return null;
+    const a = d.address || {};
+    const street = a.road || a.pedestrian || a.footway || '';
+    const area = a.suburb || a.neighbourhood || a.quarter || a.city_district || '';
+    const city = a.city || a.town || a.village || a.municipality || '';
+    return this._formatAddressOrdered(street, a.house_number, area, city, a.postcode) || d.display_name;
   },
 
   async reverseGeocodePreview(lat, lon){
