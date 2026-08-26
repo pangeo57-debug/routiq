@@ -3196,6 +3196,60 @@ const Scheduler = {
     return { repaired, dropped };
   },
 
+  // A forceMerge ("δίωρο ίδια μέρα") student is only guaranteed to land as
+  // ONE continuous block by Phase 0's initial placement — a later repair
+  // pass (enforceConstraints, LNS) can legally re-place their sessions as
+  // separate fragments instead, since nothing after Phase 0 actually
+  // enforces "must stay one block" for them, only "never twice on a day
+  // unless forceMerge". The result looks like a δίωρο (same day, close
+  // together) but has a few minutes of leftover travel-margin gap between
+  // the fragments instead of being a clean back-to-back block. Collapse any
+  // such fragments into one true block as a final normalization pass.
+  collapseForceMergeFragments(schedule, students, settings){
+    const sm = Object.fromEntries(students.map(s=>[s.id,s]));
+    let collapsed = 0;
+    for(const d of settings.workDays){
+      const slots = schedule[d] = schedule[d] || [];
+      const byStudent = {};
+      slots.forEach(sl=>{
+        if(sl.merged || sl.isGroup) return;
+        const st = sm[sl.studentId];
+        if(!st || !st.forceMerge) return;
+        (byStudent[sl.studentId] = byStudent[sl.studentId]||[]).push(sl);
+      });
+      for(const sid in byStudent){
+        const frags = byStudent[sid];
+        if(frags.length < 2) continue; // already one entry, nothing to collapse
+        const st = sm[sid];
+        frags.sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+        const totalDur = frags.reduce((a,f)=>a+f.duration,0);
+        const startMin = this.toMin(frags[0].start);
+        const endMin = startMin + totalDur;
+        const dh = settings.dayHours[d];
+        const av = st.availability[d];
+        // Only collapse if the clean straight block still fits — if it
+        // wouldn't, leave the (still valid) fragments alone rather than
+        // trade a working placement for a broken one.
+        if(dh && endMin > this.toMin(dh.end)+15) continue;
+        if(av && endMin > this.toMin(av.end)+15) continue;
+        for(const f of frags){
+          const idx = slots.indexOf(f);
+          if(idx>=0) slots.splice(idx,1);
+        }
+        slots.push({
+          studentId: sid, studentName: frags[0].studentName, subject: frags[0].subject,
+          address: frags[0].address, color: frags[0].color,
+          start: frags[0].start, end: this.toTime(endMin),
+          duration: totalDur, mergedCount: frags.length, merged: true,
+          originalDuration: st.lessonDuration
+        });
+        collapsed++;
+      }
+      slots.sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+    }
+    return collapsed;
+  },
+
   // Phase 5: LNS — destroy 2-4 slots blocking an unplaced student, re-place everyone
   async lnsRepair(schedule, students, settings, budgetMs=10000, onProgress=null){
     const wdays = settings.workDays;
@@ -4471,6 +4525,7 @@ const App = {
     try{
       const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
       if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
+      Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);
     }catch(e){}
 
     if(state._schedulingCancelled) return cancelledCleanup();
@@ -4485,6 +4540,7 @@ const App = {
         });
         const fixResult2 = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
         if(fixResult2.repaired) console.warn(`⚠ enforceConstraints (after persistent search): repaired ${fixResult2.repaired-fixResult2.dropped}, dropped ${fixResult2.dropped}`);
+        Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);
       }catch(e){}
     }
 
