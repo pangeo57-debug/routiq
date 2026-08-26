@@ -1609,7 +1609,7 @@ const Scheduler = {
   // Run several attempts with different randomized starting orders and keep the
   // one that places the MOST students — placement count always wins, km is only
   // a tie-breaker. Every student matters more than a shorter drive.
-  runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false){
+  async runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false){
     const hasRealCoords = Object.keys(coords).length > 0;
     const dist=(a,b)=>this.haversineKm(a,b)*1.4;
     const totalKm=(schedule)=>{
@@ -1642,6 +1642,14 @@ const Scheduler = {
 
     let best=null;
     for(let i=0;i<attempts;i++){
+      // Each attempt's backtracking search runs fully synchronously (it's a
+      // real recursive search, not easily interruptible mid-search) — but
+      // yielding HERE, between attempts, means the ✕ cancel button and the
+      // progress bar actually get a chance to run every ~8-11s instead of
+      // being frozen out for the whole ~50-70s multi-attempt phase in one
+      // unbroken block.
+      await new Promise(r=>setTimeout(r,0));
+      if(typeof state!=='undefined' && state._schedulingCancelled) break;
       let order = i===0 ? students : this.shuffle(students);
       if(hasAutoMerge){
         const mergeOn = i%2===0;
@@ -1654,6 +1662,14 @@ const Scheduler = {
       if(!best || placed>best.placed || (placed===best.placed && km<best.km)){
         best = { result, placed, km };
       }
+    }
+    // Cancelled before even the first attempt finished — return a valid,
+    // empty-but-well-formed result instead of crashing on best===null; the
+    // cancellation itself is handled by the caller (runAndNotify), which
+    // discards this and restores the pre-run schedule anyway.
+    if(!best){
+      const empty={}; settings.workDays.forEach(d=>empty[d]=[]);
+      return { schedule: empty, unplaced: [], success: true, _attempts: 0 };
     }
     best.result._attempts = attempts;
     return best.result;
@@ -4492,7 +4508,7 @@ const App = {
         if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
         return;
       }
-      const result = Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
+      const result = await Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
       state.scheduleAttempts = [result];
       state.scheduleAttemptIdx = 0;
       state.scheduleOptimized = false;
