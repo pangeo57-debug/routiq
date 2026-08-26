@@ -1,7 +1,7 @@
 {
   "name": "RoutePal",
   "short_name": "RoutePal",
-  "description": "Πρόγραμμα και δρομολόγηση για ιδιωτικούς εκπαιδευτές",
+  "description": "Πρόγραμμα και δρομολόγηση για ελεύθερους επαγγελματίες που επισκέπτονται πελάτες",
   "start_url": "./routiq.html",
   "scope": "./",
   "display": "standalone",
