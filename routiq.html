@@ -5240,11 +5240,19 @@ const App = {
         // Both providers can return "fuzzy" matches — typo-corrected or
         // semantically-related results that don't actually contain what was
         // typed (e.g. sharing only a couple of letters). Keep only results
-        // whose name genuinely contains the typed text, accent/case-insensitive
-        // ("Ψαρων" without a tonos still matches "Ψαρών" with one).
-        const needle = normalizeSearchText(val.trim());
-        if(results && results.length){
-          results = results.filter(res => normalizeSearchText(res.name).includes(needle) || (res.poiName && normalizeSearchText(res.poiName).includes(needle)));
+        // that contain every WORD typed, accent/case-insensitive ("Ψαρων"
+        // without a tonos still matches "Ψαρών" with one) — checked
+        // word-by-word, not as one contiguous phrase. A multi-word query
+        // ("Ψαρών 11 Ρίο") checked as a single substring would reject a
+        // perfectly correct result whose formatted address has anything
+        // else between those words (a postal code, "Ελλάδα", …), which is
+        // normal and expected, not "the API returned something unrelated".
+        const needleWords = normalizeSearchText(val.trim()).split(/\s+/).filter(Boolean);
+        if(results && results.length && needleWords.length){
+          results = results.filter(res => {
+            const hay = normalizeSearchText(res.name) + ' ' + normalizeSearchText(res.poiName||'');
+            return needleWords.every(w => hay.includes(w));
+          });
         }
         if(!results || results.length===0){
           b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_no_results')}</div>`;
