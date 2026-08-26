@@ -747,7 +747,7 @@ const I18N = {
     schedule_random_placement_label:'ΤΥΧΑΙΑ ΤΟΠΟΘΕΤΗΣΗ ΒΑΣΕΙ ΠΕΡΙΟΡΙΣΜΩΝ', schedule_attempt_label:'Δοκιμή',
     schedule_km_before_after:'Πριν: {before}km → Μετά: {after}km · Εξοικονόμηση: {saved}km',
     schedule_optimize_btn:'Βελτιστοποίηση με χάρτη (OpenStreetMap)', schedule_gap_same_location:'📍 ίδια τοποθεσία',
-    schedule_gap_travel:'🚗 ~{min}λ μετακίνηση', schedule_gap_safety:' + {min}λ ασφαλείας',
+    schedule_gap_travel:'🚗 ~{min}λ μετακίνηση', schedule_gap_safety:' + {min}λ ασφαλείας', schedule_gap_not_geocoded:'⚠ Απόσταση μη διαθέσιμη — η διεύθυνση δεν έχει γεωκωδικοποιηθεί ακόμα',
     toast_no_free_time:'Δεν υπάρχει ελεύθερη ώρα', unplaced_group_badge:'μαθ.',
     toast_slot_picked:'{name} — πάτα άλλο μάθημα (ανταλλαγή) ή ημέρα (μετακίνηση)',
     toast_move_no_availability:'{name}: δεν έχει διαθεσιμότητα — {day}',
@@ -929,7 +929,7 @@ const I18N = {
     schedule_random_placement_label:'RANDOM CONSTRAINT-BASED PLACEMENT', schedule_attempt_label:'Attempt',
     schedule_km_before_after:'Before: {before}km → After: {after}km · Saved: {saved}km',
     schedule_optimize_btn:'Optimize with map (OpenStreetMap)', schedule_gap_same_location:'📍 same location',
-    schedule_gap_travel:'🚗 ~{min}min travel', schedule_gap_safety:' + {min}min safety',
+    schedule_gap_travel:'🚗 ~{min}min travel', schedule_gap_safety:' + {min}min safety', schedule_gap_not_geocoded:'⚠ Distance unavailable — address not geocoded yet',
     toast_no_free_time:'No free time available', unplaced_group_badge:'ls.',
     toast_slot_picked:'{name} — tap another lesson (swap) or a day (move)',
     toast_move_no_availability:"{name} isn't available — {day}",
@@ -1111,7 +1111,7 @@ const I18N = {
     schedule_random_placement_label:'PLACEMENT ALÉATOIRE SOUS CONTRAINTES', schedule_attempt_label:'Essai',
     schedule_km_before_after:'Avant : {before}km → Après : {after}km · Économie : {saved}km',
     schedule_optimize_btn:'Optimiser avec carte (OpenStreetMap)', schedule_gap_same_location:'📍 même lieu',
-    schedule_gap_travel:'🚗 ~{min}min trajet', schedule_gap_safety:' + {min}min sécurité',
+    schedule_gap_travel:'🚗 ~{min}min trajet', schedule_gap_safety:' + {min}min sécurité', schedule_gap_not_geocoded:'⚠ Distance indisponible — adresse pas encore géocodée',
     toast_no_free_time:'Aucun créneau libre disponible', unplaced_group_badge:'cr.',
     toast_slot_picked:'{name} — touchez un autre cours (échanger) ou un jour (déplacer)',
     toast_move_no_availability:"{name} n'est pas disponible — {day}",
@@ -1293,7 +1293,7 @@ const I18N = {
     schedule_random_placement_label:'ZUFÄLLIGE PLATZIERUNG NACH EINSCHRÄNKUNGEN', schedule_attempt_label:'Versuch',
     schedule_km_before_after:'Vorher: {before}km → Nachher: {after}km · Ersparnis: {saved}km',
     schedule_optimize_btn:'Mit Karte optimieren (OpenStreetMap)', schedule_gap_same_location:'📍 gleicher Ort',
-    schedule_gap_travel:'🚗 ~{min}min Fahrt', schedule_gap_safety:' + {min}min Sicherheit',
+    schedule_gap_travel:'🚗 ~{min}min Fahrt', schedule_gap_safety:' + {min}min Sicherheit', schedule_gap_not_geocoded:'⚠ Entfernung nicht verfügbar — Adresse noch nicht geocodiert',
     toast_no_free_time:'Keine freie Zeit verfügbar', unplaced_group_badge:'Std.',
     toast_slot_picked:'{name} — andere Stunde antippen (tauschen) oder Tag (verschieben)',
     toast_move_no_availability:'{name} ist nicht verfügbar — {day}',
@@ -5297,19 +5297,32 @@ const App = {
             <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(res.name)}</div>
           </div>`;
         }).join('');
-        // One delegated listener per box (bound once, reused across re-renders
-        // via the _suggestResults closure above) using Pointer Events — a
-        // single unified model for mouse/touch/pen, avoiding the classic
-        // "input blur hides the list before the click registers" race that
-        // separate onmousedown/ontouchstart/onclick handling is prone to.
-        // preventDefault() here stops the input from blurring at all, so the
-        // list never gets hidden out from under the tap.
+        // One delegated listener pair per box (bound once, reused across
+        // re-renders via the _suggestResults closure above) using Pointer
+        // Events — a single unified model for mouse/touch/pen, avoiding the
+        // classic "input blur hides the list before the click registers"
+        // race that separate onmousedown/ontouchstart/onclick handling is
+        // prone to. Selection happens on pointerUP, not pointerdown, and
+        // NEVER calls preventDefault — calling it on pointerdown blocked
+        // native touch scrolling inside this list entirely (a real
+        // regression from an earlier fix: taps worked, but you could no
+        // longer scroll down to see more suggestions on a phone). Instead,
+        // a genuine tap vs. a scroll/drag is told apart by how far the
+        // finger moved between down and up — small movement selects,
+        // anything more is treated as scrolling and ignored.
         if(!b._suggestBound){
           b._suggestBound = true;
+          let downX=0, downY=0, downItem=null;
           b.addEventListener('pointerdown', (e)=>{
+            downX=e.clientX; downY=e.clientY;
+            downItem = e.target.closest('.addr-suggest-item');
+          });
+          b.addEventListener('pointerup', (e)=>{
+            if(!downItem) return;
+            const dx=e.clientX-downX, dy=e.clientY-downY;
+            if(Math.hypot(dx,dy) > 10) return; // moved too far — a scroll, not a tap
             const item = e.target.closest('.addr-suggest-item');
-            if(!item) return;
-            e.preventDefault();
+            if(item !== downItem) return; // finger drifted onto a different row
             const res = b._suggestResults && b._suggestResults[Number(item.dataset.idx)];
             if(!res) return;
             App.selectAddr(res.name, res.lat, res.lon, boxId);
@@ -6051,7 +6064,15 @@ const App = {
           // how far the two addresses actually are.
           const margin = state.settings.travelMargin ?? 3;
           const driveMin = Scheduler.travelEstMin(slot.studentId, slot.address, slots[i+1].studentId, slots[i+1].address, state.scheduleDay);
-          html += `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`;
+          // If either address isn't actually geocoded yet, travelEstMin fell
+          // back to a pseudo-coordinate derived from the address text —
+          // close-looking numbers between two real but ungeocoded addresses
+          // are coincidence, not a real distance. Say so plainly instead of
+          // showing a confident-looking number that happens to be wrong.
+          const bothGeocoded = !!state.coords[slot.studentId] && !!state.coords[slots[i+1].studentId];
+          html += bothGeocoded
+            ? `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`
+            : `<div class="slot-gap" style="color:var(--orange)">${t('schedule_gap_not_geocoded')}</div>`;
         }
       }
     }
