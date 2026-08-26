@@ -5958,12 +5958,16 @@ const App = {
         if(sameLocation){
           html += `<div class="slot-gap" style="color:var(--text-muted,#888)">${t('schedule_gap_same_location')}</div>`;
         } else {
-          // Show the travel time actually implied by the gap between these two lessons
-          // (end of this one to start of the next), not a separately re-estimated number —
-          // otherwise the displayed minutes don't add up to the times shown above.
+          // Real travel-time estimate between these two addresses (uses the
+          // fetched OSRM/HERE road matrix when available, falling back to
+          // haversine otherwise) — NOT derived from the gap between the two
+          // lesson times. That used to be "whatever's left after subtracting
+          // the safety margin", which reads as a real driving estimate but
+          // silently showed 0 minutes whenever a lesson happened to be
+          // scheduled with only the margin's worth of room, regardless of
+          // how far the two addresses actually are.
           const margin = state.settings.travelMargin ?? 3;
-          const gapMin = Scheduler.toMin(slots[i+1].start) - Scheduler.toMin(slot._end||slot.end);
-          const driveMin = Math.max(0, gapMin - margin);
+          const driveMin = Scheduler.travelEstMin(slot.studentId, slot.address, slots[i+1].studentId, slots[i+1].address, state.scheduleDay);
           html += `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`;
         }
       }
