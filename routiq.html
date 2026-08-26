@@ -1668,11 +1668,16 @@ const Scheduler = {
     // Group membership takes priority: a student who is ALSO paired/grouped must not
     // ALSO get a separate solo forceMerge block — that double-counts their lessonsPerWeek
     // and produces extra sessions nobody asked for. Group phase (0b, below) handles them.
+    // No automatic cap on block length here — the algorithm doesn't get to
+    // silently decide "that's too long, I'll split it up" on its own. If a
+    // requested merge genuinely doesn't fit anywhere, the student ends up in
+    // the unplaced list, where the existing "combine into one Xh block"
+    // suggestion (forceMergeAndReschedule) explicitly asks the tutor to
+    // confirm before applying anything — that's the one place this decision
+    // gets made, and it's the tutor who makes it.
     const isGroupOrPaired = s => !!(s.pairedWith || (s.type==='group' && s.group));
-    const MAX_MERGE_BLOCK_MIN = 120; // a "δίωρο" tops out at 2 hours — never merge past that
     for(const s of students.filter(s => s.forceMerge && !isGroupOrPaired(s))){
-      const durationCap = Math.max(1, Math.floor(MAX_MERGE_BLOCK_MIN / s.lessonDuration));
-      const blockSize = Math.max(1, Math.min(s.maxMergeSessions||s.lessonsPerWeek, s.lessonsPerWeek, durationCap));
+      const blockSize = Math.max(1, Math.min(s.maxMergeSessions||s.lessonsPerWeek, s.lessonsPerWeek));
       let remaining = s.lessonsPerWeek;
       const usedDays = new Set();
       for(const day of settings.workDays){
