@@ -3419,6 +3419,16 @@ const Scheduler = {
 // hold the key server-side instead. A user's own key, entered in Settings,
 // always takes priority over this one (see getHereKey()).
 const SHARED_HERE_KEY = 'ZYbtkcLwZXstiGaBGzxJHCuHiA-wFqW41iTCJe0y_6g';
+
+// Cloudflare Web Analytics token. Empty = analytics fully disabled (no script
+// loaded, no requests made) — that is the default and the safe state.
+//
+// Aggregate page views ONLY. Nothing about a user's clients ever leaves the
+// device: no names, addresses, notes, coordinates or schedules. Cloudflare Web
+// Analytics sets no cookies and does not fingerprint, so no consent banner is
+// required under GDPR — but that guarantee only holds as long as nothing
+// identifying is ever passed to it. Do not extend this to send custom data.
+const ANALYTICS_TOKEN = '';
 function getHereKey(){
   return (state.settings && state.settings.hereApiKey) || SHARED_HERE_KEY;
 }
@@ -3760,6 +3770,21 @@ const App = {
     try { this.updateNavLabels(); } catch(e){}
     try { this.renderHome(); } catch(e){ console.error('renderHome failed',e); }
     try { this.registerSW(); } catch(e){}
+    try { this.initAnalytics(); } catch(e){}
+  },
+
+  // Loads Cloudflare Web Analytics, but only when a token is configured — an
+  // unconfigured build makes no third-party request at all. Deliberately
+  // page-view only: no custom events, no identifiers, nothing derived from the
+  // user's own data (see ANALYTICS_TOKEN above for why that boundary matters).
+  initAnalytics(){
+    if(!ANALYTICS_TOKEN) return;
+    if(document.querySelector('script[data-cf-beacon]')) return; // already loaded
+    const s = document.createElement('script');
+    s.defer = true;
+    s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+    s.setAttribute('data-cf-beacon', JSON.stringify({ token: ANALYTICS_TOKEN }));
+    document.head.appendChild(s);
   },
 
   nav(screen){
