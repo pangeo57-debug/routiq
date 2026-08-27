@@ -2431,169 +2431,6 @@ const Scheduler = {
     }
   },
 
-  // Backtracking scheduler with MRV heuristic + forward checking
-  runBacktrack(students, settings){
-    const schedule = {};
-    settings.workDays.forEach(d => schedule[d] = []);
-
-    // Phase 0: forceMerge students first (deterministic)
-    for(const s of students.filter(s => s.forceMerge)){
-      const dur = s.lessonsPerWeek * s.lessonDuration;
-      for(const day of settings.workDays){
-        const av = s.availability[day];
-        if(!av || !av.on) continue;
-        const slot = this.findSlotDur(s, day, schedule[day]||[], settings, dur);
-        if(slot){
-          schedule[day].push({ studentId:s.id, studentName:s.name, subject:s.subject||'—', address:s.address, color:s.color||0, start:slot.start, end:slot.end, duration:dur, mergedCount:s.lessonsPerWeek, merged:true, originalDuration:s.lessonDuration });
-          schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          break;
-        }
-      }
-    }
-
-    // Build task list: one entry per required lesson per normal student
-    const normal = students.filter(s => !s.forceMerge);
-    const tasks = [];
-    for(const s of normal){
-      for(let i = 0; i < s.lessonsPerWeek; i++) tasks.push({ student:s, lessonIdx:i });
-    }
-
-    // placedDays[studentId] = [days already assigned during backtrack]
-    const placedDays = {};
-    for(const s of normal) placedDays[s.id] = [];
-
-    // One slot per student per day — hard constraint
-    const availDayCount = (s) => settings.workDays.filter(d => { const av=s.availability[d]; return av&&av.on; }).length;
-    const canSameDay = (s) => false;
-
-    // Count available slots for a task given current schedule + placedDays
-    const countSlots = (task, sch) => {
-      let n = 0;
-      const pd = placedDays[task.student.id];
-      const sameDay = canSameDay(task.student);
-      for(const day of settings.workDays){
-        const av = task.student.availability[day];
-        if(!av || !av.on) continue;
-        if(!sameDay && pd.includes(day)) continue; // spread across days when possible
-        if(this.findSlot(task.student, day, sch[day]||[], settings)) n++;
-      }
-      return n;
-    };
-
-    // Return all valid start times for a student on a day (key decision points only)
-    const allSlotsOnDay = (student, day, existing) => {
-      const margin = (settings.travelMargin ?? 3);
-      const dayH = settings.dayHours[day];
-      if(!dayH) return [];
-      const av = student.availability[day];
-      if(!av || !av.on) return [];
-      const dur = student.lessonDuration;
-      const winStart = Math.max(this.toMin(dayH.start), this.toMin(av.start));
-      const winEnd   = Math.min(this.toMin(dayH.end),   this.toMin(av.end));
-      if(winEnd - winStart < dur) return [];
-      const winEndFlex = winEnd + 15;
-      // Key candidate times: window start + just after each existing slot ends (+ travel + margin)
-      const sorted = [...existing].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-      const candidates = new Set([winStart]);
-      for(const e of sorted){
-        const bufAfter = e.studentId === student.id ? 0 : this.travelEstMin(e.studentId, e.address, student.id, student.address, day) + margin;
-        const t = this.toMin(e.end) + bufAfter;
-        const rounded = Math.ceil(t / 5) * 5;
-        if(rounded >= winStart && rounded + dur <= winEndFlex) candidates.add(rounded);
-      }
-      const slots = [];
-      for(const t of [...candidates].sort((a,b)=>a-b)){
-        if(t + dur > winEndFlex) continue;
-        let ok = true;
-        for(const e of sorted){
-          const es = this.toMin(e.start), ee = this.toMin(e.end);
-          const sm = e.studentId === student.id;
-          const bb = sm ? 0 : this.travelEstMin(e.studentId, e.address, student.id, student.address, day) + margin;
-          const ba = sm ? 0 : this.travelEstMin(student.id, student.address, e.studentId, e.address, day) + margin;
-          if(t < ee + bb && t + dur + ba > es){ ok = false; break; }
-        }
-        if(ok) slots.push({ start: this.toTime(t), end: this.toTime(t + dur) });
-      }
-      return slots;
-    };
-
-    const deadline = Date.now() + 4000; // 4-second hard limit
-    let nodesVisited = 0;
-    const MAX_NODES = 200000;
-
-    // Pre-filter tasks permanently impossible given current schedule (forceMerge already placed)
-    const feasibleTasks = tasks.filter(t => countSlots(t, schedule) > 0);
-
-    // Track best partial solution found so far
-    let bestSchedule = null, bestPlaced = -1;
-    const saveBest = (sch) => {
-      const cnt = this.countTotal(sch);
-      if(cnt > bestPlaced){
-        bestPlaced = cnt;
-        bestSchedule = {};
-        for(const d of settings.workDays) bestSchedule[d] = [...(sch[d]||[])];
-      }
-    };
-
-    const backtrack = (remaining, sch) => {
-      nodesVisited++;
-      if(remaining.length === 0){ saveBest(sch); return true; }
-      if(nodesVisited > MAX_NODES || Date.now() > deadline){ saveBest(sch); return false; }
-
-      // MRV: pick task with fewest options; skip any with 0 options (impossible now)
-      let minCount = Infinity, bestIdx = -1;
-      for(let i = 0; i < remaining.length; i++){
-        const c = countSlots(remaining[i], sch);
-        if(c === 0) continue; // can't place now — save best and continue trying others
-        if(c < minCount){ minCount = c; bestIdx = i; }
-      }
-
-      if(bestIdx === -1){ saveBest(sch); return false; } // all impossible
-
-      const task = remaining[bestIdx];
-      const rest = remaining.filter((_,i) => i !== bestIdx);
-      const pd = placedDays[task.student.id];
-      const sameDay = canSameDay(task.student);
-
-      for(const day of settings.workDays){
-        const av = task.student.availability[day];
-        if(!av || !av.on) continue;
-        if(!sameDay && pd.includes(day)) continue;
-
-        const slots = allSlotsOnDay(task.student, day, sch[day]||[]);
-        for(const slot of slots){
-          const entry = { studentId:task.student.id, studentName:task.student.name, subject:task.student.subject||'—', address:task.student.address, color:task.student.color||0, start:slot.start, end:slot.end, duration:task.student.lessonDuration, mergedCount:1, merged:false };
-          sch[day].push(entry);
-          sch[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          pd.push(day);
-
-          if(backtrack(rest, sch)) return true;
-
-          sch[day] = sch[day].filter(e => e !== entry);
-          pd.pop();
-        }
-      }
-      saveBest(sch); // save best after exhausting all placements for this task
-      return false;
-    };
-
-    const success = backtrack(feasibleTasks, schedule);
-    if(!success && bestSchedule && this.countTotal(bestSchedule) > this.countTotal(schedule)){
-      for(const d of settings.workDays) schedule[d] = bestSchedule[d];
-    }
-
-    // Build unplaced list
-    const unplaced = [];
-    for(const s of students){
-      const cnt = this.countPlaced(s.id, schedule);
-      if(cnt < s.lessonsPerWeek){
-        const u = { student:s, placed:cnt, needed:s.lessonsPerWeek, reason: this.diagnoseUnplaced(s, schedule, settings) };
-        this.computeSuggestion(u, schedule, settings);
-        unplaced.push(u);
-      }
-    }
-    return { schedule, placed: this.countTotal(schedule), total: students.reduce((a,s)=>a+s.lessonsPerWeek,0), unplaced, success };
-  },
 
   // Remaining minutes available on a day for new lessons
   dayFreeMin(day, schedule, settings){
@@ -2605,184 +2442,6 @@ const Scheduler = {
     return Math.max(0, total - used - buf);
   },
 
-  runOnce(students, settings, coords={}, seed=0){
-    const schedule = {};
-    settings.workDays.forEach(d => { schedule[d] = [] });
-
-    // All attempts shuffled — seed 0 uses Date.now() for true randomness
-    const normal  = this.shuffle(students.filter(s=>!s.forceMerge));
-    const mergers = students.filter(s =>  s.forceMerge);
-
-    // ── Phase 0: forceMerge students first (they have single-day constraints) ──
-    for(const student of mergers){
-      const missing = student.lessonsPerWeek;
-      const mergedDur = missing * student.lessonDuration;
-      const cd = settings.workDays.filter(d => { const av=student.availability[d]; return av&&av.on; });
-      for(const day of cd){
-        const slot = this.findSlotDur(student, day, schedule[day]||[], settings, mergedDur);
-        if(slot){
-          schedule[day].push({
-            studentId:student.id, studentName:student.name,
-            subject:student.subject, address:student.address,
-            color:student.color, start:slot.start, end:slot.end,
-            duration:mergedDur, merged:true, mergedCount:missing,
-            originalDuration:student.lessonDuration
-          });
-          schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          break;
-        }
-      }
-    }
-
-    // ── Phase 1: Dynamic greedy, most-constrained first, day sorted by free time ──
-    let progress = true;
-    while(progress){
-      progress = false;
-      const needy = normal.filter(s => this.countPlaced(s.id,schedule) < s.lessonsPerWeek);
-      if(!needy.length) break;
-
-      needy.sort((a,b) => this.flexScore(a,schedule,settings) - this.flexScore(b,schedule,settings));
-
-      const student = needy[0];
-      const placedDays = this.placedOnDays(student.id, schedule);
-      const candidateDays = settings.workDays.filter(d => {
-        const av = student.availability[d];
-        return av && av.on && !placedDays.includes(d);
-      });
-
-      // Sort by most free time — avoids overloading already-packed days
-      candidateDays.sort((a,b) => this.dayFreeMin(b,schedule,settings) - this.dayFreeMin(a,schedule,settings));
-
-      let placed = false;
-      for(const day of candidateDays){
-        const slot = this.findSlot(student, day, schedule[day]||[], settings);
-        if(slot){
-          this.addLesson(schedule, student, day, slot);
-          progress = true;
-          placed = true;
-          break;
-        }
-      }
-
-      // ── Phase 2: Displacement ──
-      if(!placed){
-        if(this.tryDisplace(student, normal, schedule, settings)){
-          progress = true;
-        }
-      }
-    }
-
-    // ── Phase 1.5: EDF per-day repair ──
-    // Merge placed + unplaced students per day, sort by EDF, re-place to avoid blocking
-    for(const day of settings.workDays){
-      const merged = (schedule[day]||[]).filter(s=>s.merged);
-      const toReplace = [...new Set((schedule[day]||[]).filter(s=>!s.merged).map(s=>s.studentId))];
-      const dayStudents = toReplace.map(id=>normal.find(s=>s.id===id)).filter(Boolean);
-      const unplacedHere = normal.filter(s=>{
-        if(toReplace.includes(s.id)) return false;
-        const av = s.availability[day];
-        if(!av || !av.on) return false;
-        return this.countPlaced(s.id, schedule) < s.lessonsPerWeek &&
-               !this.placedOnDays(s.id, schedule).includes(day);
-      });
-      const allHere = [...dayStudents, ...unplacedHere];
-      if(allHere.length === 0) continue;
-      // Sort ALL together by EDF (earliest deadline first), ties broken by narrower window
-      allHere.sort((a,b)=>{
-        const aav = a.availability[day], bav = b.availability[day];
-        const ae = aav ? this.toMin(aav.end) : 9999;
-        const be = bav ? this.toMin(bav.end) : 9999;
-        if(ae !== be) return ae - be;
-        // tie: earlier window start first (leaves later slots for others)
-        const as = aav ? this.toMin(aav.start) : 0;
-        const bs = bav ? this.toMin(bav.start) : 0;
-        return as - bs;
-      });
-      schedule[day] = [...merged];
-      for(const student of allHere){
-        if(this.countPlaced(student.id, schedule) >= student.lessonsPerWeek) continue;
-        if(this.placedOnDays(student.id, schedule).includes(day)) continue;
-        const slot = this.findSlot(student, day, schedule[day], settings);
-        if(slot) this.addLesson(schedule, student, day, slot);
-      }
-    }
-
-    // ── Phase 3: Merged-block fallback for unplaced students ──
-    // If a student still needs 2+ lessons and can't fit separately, try a single merged block
-    for(const student of normal){
-      const cnt = this.countPlaced(student.id, schedule);
-      if(cnt >= student.lessonsPerWeek) continue;
-      const missing = student.lessonsPerWeek - cnt;
-      if(missing < 2) continue;
-      const mergeCount = Math.min(missing, 2);
-      const mergedDur = mergeCount * student.lessonDuration;
-      const candidateDays = settings.workDays.filter(d => {
-        const av = student.availability[d];
-        return av && av.on;
-      });
-      candidateDays.sort((a,b) => this.dayFreeMin(b,schedule,settings) - this.dayFreeMin(a,schedule,settings));
-      for(const day of candidateDays){
-        // Remove any partial placement on this day first
-        const tempDay = (schedule[day]||[]).filter(s => s.studentId !== student.id);
-        const slot = this.findSlotDur(student, day, tempDay, settings, mergedDur);
-        if(slot){
-          schedule[day] = tempDay;
-          schedule[day].push({
-            studentId:student.id, studentName:student.name,
-            subject:student.subject, address:student.address,
-            color:student.color, start:slot.start, end:slot.end,
-            duration:mergedDur, merged:true, mergedCount:mergeCount,
-            originalDuration:student.lessonDuration
-          });
-          schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          break;
-        }
-      }
-    }
-
-    // ── Phase 4: forceMerge blocks ──
-    for(const student of mergers){
-      const cnt = this.countPlaced(student.id, schedule);
-      if(cnt >= student.lessonsPerWeek) continue;
-      const missing = student.lessonsPerWeek - cnt;
-      const mergedDur = missing * student.lessonDuration;
-      const placedDays = this.placedOnDays(student.id, schedule);
-      const candidateDays = settings.workDays.filter(d => {
-        const av = student.availability[d];
-        return av && av.on;
-      });
-      for(const day of candidateDays){
-        if(placedDays.includes(day)){
-          schedule[day] = schedule[day].filter(s => s.studentId !== student.id);
-        }
-        const slot = this.findSlotDur(student, day, schedule[day]||[], settings, mergedDur);
-        if(slot){
-          schedule[day].push({
-            studentId:student.id, studentName:student.name,
-            subject:student.subject, address:student.address,
-            color:student.color, start:slot.start, end:slot.end,
-            duration:mergedDur, merged:true, mergedCount:missing,
-            originalDuration:student.lessonDuration
-          });
-          schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-          break;
-        }
-      }
-    }
-
-    // ── Phase 5: Unplaced + suggestions ──
-    const unplaced = [];
-    for(const student of students){
-      const cnt = this.countPlaced(student.id, schedule);
-      if(cnt < student.lessonsPerWeek){
-        const u = { student, placed:cnt, needed:student.lessonsPerWeek,
-          reason: this.diagnoseUnplaced(student, schedule, settings) };
-        this.computeSuggestion(u, schedule, settings);
-        unplaced.push(u);
-      }
-    }
-    return { schedule, unplaced };
-  },
 
   // True flexibility: count valid 5-min start positions across all unused available days
   flexScore(student, schedule, settings){
@@ -3033,174 +2692,85 @@ const Scheduler = {
     return t('diag_no_free_slot');
   },
 
-  // Phase 3: Simulated Annealing — cross-day reassignment to minimize total km
-  // Operates on an already-placed schedule; never removes students.
-  async saOptimize(schedule, students, settings, coords, travelMinFn, budgetMs=20000){
-    const HOME = coords['home'] || {lat:0,lon:0};
-    const wdays = settings.workDays;
-    const studentsById = Object.fromEntries(students.map(s=>[s.id,s]));
-    const isAvailable = (studentId, day) => {
-      const st = studentsById[studentId];
-      const av = st && st.availability && st.availability[day];
-      return !!(av && av.on);
-    };
-    const distKm = (a,b)=>this.haversineKm(a,b)*1.4;
-    const trvMin = travelMinFn
-      ? (a,b)=>travelMinFn(a,b)
-      : (a,b)=>Math.max(1,Math.round(distKm(a,b)/((settings.avgCitySpeedKmh)||25)*60));
 
-    // Small per-slot penalty (km-equivalent) for landing on Saturday, so that
-    // among otherwise-equal options SA prefers filling weekdays first — this
-    // never costs a placement (SA only ever rearranges already-placed slots,
-    // it doesn't drop anyone), it just nudges the pick when km is a near-tie.
-    const WEEKEND_PENALTY = 2;
-    const calcSchedKm = (sch)=>{
-      let km=0;
-      for(const d of wdays){
-        const sl=(sch[d]||[]);let prev=HOME;let prevS=null;
-        for(const s of sl){const c=coords[s.studentId]||HOME;if(!prevS||prevS.studentId!==s.studentId)km+=distKm(prev,c);prev=c;prevS=s;}
-        if(sl.length)km+=distKm(prev,HOME);
-        if(d===6) km += sl.length*WEEKEND_PENALTY;
-      }
-      return km;
-    };
-
-    const rebuildDay = (slots, day)=>{
-      if(!slots.length) return [];
-      const dh = settings.dayHours[day]; if(!dh) return null;
-      const dayStart = this.toMin(dh.start), dayEnd = this.toMin(dh.end)+15;
-      const out=[]; let cur=dayStart;
-      for(let i=0;i<slots.length;i++){
-        const sl=slots[i];
-        const prevC = i===0 ? HOME : coords[out[i-1].studentId]||HOME;
-        const trav = trvMin(prevC, coords[sl.studentId]||HOME);
-        // The first lesson of the day always starts exactly at the window open — travel
-        // from home doesn't push it later, the tutor just leaves home early enough.
-        cur = i===0 ? dayStart : this.toMin(out[i-1].end)+trav+(settings.travelMargin||2);
-        const end = cur+sl.duration;
-        if(end>dayEnd) return null;
-        out.push({...sl, start:this.toTime(cur), end:this.toTime(end)});
-        cur=end;
-      }
-      return out;
-    };
-
-    const sc = {};
-    for(const d of wdays){ const b=rebuildDay([...(schedule[d]||[])],d); sc[d]=b||[...(schedule[d]||[])]; }
-
-    let curKm=calcSchedKm(sc), bestKm=curKm;
-    const bestSch = {};
-    for(const d of wdays) bestSch[d]=[...sc[d]];
-
-    let ss=77777;
-    const rng=()=>{ss=(ss*1664525+1013904223)&0xffffffff;return(ss>>>0)/0xffffffff;};
-
-    const T_START=1.5, T_END=0.005;
-    const t0=Date.now();
-    let iter=0;
-
-    while(Date.now()-t0<budgetMs){
-      // Periodically hand control back to the browser so the UI (progress bar,
-      // shimmer) can actually repaint instead of the tab looking frozen for 25s straight.
-      if(++iter%150===0) await new Promise(r=>setTimeout(r,0));
-      const elapsed=(Date.now()-t0)/budgetMs;
-      const T=T_START*Math.pow(T_END/T_START,elapsed);
-      const activeDays=wdays.filter(d=>(sc[d]||[]).length>0);
-      if(!activeDays.length) break;
-
-      const moveType=Math.floor(rng()*3);
-      let d1,d2,newSl1,newSl2,newSl;
-
-      if(moveType===0){
-        d1=activeDays[Math.floor(rng()*activeDays.length)];
-        const sl=[...sc[d1]]; if(sl.length<2) continue;
-        const i=Math.floor(rng()*sl.length);
-        const j=(i+1+Math.floor(rng()*(sl.length-1)))%sl.length;
-        [sl[i],sl[j]]=[sl[j],sl[i]];
-        newSl=rebuildDay(sl,d1); if(!newSl) continue;
-        const saved=sc[d1]; sc[d1]=newSl;
-        const nKm=calcSchedKm(sc);
-        const delta=nKm-curKm;
-        if(delta<0||rng()<Math.exp(-delta/T)){curKm=nKm;if(nKm<bestKm){bestKm=nKm;for(const d of wdays)bestSch[d]=[...sc[d]];}}
-        else sc[d1]=saved;
-      } else if(moveType===1){
-        d1=activeDays[Math.floor(rng()*activeDays.length)];
-        d2=wdays[Math.floor(rng()*wdays.length)];
-        if(d1===d2) continue;
-        const sl1=[...sc[d1]];
-        const idx=Math.floor(rng()*sl1.length);
-        // Merged/group blocks represent multiple people or sessions at once — this
-        // move only checks the primary studentId's constraints, so leave those in place.
-        if(sl1[idx].merged||sl1[idx].isGroup) continue;
-        const sl2=[...sc[d2]||[]];
-        const moved=sl1.splice(idx,1)[0];
-        // Don't move to a day where this student already has a slot
-        if(sl2.some(s=>s.studentId===moved.studentId)) continue;
-        // rebuildDay only checks the TEACHER's working hours for d2, not whether
-        // this particular student is personally available that day — without this
-        // check SA can (and did) move a student onto a day they marked as off.
-        if(!isAvailable(moved.studentId, d2)) continue;
-        sl2.splice(Math.floor(rng()*(sl2.length+1)),0,moved);
-        newSl1=rebuildDay(sl1,d1);
-        newSl2=rebuildDay(sl2,d2); if(!newSl2) continue;
-        const s1=sc[d1],s2=sc[d2];
-        sc[d1]=newSl1||sl1; sc[d2]=newSl2;
-        const nKm=calcSchedKm(sc);
-        const delta=nKm-curKm;
-        if(delta<0||rng()<Math.exp(-delta/T)){curKm=nKm;if(nKm<bestKm){bestKm=nKm;for(const d of wdays)bestSch[d]=[...sc[d]];}}
-        else{sc[d1]=s1;sc[d2]=s2;}
-      } else {
-        if(activeDays.length<2) continue;
-        d1=activeDays[Math.floor(rng()*activeDays.length)];
-        d2=activeDays[Math.floor(rng()*activeDays.length)];
-        if(d1===d2) continue;
-        const sl1=[...sc[d1]], sl2=[...sc[d2]];
-        const i1=Math.floor(rng()*sl1.length), i2=Math.floor(rng()*sl2.length);
-        const a=sl1[i1], b=sl2[i2];
-        // Merged/group blocks represent multiple people or sessions at once — swapping
-        // only re-checks the primary studentId's constraints, so leave those in place.
-        if(a.merged||a.isGroup||b.merged||b.isGroup) continue;
-        // Skip swap if it would put same student twice on same day
-        if(sl1.some((s,i)=>i!==i1&&s.studentId===b.studentId)) continue;
-        if(sl2.some((s,i)=>i!==i2&&s.studentId===a.studentId)) continue;
-        // a moves to d2, b moves to d1 — each must be personally available on
-        // the day it's landing on, not just fit the teacher's working hours there.
-        if(!isAvailable(a.studentId, d2) || !isAvailable(b.studentId, d1)) continue;
-        [sl1[i1],sl2[i2]]=[sl2[i2],sl1[i1]];
-        newSl1=rebuildDay(sl1,d1); newSl2=rebuildDay(sl2,d2);
-        if(!newSl1||!newSl2) continue;
-        const s1=sc[d1],s2=sc[d2];
-        sc[d1]=newSl1; sc[d2]=newSl2;
-        const nKm=calcSchedKm(sc);
-        const delta=nKm-curKm;
-        if(delta<0||rng()<Math.exp(-delta/T)){curKm=nKm;if(nKm<bestKm){bestKm=nKm;for(const d of wdays)bestSch[d]=[...sc[d]];}}
-        else{sc[d1]=s1;sc[d2]=s2;}
-      }
-    }
-
-    for(const d of wdays) schedule[d]=bestSch[d]||[];
-  },
-
+  // Final correctness check over a finished schedule. This is the last line of
+  // defence, so it deliberately re-derives everything from the students/settings
+  // rather than trusting any flag an earlier phase set. It previously checked
+  // only day-hours, the slot owner's availability, and adjacent overlap — which
+  // let three whole classes of real bug through silently (blocked times, the
+  // second member of a pair, and travel time between consecutive addresses).
   verifySchedule(schedule, students, settings){
     const issues=[];
     const D=['','Δευ','Τρι','Τετ','Πεμ','Παρ','Σαβ'];
     const sm=Object.fromEntries(students.map(s=>[s.id,s]));
+    const margin=(settings.travelMargin ?? 2);
+
+    // Every student who occupies a slot, not just the one whose id is on it: a
+    // group/paired block is stored under the leader's id, so checking only
+    // sl.studentId silently ignored whether the OTHER member is actually free.
+    const occupantsOf=(sl)=>{
+      const ids = sl.groupMemberIds && sl.groupMemberIds.length
+        ? sl.groupMemberIds.slice()
+        : [sl.studentId, sl.pairedStudentId].filter(Boolean);
+      return ids.map(id=>sm[id]).filter(Boolean);
+    };
+
     for(const d of settings.workDays){
       const slots=(schedule[d]||[]).slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
       const dh=settings.dayHours[d];
+      const seenToday={};
       for(let i=0;i<slots.length;i++){
-        const sl=slots[i]; const st=sm[sl.studentId];
-        if(dh && this.toMin(sl.end)>this.toMin(dh.end)+15)
+        const sl=slots[i];
+        const s0=this.toMin(sl.start), e0=this.toMin(sl.end);
+
+        if(dh && e0>this.toMin(dh.end)+15)
           issues.push(`${sl.studentName} ${D[d]}: τελειώνει μετά το ωράριο (${sl.end}>${dh.end})`);
-        if(st){
-          const av=st.availability[d];
-          if(!av||!av.on) issues.push(`${sl.studentName} δεν είναι διαθέσιμος ${D[d]}`);
-          else if(this.toMin(sl.start)<this.toMin(av.start)||this.toMin(sl.end)>this.toMin(av.end)+15)
-            issues.push(`${sl.studentName} ${D[d]} ${sl.start}-${sl.end} εκτός παραθύρου ${av.start}-${av.end}`);
+        if(dh && s0<this.toMin(dh.start))
+          issues.push(`${sl.studentName} ${D[d]}: ξεκινά πριν το ωράριο (${sl.start}<${dh.start})`);
+
+        for(const st of occupantsOf(sl)){
+          const av=st.availability && st.availability[d];
+          if(!av||!av.on) issues.push(`${st.name} δεν είναι διαθέσιμος ${D[d]}`);
+          else if(s0<this.toMin(av.start)||e0>this.toMin(av.end)+15)
+            issues.push(`${st.name} ${D[d]} ${sl.start}-${sl.end} εκτός παραθύρου ${av.start}-${av.end}`);
         }
-        if(i>0&&this.toMin(sl.start)<this.toMin(slots[i-1].end))
-          issues.push(`Επικάλυψη ${D[d]}: ${slots[i-1].studentName} & ${sl.studentName}`);
+
+        // Blocked times — the user's own reserved breaks. Never checked before,
+        // so an optimizer relocating a lesson into one passed verification.
+        if(this.isBlocked(s0, e0, d, settings))
+          issues.push(`${sl.studentName} ${D[d]} ${sl.start}-${sl.end} μέσα σε μπλοκαρισμένη ώρα`);
+
+        // Same student twice in one day is only legitimate for a merged block.
+        for(const st of occupantsOf(sl)){
+          if(seenToday[st.id] && !sl.merged)
+            issues.push(`${st.name} ${D[d]}: δύο μαθήματα την ίδια μέρα`);
+          seenToday[st.id]=true;
+        }
+
+        if(i>0){
+          const prev=slots[i-1], pe=this.toMin(prev.end);
+          if(s0<pe){
+            issues.push(`Επικάλυψη ${D[d]}: ${prev.studentName} & ${sl.studentName}`);
+          } else if(prev.studentId!==sl.studentId){
+            // Enough time to actually drive between the two addresses.
+            const need=this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, d)+margin;
+            if(s0 < pe+need)
+              issues.push(`${D[d]}: μη ρεαλιστικός χρόνος μετακίνησης ${prev.studentName}→${sl.studentName} (${s0-pe}′ διαθέσιμα, ${need}′ χρειάζονται)`);
+          }
+        }
       }
+    }
+
+    // Weekly totals: nobody should end up with more sessions than requested.
+    const placed={};
+    for(const d of settings.workDays)
+      for(const sl of (schedule[d]||[]))
+        for(const st of occupantsOf(sl))
+          placed[st.id]=(placed[st.id]||0)+(sl.mergedCount||1);
+    for(const st of students){
+      const n=placed[st.id]||0;
+      if(n>st.lessonsPerWeek)
+        issues.push(`${st.name}: ${n} μαθήματα αντί για ${st.lessonsPerWeek}`);
     }
     return issues;
   },
@@ -3229,10 +2799,50 @@ const Scheduler = {
         if(!st) continue;
         const av = st.availability[d];
         const dh = settings.dayHours[d];
+        const margin = (settings.travelMargin ?? 2);
+        const s0 = this.toMin(sl.start), e0 = this.toMin(sl.end);
+
+        // Deliberately the same rule set verifySchedule reports on, so anything
+        // it would flag is repaired here first instead of surfacing to the user
+        // as a warning about a schedule nothing attempted to fix. Occupancy is
+        // checked per PERSON, not per slot id — a group/paired block is filed
+        // under one member's id, so an id-only comparison misses the case where
+        // the other member also has a solo lesson that day.
+        const occupies = (slot, sid) => slot.studentId===sid
+          || slot.pairedStudentId===sid
+          || (slot.groupMemberIds && slot.groupMemberIds.includes(sid));
+        const otherSameStudent = slots.some((o,oi)=>
+          oi!==i && !o.merged && occupies(o, sl.studentId));
+
+        // Not enough time to physically get here from the previous stop (or on
+        // to the next one). An impossible schedule is worse than an incomplete
+        // one, so drop it and let the normal re-placement below try again.
+        const sorted = slots.slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+        const pos = sorted.indexOf(sl);
+        let travelImpossible = false;
+        if(pos > 0){
+          const p = sorted[pos-1];
+          if(p.studentId !== sl.studentId){
+            const need = this.travelEstMin(p.studentId, p.address, sl.studentId, sl.address, d) + margin;
+            if(s0 < this.toMin(p.end) + need) travelImpossible = true;
+          }
+        }
+        if(pos >= 0 && pos < sorted.length-1){
+          const n = sorted[pos+1];
+          if(n.studentId !== sl.studentId){
+            const need = this.travelEstMin(sl.studentId, sl.address, n.studentId, n.address, d) + margin;
+            if(this.toMin(n.start) < e0 + need) travelImpossible = true;
+          }
+        }
+
         const violates = !av || !av.on ||
-          this.toMin(sl.start) < this.toMin(av.start) ||
-          this.toMin(sl.end) > this.toMin(av.end) + 15 ||
-          (dh && this.toMin(sl.end) > this.toMin(dh.end) + 15);
+          s0 < this.toMin(av.start) ||
+          e0 > this.toMin(av.end) + 15 ||
+          (dh && e0 > this.toMin(dh.end) + 15) ||
+          (dh && s0 < this.toMin(dh.start)) ||
+          this.isBlocked(s0, e0, d, settings) ||
+          otherSameStudent ||
+          travelImpossible;
         if(!violates) continue;
 
         slots.splice(i, 1);
@@ -3972,23 +3582,6 @@ const Router = {
     return {durations, distances, coords};
   },
 
-  // Nearest-neighbor TSP for ordering stops
-  nnRoute(stops){
-    if(stops.length<=1) return stops.map((_,i)=>i);
-    const n=stops.length, visited=new Array(n).fill(false), order=[0];
-    visited[0]=true;
-    for(let i=1;i<n;i++){
-      const last=order[order.length-1];
-      let best=-1,bestD=Infinity;
-      for(let j=0;j<n;j++){
-        if(visited[j]) continue;
-        const d=this.dist(stops[last],stops[j]);
-        if(d<bestD){bestD=d;best=j}
-      }
-      if(best>=0){order.push(best);visited[best]=true}
-    }
-    return order;
-  },
 
   dist(a,b){
     if(!a||!b) return Infinity;
