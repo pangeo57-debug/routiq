@@ -3782,35 +3782,44 @@ const Router = {
     return `&viewbox=${home.lon-d},${home.lat+d},${home.lon+d},${home.lat-d}&bounded=1`;
   },
 
+  // A geocoder's exact-match data frequently doesn't cover every house
+  // number on a street (see the "Γούναρη 58" search case) — geocoding the
+  // full address can come back completely empty even though the street
+  // itself is real and well-known. Stripping the leading house number and
+  // retrying gets a real, street-level coordinate instead of nothing, which
+  // is far better than the alternative (coordsHash's pseudo-coordinate,
+  // hashed from the address text with no relation to where it actually is —
+  // exactly what produced nonsense travel-time numbers between real,
+  // distant neighborhoods that happened to hash close together).
+  _stripHouseNumber(address){
+    return address.replace(/^(\S+)\s+\d+[a-zA-Zα-ωΑ-Ω]?\b/, '$1').trim();
+  },
+
   async geocode(address){
     if(!address) return null;
-    try{
-      // No forced country — worldwide search, biased (not restricted) toward
-      // the tutor's home area via the viewbox param below when one is set.
-      const q = encodeURIComponent(address);
-      const url = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&addressdetails=1${this._viewboxParam()}`;
-      const r = await fetch(url, {headers:{'Accept-Language':this._geoLang()}});
-      if(!r.ok){
-        console.warn(`Nominatim geocode failed for "${address}": HTTP ${r.status} ${r.statusText}`);
-        return null;
-      }
-      let d = await r.json();
-      // Bounded search found nothing (e.g. address genuinely outside the home area) — retry unbounded
-      if((!Array.isArray(d) || d.length===0) && this._viewboxParam()){
-        const url2 = `${this.NOMINATIM}/search?q=${q}&format=json&limit=1&addressdetails=1`;
-        const r2 = await fetch(url2, {headers:{'Accept-Language':this._geoLang()}});
-        if(!r2.ok){
-          console.warn(`Nominatim geocode (unbounded retry) failed for "${address}": HTTP ${r2.status} ${r2.statusText}`);
-          return null;
+    const tryQuery = async (q)=>{
+      try{
+        const url = `${this.NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1${this._viewboxParam()}`;
+        const r = await fetch(url, {headers:{'Accept-Language':this._geoLang()}});
+        if(!r.ok){ console.warn(`Nominatim geocode failed for "${q}": HTTP ${r.status} ${r.statusText}`); return null; }
+        let d = await r.json();
+        if((!Array.isArray(d) || d.length===0) && this._viewboxParam()){
+          const url2 = `${this.NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1`;
+          const r2 = await fetch(url2, {headers:{'Accept-Language':this._geoLang()}});
+          if(!r2.ok){ console.warn(`Nominatim geocode (unbounded retry) failed for "${q}": HTTP ${r2.status} ${r2.statusText}`); return null; }
+          d = await r2.json();
         }
-        d = await r2.json();
-      }
-      if(Array.isArray(d) && d.length>0) return {lat:parseFloat(d[0].lat), lon:parseFloat(d[0].lon)};
-      console.warn(`Nominatim found no results for "${address}"`);
-    }catch(e){
-      console.warn(`Nominatim geocode threw for "${address}":`, e.message);
+        if(Array.isArray(d) && d.length>0) return {lat:parseFloat(d[0].lat), lon:parseFloat(d[0].lon)};
+        return null;
+      }catch(e){ console.warn(`Nominatim geocode threw for "${q}":`, e.message); return null; }
+    };
+    let c = await tryQuery(address);
+    if(!c){
+      const stripped = this._stripHouseNumber(address);
+      if(stripped !== address) c = await tryQuery(stripped);
     }
-    return null;
+    if(!c) console.warn(`Nominatim found no results for "${address}" (even without house number)`);
+    return c;
   },
 
   // HERE Geocoding — used when a key is configured, since it doesn't need the
@@ -3818,16 +3827,22 @@ const Router = {
   // requires (see App.runAndNotify's bulk geocoding loop).
   async geocodeHere(address, key){
     if(!address) return null;
-    try{
-      const q = encodeURIComponent(address);
-      const url = `https://geocode.search.hereapi.com/v1/geocode?q=${q}&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
-      const r = await fetch(url);
-      if(!r.ok) return null;
-      const d = await r.json();
-      const item = d.items && d.items[0];
-      if(item && item.position) return {lat:item.position.lat, lon:item.position.lng};
-    }catch(e){}
-    return null;
+    const tryQuery = async (q)=>{
+      try{
+        const url = `https://geocode.search.hereapi.com/v1/geocode?q=${encodeURIComponent(q)}&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
+        const r = await fetch(url);
+        if(!r.ok) return null;
+        const d = await r.json();
+        const item = d.items && d.items[0];
+        return (item && item.position) ? {lat:item.position.lat, lon:item.position.lng} : null;
+      }catch(e){ return null; }
+    };
+    let c = await tryQuery(address);
+    if(!c){
+      const stripped = this._stripHouseNumber(address);
+      if(stripped !== address) c = await tryQuery(stripped);
+    }
+    return c;
   },
 
   // OSRM Table API: returns duration (seconds) and distance (meters) matrix
@@ -6064,15 +6079,7 @@ const App = {
           // how far the two addresses actually are.
           const margin = state.settings.travelMargin ?? 3;
           const driveMin = Scheduler.travelEstMin(slot.studentId, slot.address, slots[i+1].studentId, slots[i+1].address, state.scheduleDay);
-          // If either address isn't actually geocoded yet, travelEstMin fell
-          // back to a pseudo-coordinate derived from the address text —
-          // close-looking numbers between two real but ungeocoded addresses
-          // are coincidence, not a real distance. Say so plainly instead of
-          // showing a confident-looking number that happens to be wrong.
-          const bothGeocoded = !!state.coords[slot.studentId] && !!state.coords[slots[i+1].studentId];
-          html += bothGeocoded
-            ? `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`
-            : `<div class="slot-gap" style="color:var(--orange)">${t('schedule_gap_not_geocoded')}</div>`;
+          html += `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`;
         }
       }
     }
