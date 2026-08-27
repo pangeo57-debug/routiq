@@ -3884,25 +3884,21 @@ const App = {
         prevSl = sl;
       });
       if(!uniqueSlots.length) continue;
-      const coordsList = [homeC, ...uniqueSlots.map(sl => state.coords[sl.studentId] || Scheduler.coordsHash(sl.address)), homeC];
-      let dayKm = null;
-      try{
-        const matrix = await Router.getMatrix(coordsList);
-        if(matrix && matrix.distances){
-          dayKm = 0;
-          for(let i=0;i<coordsList.length-1;i++) dayKm += (matrix.distances[i]?.[i+1]||0)/1000;
-        }
-      }catch(e){ /* fall through to straight-line for this day */ }
-      if(dayKm == null){
-        dayKm = 0;
-        let prev = homeC;
-        uniqueSlots.forEach(sl=>{
-          const c = state.coords[sl.studentId] || Scheduler.coordsHash(sl.address);
-          dayKm += Router.estimateKm(prev, c);
-          prev = c;
-        });
-        dayKm += Router.estimateKm(prev, homeC);
-      }
+      // Reuse the road matrix already fetched for this run (HERE when a key is
+      // set, OSRM otherwise) via travelEstKm, instead of firing a second,
+      // OSRM-only request per day. Previously this ignored a configured HERE
+      // key entirely, so the headline km figure came from a different engine
+      // than the schedule was planned with — and cost one extra network round
+      // trip per day on every run. travelEstKm falls back to straight-line
+      // internally when no matrix is available.
+      const homeAddr = state.settings.homeAddress || '';
+      let dayKm = 0;
+      let prevId = 'home', prevAddr = homeAddr;
+      uniqueSlots.forEach(sl=>{
+        dayKm += Scheduler.travelEstKm(prevId, prevAddr, sl.studentId, sl.address, Number(day));
+        prevId = sl.studentId; prevAddr = sl.address;
+      });
+      dayKm += Scheduler.travelEstKm(prevId, prevAddr, 'home', homeAddr, Number(day));
       total += dayKm;
     }
     return total;
@@ -6153,26 +6149,43 @@ const App = {
     if(btn){ btn.innerHTML='<span class="spinner"></span>'; btn.disabled=true }
 
     try{
-      // Geocode home (Nominatim, 1 req/s limit)
+      // Use the same provider the scheduler uses. This screen previously
+      // hardcoded Nominatim + OSRM even when a HERE key was configured, so the
+      // distances/times shown here were computed by a different engine (and
+      // without traffic) than the ones the schedule was actually built from —
+      // two different answers for the same journey.
+      const hereKey = getHereKey();
+      const geo = (addr)=> hereKey ? Router.geocodeHere(addr, hereKey) : Router.geocode(addr);
+      // Nominatim's public server requires ~1 req/sec; HERE has no such limit.
+      const geoPause = hereKey ? 0 : 1100;
+
       if(!state.coords['home']){
-        const c = await Router.geocode(state.settings.homeAddress);
+        const c = await geo(state.settings.homeAddress);
         if(c){ state.coords['home']=c; Storage.saveCoords(state.coords) }
-        await new Promise(r=>setTimeout(r,1100));
+        if(geoPause) await new Promise(r=>setTimeout(r,geoPause));
       }
-      // Geocode all students for this day
       for(const slot of slots){
         if(!state.coords[slot.studentId]){
-          const c = await Router.geocode(slot.address);
+          const c = await geo(slot.address);
           if(c){ state.coords[slot.studentId]=c; Storage.saveCoords(state.coords) }
-          await new Promise(r=>setTimeout(r,1100));
+          if(geoPause) await new Promise(r=>setTimeout(r,geoPause));
         }
       }
 
       const homeC = state.coords['home'] || Scheduler.coordsHash(state.settings.homeAddress||'Πλατεία Γεωργίου 1, Πάτρα');
 
-      // OSRM Matrix for real driving times
+      // Real road matrix. With a HERE key this is traffic-aware for the day
+      // actually being viewed (Saturday routes at off-peak, weekdays at the
+      // afternoon peak, matching how the schedule was planned); OSRM is the
+      // traffic-free fallback.
       const allCoords = [homeC, ...slots.map(s=>state.coords[s.studentId]||Scheduler.coordsHash(s.address))];
-      const matrix = await Router.getMatrix(allCoords);
+      let matrix = null;
+      if(hereKey && allCoords.length >= 2){
+        const dep = new Date();
+        if(Number(day)===6) dep.setHours(11,0,0,0); else dep.setHours(17,0,0,0);
+        matrix = await Router.getHereMatrix(allCoords, hereKey, dep.toISOString()).catch(()=>null);
+      }
+      if(!matrix) matrix = await Router.getMatrix(allCoords);
 
       let orderedSlots, totalKm=0, totalMin=0;
       if(matrix && matrix.durations){
