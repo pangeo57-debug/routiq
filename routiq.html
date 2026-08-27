@@ -4112,8 +4112,22 @@ const App = {
       state.coords = {};
     }
 
-    // Ensure workDays is always an array
+    // Backfill any settings field added after this user's data was last saved.
+    // Settings are loaded verbatim from localStorage, and the scheduler reads
+    // e.g. settings.dayHours[day] unguarded in a dozen places — a profile
+    // saved by an older build (before dayHours/blockedSlots existed) crashed
+    // App.init outright, leaving a blank app with no way to recover.
+    const _defs = defaultSettings();
+    for(const k in _defs){
+      if(state.settings[k] === undefined || state.settings[k] === null) state.settings[k] = _defs[k];
+    }
     if(!Array.isArray(state.settings.workDays)) state.settings.workDays = [1,2,3,4,5];
+    if(!Array.isArray(state.settings.blockedSlots)) state.settings.blockedSlots = [];
+    if(!state.settings.dayHours || typeof state.settings.dayHours !== 'object') state.settings.dayHours = _defs.dayHours;
+    for(const d of state.settings.workDays){
+      const dh = state.settings.dayHours[d];
+      if(!dh || !dh.start || !dh.end) state.settings.dayHours[d] = (_defs.dayHours && _defs.dayHours[d]) || {start:'15:00', end:'22:00'};
+    }
     if(!state.settings.language) state.settings.language = 'el';
     applyLanguageArrays();
     this.applyTheme();
@@ -5768,6 +5782,12 @@ const App = {
     };
 
     const L2 = getLabels();
+    // Read the PREVIOUS record before overwriting it — the un-pairing check
+    // below compares old vs new partner, and looking it up afterwards would
+    // just find the new object (making the comparison always false and
+    // leaving the old partner with a dangling pairedWith link).
+    const prevSt = state.editingStudentId ? state.students.find(s=>s.id===state.editingStudentId) : null;
+    const oldPaired = prevSt ? prevSt.pairedWith : null;
     if(state.editingStudentId){
       const idx = state.students.findIndex(s=>s.id===state.editingStudentId);
       if(idx>=0) state.students[idx]=st;
@@ -5776,9 +5796,6 @@ const App = {
       state.students.push(st);
       Toast.show(`${L2.client} ${t('toast_client_added')}`,'success');
     }
-    // Bidirectional pairedWith: set partner's pairedWith = this student's id, clear old partner
-    const oldSt = state.editingStudentId ? state.students.find(s=>s.id===state.editingStudentId) : null;
-    const oldPaired = oldSt?.pairedWith;
     if(oldPaired && oldPaired !== st.pairedWith){
       const oldPartner = state.students.find(s=>s.id===oldPaired);
       if(oldPartner && oldPartner.pairedWith===st.id) oldPartner.pairedWith = null;
@@ -5830,8 +5847,21 @@ const App = {
       ()=>{
         state.students = state.students.filter(s=>s.id!==id);
         delete state.coords[id];
+        // Drop their lessons too — a leftover slot referencing a deleted
+        // student still renders on the schedule/route as a real visit and
+        // survives reloads until some later run happens to overwrite it.
+        for(const d in state.schedule){
+          state.schedule[d] = (state.schedule[d]||[]).filter(sl =>
+            sl.studentId !== id &&
+            !(sl.groupMemberIds && sl.groupMemberIds.includes(id)) &&
+            sl.pairedStudentId !== id);
+        }
+        // Clear the other half of a pairing, so the partner isn't left
+        // pointing at someone who no longer exists.
+        state.students.forEach(s=>{ if(s.pairedWith===id) s.pairedWith = null; });
         Storage.saveStudents(state.students);
         Storage.saveCoords(state.coords);
+        Storage.saveSchedule(state.schedule);
         state._scheduleStale = true;
         this.renderStudents();
         this.renderHome();
@@ -7139,7 +7169,7 @@ const App = {
           state.students=data.students||[];
           state.settings=data.settings||defaultSettings();
           state.schedule=data.schedule||{};
-          state.coords=data.coords||{};
+          state.coords=data.coords||state.coords||{}; // keep existing if the backup predates coords export
           Storage.saveStudents(state.students);
           Storage.saveSettings(state.settings);
           Storage.saveCoords(state.coords);
@@ -7162,6 +7192,10 @@ const App = {
       settings: state.settings,
       students: state.students,
       schedule: state.schedule,
+      // Must be exported: importData overwrites state.coords from the file, so
+      // omitting them here meant a normal export→import round trip silently
+      // wiped every geocoded location (and re-geocoding is rate-limited).
+      coords: state.coords,
       exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
