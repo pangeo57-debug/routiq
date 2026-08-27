@@ -5263,38 +5263,44 @@ const App = {
         // else between those words (a postal code, "Ελλάδα", …), which is
         // normal and expected, not "the API returned something unrelated".
         //
-        // House numbers are checked leniently, not required: a geocoder's
-        // exact-match data frequently doesn't cover every number on a
-        // street, so a real, correct search (e.g. "Γούναρη 58") often gets
-        // back just the street itself with no "58" anywhere in it — still
-        // the right street, and still useful (the pin can be fine-tuned on
-        // the map afterward), but a literal number match would throw it
-        // away as "no results" even though the street name matched exactly.
+        // Relevance is SCORED, not gated. Requiring every typed word to
+        // appear was too strict for the way people actually type addresses:
+        // "Ψαρών 11 Αραχωβίτικα" gets back results for the street ("Ψαρών,
+        // Ρίο") and for the settlement ("Κάτω Αραχωβίτικα") as separate
+        // items — no single result contains both words, so an all-words
+        // filter threw away every result and showed "no results" for an
+        // address that plainly exists. Instead, count how many typed words
+        // each result matches and rank by that; only results matching
+        // nothing at all are dropped. Numbers count toward the score but
+        // never gate a result, since a geocoder often has the street
+        // without that exact house number.
         const needleWords = normalizeSearchText(val.trim()).split(/\s+/).filter(Boolean);
-        const needleTextWords = needleWords.filter(w => !/^\d+$/.test(w));
         if(results && results.length && needleWords.length){
-          results = results.filter(res => {
-            const hay = normalizeSearchText(res.name) + ' ' + normalizeSearchText(res.poiName||'');
-            // If the query is only numbers (rare), fall back to requiring
-            // all of them; otherwise numbers are a bonus match, not a gate.
-            const required = needleTextWords.length ? needleTextWords : needleWords;
-            return required.every(w => hay.includes(w));
+          results.forEach(res=>{
+            const hay = normalizeSearchText([res._matchText, res.name, res.poiName].filter(Boolean).join(' '));
+            res._score = needleWords.reduce((n,w)=> n + (hay.includes(w) ? 1 : 0), 0);
           });
+          const anyMatched = results.some(res=>res._score>0);
+          if(anyMatched) results = results.filter(res=>res._score>0);
         }
         if(!results || results.length===0){
           b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_no_results')}</div>`;
           return;
         }
-        // Closest to home first — the right match is usually the nearby one, not
-        // a same-named street in another city.
+        // Rank: most typed words matched first, then closest to home — the
+        // right match is usually the nearby one, not a same-named street in
+        // another city.
         const home = state.coords && state.coords['home'];
-        if(home){
-          results.forEach(res=>{
-            res._distKm = Scheduler.haversineKm(res, home);
-          });
-          results.sort((a,b)=>a._distKm-b._distKm);
-        }
-        const shown = results.slice(0,5);
+        results.forEach(res=>{
+          res._distKm = home ? Scheduler.haversineKm(res, home) : null;
+        });
+        results.sort((a,b)=>{
+          const ds = (b._score||0) - (a._score||0);
+          if(ds !== 0) return ds;
+          if(a._distKm==null || b._distKm==null) return 0;
+          return a._distKm - b._distKm;
+        });
+        const shown = results.slice(0,6);
         // Results are looked up by index from this closure array at selection
         // time — NOT embedded into inline onclick/ontouchstart attribute
         // strings. A place name containing a quote character (real addresses
@@ -5379,7 +5385,15 @@ const App = {
       // <ordered address>" — since that's what the tutor searched for, not the raw street.
       const name = ordered || a.label || it.title || '';
       const withTitle = (it.title && !name.startsWith(it.title)) ? `${it.title}, ${name}` : name;
-      return { name: withTitle, poiName: it.title, lat: it.position.lat, lon: it.position.lng };
+      // Keep the provider's own full label (plus every address field) purely
+      // for relevance matching. The displayed `name` is deliberately trimmed
+      // to a fixed field order, which drops context the user may well have
+      // typed — HERE puts a settlement like "Αραχωβίτικα" in county/
+      // subdistrict, not in `district`, so matching against the trimmed
+      // string alone would reject a result the user explicitly asked for.
+      const matchText = [a.label, a.street, a.houseNumber, a.district, a.subdistrict,
+        a.city, a.county, a.state, a.postalCode, it.title].filter(Boolean).join(' ');
+      return { name: withTitle, poiName: it.title, _matchText: matchText, lat: it.position.lat, lon: it.position.lng };
     });
   },
 
@@ -5408,6 +5422,9 @@ const App = {
       return {
         name: ordered || res.display_name,
         poiName: res.namedetails && res.namedetails.name,
+        // Full unfiltered text for relevance matching only — see the same
+        // note in _searchHere above.
+        _matchText: [res.display_name, (res.namedetails && res.namedetails.name)].filter(Boolean).join(' '),
         lat: parseFloat(res.lat), lon: parseFloat(res.lon)
       };
     });
