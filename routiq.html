@@ -4053,16 +4053,38 @@ const App = {
   },
 
   async runAndNotify(){
+    // Two runs must never be in flight at once: several entry points can start
+    // one (the two Ανανέωση buttons, the unplaced-student suggestions,
+    // saveSettings), and previously the second would immediately clear
+    // _schedulingCancelled — un-cancelling the first, leaving both alive and
+    // both writing to state.schedule from different inputs. Stop the running
+    // one and wait for it to actually unwind before starting.
+    if(state._schedulingInProgress){
+      this.cancelScheduling();
+      const waitStart = Date.now();
+      while(state._schedulingInProgress && Date.now()-waitStart < 15000){
+        await new Promise(r=>setTimeout(r,50));
+      }
+    }
     const btn = document.querySelector('.btn[onclick*="runAndNotify"]');
     if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.innerHTML = btn.innerHTML.replace(new RegExp(t('schedule_refresh')+'|<svg[^>]*>.*?<\\/svg>\\s*','s'),'') ; btn.textContent = t('debug_geocoding'); }
     state._schedulingInProgress = true;
     state._schedulingCancelled = false;
+    // Generation marker: if a newer run starts anyway (e.g. the wait above
+    // timed out on a stuck phase), this one must not write its now-stale
+    // result over the newer one's.
+    const myToken = (state._runToken = (state._runToken||0) + 1);
+    const isStale = () => state._runToken !== myToken;
     // Keep a snapshot to restore if the user cancels — a half-optimized
     // schedule from an interrupted run is worse than just keeping what was
     // there before "Ανανέωση" was pressed.
     const scheduleBackup = JSON.parse(JSON.stringify(state.schedule));
     const kmBeforeBackup = state.scheduleKmBefore, kmAfterBackup = state.scheduleKmAfter;
     const cancelledCleanup = ()=>{
+      // Superseded rather than genuinely cancelled — the newer run owns the
+      // schedule now, so restoring this run's pre-start snapshot would undo
+      // whatever it has already produced.
+      if(isStale()) return;
       state.schedule = scheduleBackup;
       state.scheduleKmBefore = kmBeforeBackup;
       state.scheduleKmAfter = kmAfterBackup;
@@ -4080,7 +4102,11 @@ const App = {
     // and this never gets to its normal cleanup, don't leave Settings blocked
     // forever — force-clear after longer than any legitimate run could take.
     clearTimeout(this._schedulingWatchdog);
-    this._schedulingWatchdog = setTimeout(()=>{ state._schedulingInProgress=false; }, 9*60*1000);
+    // Signal cancellation rather than just clearing the in-progress flag:
+    // cancelScheduling() early-returns when that flag is false, so the old
+    // behaviour left the ✕ button permanently inert on any run that outlived
+    // the watchdog, while the run itself carried on in the background.
+    this._schedulingWatchdog = setTimeout(()=>{ state._schedulingCancelled = true; }, 9*60*1000);
     this.requestNotifyPermission(); // user-gesture-triggered, fine to ask here
 
     // Show the overlay (and its ✕ cancel button) right away — it previously
@@ -4279,6 +4305,7 @@ const App = {
       // schedule instead of reusing Phase 1's now-stale snapshot.
       state.scheduleAttempts[0] = { ...r, schedule: state.schedule, unplaced: this.computeUnplacedLive() };
       state.schedulerResult = state.scheduleAttempts[0];
+      if(isStale()) return;
       Storage.saveSchedule(state.schedule);
 
       schedProgress(97,t('phase_km_title'),t('phase_km_sub'),'🚗');
@@ -4287,8 +4314,14 @@ const App = {
       }catch(e){ /* keep the straight-line placeholder */ }
     }
 
+    // A newer run took over while this one was finishing: it owns the state
+    // now, so bow out silently rather than overwriting its result, resetting
+    // the stale flag, or clearing the in-progress flag out from under it.
+    if(isStale()) return;
+
     schedProgress(100,t('phase_done_title'),t('phase_done_sub'),'✅');
     await new Promise(r=>setTimeout(r,300));
+    if(isStale()) return;
 
     state._scheduleStale = false;
     schedProgress(null,null,null,null);
@@ -6509,9 +6542,14 @@ const App = {
     // silently finishing a run the user no longer wants.
     const wasRunning = state._schedulingInProgress;
     if(wasRunning){
+      // Wait for the running calculation to actually unwind before rewriting
+      // the settings it is reading. 3s was far too short — the persistent
+      // repair phase has a 7-minute budget and only checks for cancellation
+      // between iterations, so the old run routinely survived the wait and
+      // then kept scheduling against half-updated settings.
       this.cancelScheduling();
       const cancelStart=Date.now();
-      while(state._schedulingInProgress && Date.now()-cancelStart<3000){ await new Promise(r=>setTimeout(r,50)); }
+      while(state._schedulingInProgress && Date.now()-cancelStart<15000){ await new Promise(r=>setTimeout(r,50)); }
     }
     const s = state.settings;
     const prevHome = s.homeAddress;
