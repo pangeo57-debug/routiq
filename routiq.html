@@ -2740,9 +2740,12 @@ const Scheduler = {
         if(this.isBlocked(s0, e0, d, settings))
           issues.push(`${sl.studentName} ${D[d]} ${sl.start}-${sl.end} μέσα σε μπλοκαρισμένη ώρα`);
 
-        // Same student twice in one day is only legitimate for a merged block.
+        // Same student twice in one day is legitimate for a merged block, and
+        // for a student who explicitly chose "same day" (forceMerge) — that is
+        // what they asked for, whether it ended up collapsed into one block or
+        // left as two adjacent lessons.
         for(const st of occupantsOf(sl)){
-          if(seenToday[st.id] && !sl.merged)
+          if(seenToday[st.id] && !sl.merged && !st.forceMerge)
             issues.push(`${st.name} ${D[d]}: δύο μαθήματα την ίδια μέρα`);
           seenToday[st.id]=true;
         }
@@ -2811,7 +2814,9 @@ const Scheduler = {
         const occupies = (slot, sid) => slot.studentId===sid
           || slot.pairedStudentId===sid
           || (slot.groupMemberIds && slot.groupMemberIds.includes(sid));
-        const otherSameStudent = slots.some((o,oi)=>
+        // Not a violation for a forceMerge student: same-day is precisely what
+        // they requested, so pulling one of the two out would defeat it.
+        const otherSameStudent = !st.forceMerge && slots.some((o,oi)=>
           oi!==i && !o.merged && occupies(o, sl.studentId));
 
         // Not enough time to physically get here from the previous stop (or on
@@ -2906,6 +2911,15 @@ const Scheduler = {
         if(totalDur > 120) continue;
         if(dh && endMin > this.toMin(dh.end)+15) continue;
         if(av && endMin > this.toMin(av.end)+15) continue;
+        // The collapsed block spans the gap the fragments left — which may be
+        // occupied. Bail out if anything else on the day (another student's
+        // lesson, or a blocked break) sits inside that span: swallowing it
+        // would turn a valid schedule into a double-booked one.
+        const collapseHitsSomething = slots.some(o =>
+          !frags.includes(o) &&
+          this.toMin(o.start) < endMin && this.toMin(o.end) > startMin);
+        if(collapseHitsSomething) continue;
+        if(this.isBlocked(startMin, endMin, d, settings)) continue;
         for(const f of frags){
           const idx = slots.indexOf(f);
           if(idx>=0) slots.splice(idx,1);

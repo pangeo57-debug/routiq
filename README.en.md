@@ -61,12 +61,30 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 
 ### Testing
 
-There's no test framework — the algorithm is tested by extracting the `<script>` contents and running them in a Node.js `vm` context with stub browser globals:
-
 ```bash
-awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' routiq.html > /tmp/scheduler_test.js
-node /tmp/scheduler_test.js
+npm test
 ```
+
+40 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+
+Because the app is a single HTML file, the tests load its real `<script>` into
+a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run
+against the **actual code**, not a copy.
+
+| File | Covers |
+|---|---|
+| `test/scheduler.test.js` | Scheduling rules: blocked times, availability, pairs/groups, merged blocks, travel time |
+| `test/data.test.js` | Data loss: pairing, deletion, export/import, legacy saved data |
+| `test/rendering.test.js` | XSS escaping, address search, network resilience |
+| `test/i18n.test.js` | Translation completeness across all 4 languages |
+
+`test/invariants.js` holds an **independent** rule checker — deliberately
+separate from the app's own `verifySchedule()`, so it can catch the case where
+the scheduler and its self-check are wrong in the *same* way (which is exactly
+what happened with blocked times).
+
+Every test maps to a bug that actually shipped — this is a regression suite,
+not a specification exercise.
 
 ### Deployment
 

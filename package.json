@@ -1,0 +1,17 @@
+{
+  "name": "routepal",
+  "version": "1.0.0",
+  "description": "Scheduling and route optimization for mobile professionals",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:scheduler": "node --test test/scheduler.test.js",
+    "test:data": "node --test test/data.test.js",
+    "test:rendering": "node --test test/rendering.test.js",
+    "test:i18n": "node --test test/i18n.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
