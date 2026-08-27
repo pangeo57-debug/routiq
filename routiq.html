@@ -1870,9 +1870,20 @@ const Scheduler = {
         const r=Math.ceil(t/5)*5;
         if(r>=winStart&&r+dur<=winEndFlex) candidates.add(r);
       }
+      // Blocked times: their end is a candidate start (so a block at the start
+      // of the day doesn't render the rest of it unreachable), and any window
+      // overlapping one is rejected below. This function previously ignored
+      // settings.blockedSlots entirely, so the backtracking search could place
+      // lessons straight through a user's reserved break.
+      for(const b of (settings.blockedSlots||[])){
+        if(b.day!==day) continue;
+        const r=Math.ceil(this.toMin(b.end)/5)*5;
+        if(r>=winStart&&r+dur<=winEndFlex) candidates.add(r);
+      }
       const slots=[];
       for(const t of [...candidates].sort((a,b)=>a-b)){
         if(t+dur>winEndFlex) continue;
+        if(this.isBlocked(t,t+dur,day,settings)) continue;
         let ok=true;
         for(const e of sorted){
           const es=this.toMin(e.start),ee=this.toMin(e.end);
@@ -2080,6 +2091,16 @@ const Scheduler = {
         candidates.push(ee+buf);
       }
     }
+    // …and right after each blocked time ends. Without these, a blocked slot
+    // covering winStart made the whole day unusable: isBlocked() below only
+    // ever REJECTS a candidate, so if no candidate happened to fall after the
+    // block, the day was abandoned even when hours of it were free. That
+    // silently broke the main use of blocked times — splitting a working day
+    // (e.g. 14:00-17:00, break, 19:00-20:00).
+    for(const b of (settings.blockedSlots||[])){
+      if(b.day!==day) continue;
+      candidates.push(this.toMin(b.end));
+    }
 
     for(let t of candidates){
       t=Math.max(t,winStart);
@@ -2173,6 +2194,18 @@ const Scheduler = {
         if(!first) t=Math.ceil(t/5)*5;
         first=false;
         const winEnd=Math.min(this.toMin(dayH.end),this.toMin(av.end));
+        // Skip past any blocked time this lesson would land on. This pass
+        // re-lays out a whole day from scratch, and without this it would
+        // relocate lessons into breaks the user explicitly reserved — the
+        // day went in respecting them and came out ignoring them.
+        const blocks=(settings.blockedSlots||[]).filter(b=>b.day===day)
+          .map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)}))
+          .sort((a,b)=>a.start-b.start);
+        for(let guard=0; guard<blocks.length+1; guard++){
+          const hit=blocks.find(b=>t<b.end && t+slot.duration>b.start);
+          if(!hit) break;
+          t=hit.end;
+        }
         if(t+slot.duration>winEnd) return null;
         newSlots.push({...slot,start:this.toTime(t),end:this.toTime(t+slot.duration)});
         t+=slot.duration; prev=c;
@@ -3435,11 +3468,16 @@ const Scheduler = {
       const dh=dayHours[day]; if(!dh) return null;
       const dayStart=this.toMin(dh.start), dayEnd=this.toMin(dh.end)+15;
       const buf=settings.travelMargin||2;
-      // Merged/group blocks for this day are laid out with fixed clock times and
-      // never touched by this pass (see the merged[] split above) — a movable
-      // slot's computed start/end must be pushed past any of them it would
-      // otherwise land on, exactly like it would avoid a blocked time slot.
-      const fixed=(merged[day]||[]).map(m=>({start:this.toMin(m.start), end:this.toMin(m.end)}));
+      // Immovable regions of this day that a re-laid-out lesson must be pushed
+      // past: merged/group blocks (fixed clock times, never touched by this
+      // pass — see the merged[] split above) AND the user's blocked times.
+      // Blocked times were missing here, so this optimizer would happily
+      // relocate lessons straight into a break the user had explicitly
+      // reserved — the schedule went in valid and came out violating it.
+      const fixed=[
+        ...(merged[day]||[]).map(m=>({start:this.toMin(m.start), end:this.toMin(m.end)})),
+        ...(settings.blockedSlots||[]).filter(b=>b.day===day).map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)})),
+      ];
       const out=[]; let cur=dayStart;
       for(let i=0;i<slots.length;i++){
         const s=slots[i];
@@ -3467,6 +3505,10 @@ const Scheduler = {
         const av=studentsById[s.studentId]&&studentsById[s.studentId].availability&&studentsById[s.studentId].availability[day];
         if(!av||!av.on) return false;
         if(s.start<this.toMin(av.start)||s.end>this.toMin(av.end)) return false;
+        // Second line of defence behind rebuildDay's push-past-blocked logic:
+        // reject outright rather than accept a candidate arrangement that
+        // overlaps a blocked time.
+        if(this.isBlocked(s.start, s.end, day, settings)) return false;
       }
       return true;
     };
@@ -3773,6 +3815,23 @@ const Router = {
     return (typeof curLang === 'function') ? curLang() : 'el';
   },
 
+  // fetch() has NO default timeout: on a flaky mobile connection a request can
+  // hang indefinitely rather than failing. That's not just slow — every phase
+  // of runAndNotify checks the cancel flag only AFTER its awaits resolve, so a
+  // hung request freezes the whole calculation past the point where pressing ✕
+  // can do anything, until the 9-minute watchdog fires. Every network call
+  // goes through this instead, so a dead request fails fast and the normal
+  // fallback path (or the cancel check) is reached.
+  async _fetch(url, opts={}, timeoutMs=12000){
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
+    try{
+      return await fetch(url, {...opts, signal: ctrl.signal});
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
   // Bias results toward the user's actual working area (±~30km around home) so an
   // ambiguous street name doesn't accidentally resolve to a same-named street elsewhere in Greece.
   _viewboxParam(){
@@ -3800,12 +3859,12 @@ const Router = {
     const tryQuery = async (q)=>{
       try{
         const url = `${this.NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1${this._viewboxParam()}`;
-        const r = await fetch(url, {headers:{'Accept-Language':this._geoLang()}});
+        const r = await this._fetch(url, {headers:{'Accept-Language':this._geoLang()}});
         if(!r.ok){ console.warn(`Nominatim geocode failed for "${q}": HTTP ${r.status} ${r.statusText}`); return null; }
         let d = await r.json();
         if((!Array.isArray(d) || d.length===0) && this._viewboxParam()){
           const url2 = `${this.NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1`;
-          const r2 = await fetch(url2, {headers:{'Accept-Language':this._geoLang()}});
+          const r2 = await this._fetch(url2, {headers:{'Accept-Language':this._geoLang()}});
           if(!r2.ok){ console.warn(`Nominatim geocode (unbounded retry) failed for "${q}": HTTP ${r2.status} ${r2.statusText}`); return null; }
           d = await r2.json();
         }
@@ -3830,7 +3889,7 @@ const Router = {
     const tryQuery = async (q)=>{
       try{
         const url = `https://geocode.search.hereapi.com/v1/geocode?q=${encodeURIComponent(q)}&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
-        const r = await fetch(url);
+        const r = await this._fetch(url);
         if(!r.ok) return null;
         const d = await r.json();
         const item = d.items && d.items[0];
@@ -3851,7 +3910,9 @@ const Router = {
     try{
       const pts = coords.map(c=>`${c.lon},${c.lat}`).join(';');
       const url = `${this.OSRM}/table/v1/driving/${pts}?annotations=duration,distance`;
-      const r = await fetch(url);
+      // Longer timeout than the default: an N×N matrix for a full client list
+      // is a genuinely slow request, not a hung one.
+      const r = await this._fetch(url, {}, 25000);
       if(!r.ok) return null;
       const d = await r.json();
       if(d.code !== 'Ok') return null;
@@ -3866,7 +3927,7 @@ const Router = {
     try{
       const pts = coords.map(c=>`${c.lon},${c.lat}`).join(';');
       const url = `${this.OSRM}/route/v1/driving/${pts}?overview=full&geometries=geojson`;
-      const r = await fetch(url);
+      const r = await this._fetch(url);
       if(!r.ok) return null;
       const d = await r.json();
       if(d.code !== 'Ok' || !d.routes?.[0]) return null;
@@ -3888,11 +3949,11 @@ const Router = {
       matrixAttributes:['travelTimes','distances']
     };
     const url = `https://matrix.router.hereapi.com/v8/matrix?async=false&apiKey=${encodeURIComponent(apiKey)}`;
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body)
-    });
+    }, 25000);
     if(!resp.ok) throw new Error(`HERE API ${resp.status}`);
     const data = await resp.json();
     // data.matrix.travelTimes/distances are flat arrays, numOrigins × numDestinations
@@ -4671,7 +4732,7 @@ const App = {
     s.innerHTML = `
       <div class="hero">
         <div class="hero-greeting">${greeting}</div>
-        <div class="hero-title">${name?name+', ':''}<span class="accent">RoutePal</span>${name?'':t('home_welcome')}</div>
+        <div class="hero-title">${name?esc(name)+', ':''}<span class="accent">RoutePal</span>${name?'':t('home_welcome')}</div>
       </div>
       ${state._scheduleStale && state.students.length>0 ? `
         <div style="margin:0 16px 12px;background:rgba(217,119,6,.1);border:1.5px solid rgba(217,119,6,.35);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px">
@@ -5374,7 +5435,7 @@ const App = {
     const home = (state.coords && state.coords['home']) || {lat:38.2466, lon:21.7346};
     const q = encodeURIComponent(val.trim());
     const url = `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${home.lat},${home.lon}&limit=8&lang=${Router._geoLang()}&apiKey=${key}`;
-    const r = await fetch(url);
+    const r = await Router._fetch(url);
     if(!r.ok) throw new Error(`HERE Autosuggest ${r.status}`);
     const d = await r.json();
     const items = (d.items||[]).filter(it=>it.position); // skip query-refinement items with no coordinates
@@ -5404,12 +5465,12 @@ const App = {
     // the student genuinely lives outside that area or in another country).
     const q = encodeURIComponent(val.trim());
     const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&addressdetails=1&namedetails=1${Router._viewboxParam()}`;
-    const r = await fetch(url, {headers:{'Accept-Language':Router._geoLang()}});
+    const r = await Router._fetch(url, {headers:{'Accept-Language':Router._geoLang()}});
     if(!r.ok) throw new Error(`Nominatim ${r.status}`);
     let results = await r.json();
     if((!Array.isArray(results) || results.length===0) && Router._viewboxParam()){
       const url2 = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=8&addressdetails=1&namedetails=1`;
-      const r2 = await fetch(url2, {headers:{'Accept-Language':Router._geoLang()}});
+      const r2 = await Router._fetch(url2, {headers:{'Accept-Language':Router._geoLang()}});
       if(r2.ok) results = await r2.json();
     }
     if(!Array.isArray(results)) results = [];
@@ -5506,7 +5567,7 @@ const App = {
     const hereKey = getHereKey();
     if(hereKey){
       const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=${Router._geoLang()}&apiKey=${hereKey}`;
-      const r = await fetch(url);
+      const r = await Router._fetch(url);
       if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
       const d = await r.json();
       const item = d.items && d.items[0];
@@ -5515,7 +5576,7 @@ const App = {
       return this._formatAddressOrdered(a.street, a.houseNumber, a.district, a.city, a.postalCode) || (a.label || item.title);
     }
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&zoom=18`;
-    const r = await fetch(url, {headers:{'Accept-Language':Router._geoLang(),'User-Agent':'RoutePal/1.0'}});
+    const r = await Router._fetch(url, {headers:{'Accept-Language':Router._geoLang(),'User-Agent':'RoutePal/1.0'}});
     const d = await r.json();
     if(!d) return null;
     const a = d.address || {};
@@ -6146,7 +6207,7 @@ const App = {
           return `
           <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-weight:600;font-size:14px">${u.student.name}</span>
+              <span style="font-weight:600;font-size:14px">${esc(u.student.name)}</span>
               <span class="chip chip-red">${u.placed}/${u.needed} ${t('unplaced_group_badge')}</span>
             </div>
             <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${u.reason}</div>
@@ -6172,9 +6233,9 @@ const App = {
             ${u.suggestionStudent ? `
             <div style="background:rgba(217,119,6,.07);border:1px solid rgba(217,119,6,.2);border-radius:8px;padding:10px">
               <div style="font-weight:700;font-size:12px;color:var(--orange);margin-bottom:4px">${tf('unplaced_solution_extend_window',{letter:missing>=2?(u.suggestionTeacher?'C':'B'):(u.suggestionTeacher?'B':'A')})}</div>
-              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_extend_window_detail',{name:u.student.name,day:`<strong>${DAYS_FULL[u.suggestionStudent.day]}</strong>`,min:u.suggestionStudent.extensionMin})}</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_extend_window_detail',{name:esc(u.student.name),day:`<strong>${DAYS_FULL[u.suggestionStudent.day]}</strong>`,min:u.suggestionStudent.extensionMin})}</div>
               <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;width:100%" onclick="App.applyWindowExtension('${u.student.id}',${u.suggestionStudent.day},${u.suggestionStudent.extensionMin})">
-                ${tf('unplaced_extend_window_btn',{min:u.suggestionStudent.extensionMin,name:u.student.name,day:DAYS_FULL[u.suggestionStudent.day]})}
+                ${tf('unplaced_extend_window_btn',{min:u.suggestionStudent.extensionMin,name:esc(u.student.name),day:DAYS_FULL[u.suggestionStudent.day]})}
               </button>
             </div>` : ''}
           </div>`;
@@ -6394,7 +6455,7 @@ const App = {
         <div class="stop-num home">🏠</div>
         <div class="stop-info">
           <div class="stop-name">${t('route_start')}</div>
-          <div class="stop-addr">${state.settings.homeAddress||t('route_home_label')}</div>
+          <div class="stop-addr">${esc(state.settings.homeAddress||t('route_home_label'))}</div>
         </div>
       </div>
       <div class="stop-connector" style="margin-left:29px"></div>
@@ -6408,9 +6469,9 @@ const App = {
         <div class="stop-item">
           <div class="stop-num">${i+1}</div>
           <div class="stop-info">
-            <div class="stop-name">${stop.studentName||'—'}${mergeTag}</div>
-            <div class="stop-addr">${stop.address||'—'}</div>
-            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${displayEnd} · ${subjectLabel(stop.subject)||''}</span>${travelRow}</div>
+            <div class="stop-name">${esc(stop.studentName||'—')}${mergeTag}</div>
+            <div class="stop-addr">${esc(stop.address||'—')}</div>
+            <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${displayEnd} · ${esc(subjectLabel(stop.subject)||'')}</span>${travelRow}</div>
           </div>
         </div>
         ${i<stops.length-1?'<div class="stop-connector" style="margin-left:29px"></div>':''}
@@ -6422,7 +6483,7 @@ const App = {
         <div class="stop-num home">🏠</div>
         <div class="stop-info">
           <div class="stop-name">${t('route_return')}</div>
-          <div class="stop-addr">${state.settings.homeAddress||t('route_home_label')}</div>
+          <div class="stop-addr">${esc(state.settings.homeAddress||t('route_home_label'))}</div>
         </div>
       </div>
     `;
