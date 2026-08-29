@@ -140,6 +140,9 @@ driver running late).
 ## 5. Lessons paid for the hard way
 
 These cost real debugging time in RoutePal. Design DropOff to avoid them.
+The full set — including the ones not specific to routing — is in
+[`LESSONS.md`](./LESSONS.md), written to be dropped into another project as
+instructions.
 
 ### Every phase must enforce every constraint
 RoutePal's worst bug class: the initial placement respected blocked times,
