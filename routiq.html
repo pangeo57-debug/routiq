@@ -14,10 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root {
   --green: #059669;
@@ -3965,11 +3963,43 @@ const App = {
   // fonts correctly — jsPDF's built-in fonts don't support Greek glyphs at all),
   // rasterizes it with html2canvas, then slices that image across as many A4
   // pages as needed inside a jsPDF document and triggers a native download.
+  // jsPDF and html2canvas together are ~550KB — more than the app itself — and
+  // are used by exactly one button. Loading them eagerly in <head> made every
+  // cold start pay for a feature most sessions never touch. Fetched on first
+  // use instead, then cached by the browser for the rest of the session.
+  _pdfLibsPromise: null,
+  loadPdfLibs(){
+    if(typeof jspdf !== 'undefined' && jspdf.jsPDF && typeof html2canvas !== 'undefined'){
+      return Promise.resolve();
+    }
+    if(this._pdfLibsPromise) return this._pdfLibsPromise; // a second click must not load them twice
+    const script = (src) => new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error('failed to load ' + src));
+      document.head.appendChild(el);
+    });
+    this._pdfLibsPromise = Promise.all([
+      script('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'),
+      script('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+    ]).catch(err => {
+      this._pdfLibsPromise = null; // allow a retry after a transient failure
+      throw err;
+    });
+    return this._pdfLibsPromise;
+  },
+
   async printSchedule(){
+    Toast.show(t('toast_pdf_generating'),'info');
+    try{
+      await this.loadPdfLibs();
+    }catch(e){
+      Toast.show(t('toast_pdf_lib_failed'),'error'); return;
+    }
     if(typeof jspdf === 'undefined' || !jspdf.jsPDF || typeof html2canvas === 'undefined'){
       Toast.show(t('toast_pdf_lib_failed'),'error'); return;
     }
-    Toast.show(t('toast_pdf_generating'),'info');
     const teacherName = state.settings.teacherName || 'RoutePal';
     const avatarColors=['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
     const dateLocale = curLang()==='el'?'el-GR':curLang();
@@ -6988,18 +7018,25 @@ const App = {
   },
 
   // ---- SERVICE WORKER ----
+  // Registers ./sw.js — a real file, deliberately NOT a Blob URL. A blob gets a
+  // fresh url on every load, so the browser saw a different worker each visit
+  // and re-registered it endlessly; a stable path lets it do proper update
+  // detection. See sw.js for the caching strategy.
   registerSW(){
-    if('serviceWorker' in navigator){
-      const CACHE_VER = '20260616-3';
-      const swBlob = new Blob([`
-        const CACHE='routepal-${CACHE_VER}';
-        self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([]))); self.skipWaiting();});
-        self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-        self.addEventListener('fetch',e=>e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))));
-      `.replace('${CACHE_VER}', CACHE_VER)],{type:'application/javascript'});
-      const swUrl = URL.createObjectURL(swBlob);
-      navigator.serviceWorker.register(swUrl).catch(()=>{});
-    }
+    if(!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      // Pick up a new deploy without waiting for every tab to be closed.
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if(!sw) return;
+        sw.addEventListener('statechange', () => {
+          if(sw.state === 'installed' && navigator.serviceWorker.controller){
+            // A newer version is ready; it will serve the next load.
+            console.info('RoutePal: a new version is available and will load next time.');
+          }
+        });
+      });
+    }).catch(()=>{ /* unsupported or blocked — the app works fine without it */ });
   }
 };
 

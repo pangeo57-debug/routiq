@@ -23,6 +23,7 @@ A scheduling and route-optimization app for private tutors and other mobile prof
 
 ```
 routiq.html                       → the entire application
+sw.js                             → service worker (network-first: fresh online, works offline)
 manifest.json                     → PWA manifest (icon, name, colors)
 icon-*.png, apple-touch-icon.png  → app icons
 PRIVACY.md, TERMS.md              → draft legal text (NEEDS LAWYER REVIEW before real use)
@@ -65,7 +66,7 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 npm test
 ```
 
-40 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+42 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run
@@ -88,7 +89,9 @@ not a specification exercise.
 
 ### Deployment
 
-Push to `main` → automatic deploy via GitHub Pages, live within 30-60 seconds. Because of Service Worker caching, a hard refresh (⌘⇧R) may be needed on-device to see changes immediately.
+Push to `main` → automatic deploy via GitHub Pages, live within 30-60 seconds.
+
+The service worker is network-first, so a device with connectivity always gets the latest deploy without a hard refresh. (Devices still running the old blob-based worker need one final hard refresh to pick up the new one.)
 
 ## Roadmap
 

@@ -23,6 +23,7 @@
 
 ```
 routiq.html          → ολόκληρη η εφαρμογή
+sw.js                 → service worker (network-first: φρέσκο online, λειτουργεί offline)
 manifest.json         → PWA manifest (εικονίδιο, όνομα, χρώματα)
 icon-*.png, apple-touch-icon.png → εικονίδια εφαρμογής
 PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙΑΖΟΝΤΑΙ ΕΛΕΓΧΟ ΔΙΚΗΓΟΡΟΥ πριν χρησιμοποιηθούν)
@@ -65,7 +66,7 @@ PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙ�
 npm test
 ```
 
-40 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
+42 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
 
 Επειδή η εφαρμογή είναι ένα αρχείο HTML, τα τεστ φορτώνουν το πραγματικό
 `<script>` σε Node `vm` sandbox με stubbed browser API (`test/harness.js`).
@@ -88,7 +89,9 @@ npm test
 
 ### Deployment
 
-Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζωντανό μέσα σε 30-60 δευτερόλεπτα. Λόγω Service Worker caching, μπορεί να χρειαστεί hard refresh (⌘⇧R) στη συσκευή για να φανούν αλλαγές άμεσα.
+Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζωντανό μέσα σε 30-60 δευτερόλεπτα.
+
+Ο service worker είναι network-first, οπότε μια συσκευή με σήμα παίρνει πάντα την τελευταία έκδοση χωρίς hard refresh. (Συσκευές που είχαν τον παλιό, blob-based worker χρειάζονται ένα τελευταίο hard refresh για να περάσουν στον νέο.)
 
 ## Roadmap
 
