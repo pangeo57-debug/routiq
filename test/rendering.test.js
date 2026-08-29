@@ -150,3 +150,54 @@ describe('geocoding resilience', () => {
     assert.ok(queries.length >= 2, 'should have retried');
   });
 });
+
+describe('resource lifecycle', () => {
+  test('navigating away destroys Leaflet maps instead of leaking them', () => {
+    const app = loadApp();
+    let removed = 0;
+    const mapEl = {
+      id: 'route-map',
+      _leaflet_map: { remove() { removed++; } },
+      _leaflet_marker: {},
+    };
+    // Only the selector destroyMaps() uses should see the element, so a typo
+    // in that selector fails this test rather than silently leaking.
+    app.ctx.document.querySelectorAll = (sel) =>
+      sel === '.screen [id$="-map"]' ? [mapEl] : [];
+
+    app.App.destroyMaps();
+    assert.equal(removed, 1, 'the map object should have been torn down');
+    assert.equal(mapEl._leaflet_map, null, 'the reference should be cleared');
+    assert.equal(mapEl._leaflet_marker, null);
+
+    // Idempotent: a second navigation must not throw on an already-dead map.
+    assert.doesNotThrow(() => app.App.destroyMaps());
+    assert.equal(removed, 1);
+  });
+
+  test('a non-destructive confirm is not a red Delete button', () => {
+    const app = loadApp();
+    const classes = new Set(['btn', 'btn-danger']);
+    const okBtn = {
+      textContent: '',
+      classList: {
+        toggle(name, on) { if (on) classes.add(name); else classes.delete(name); },
+        add(n) { classes.add(n); }, remove(n) { classes.delete(n); },
+        contains(n) { return classes.has(n); },
+      },
+    };
+    app.ctx.document.getElementById = (id) =>
+      id === 'confirm-ok-btn' ? okBtn : { textContent: '', classList: okBtn.classList,
+        style: {}, addEventListener() {}, appendChild() {} };
+
+    app.App.confirm('Load demo?', 'text', () => {}, 'Load', false);
+    assert.equal(okBtn.textContent, 'Load');
+    assert.ok(!classes.has('btn-danger'), 'loading demo data is not destructive');
+    assert.ok(classes.has('btn-primary'));
+
+    // Real deletions still get the danger treatment.
+    app.App.confirm('Delete?', 'text', () => {});
+    assert.ok(classes.has('btn-danger'));
+    assert.ok(!classes.has('btn-primary'));
+  });
+});

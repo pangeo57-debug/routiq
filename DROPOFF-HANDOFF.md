@@ -236,10 +236,8 @@ infrastructure for users who didn't exist yet.
 ## 8. Current RoutePal state (as of this handoff)
 
 - ~7.000 lines, single file, no build step
-- 41 tests passing (`npm test`)
+- 46 tests passing (`npm test`)
 - Deployed: https://pangeo57-debug.github.io/routiq/routiq.html
 - Routing: HERE (traffic-aware) with a shared API key embedded in the client
   — a deliberate temporary trade-off, to be replaced by a backend proxy
-- Known unfixed: Leaflet map instances leak on screen re-render;
-  `computeAvailabilityFromExceptions` is lossy with multiple gaps per day;
-  the demo-data button's confirm dialog says "Delete"
+- Known unfixed: none outstanding from the last audit

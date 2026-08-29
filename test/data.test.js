@@ -157,4 +157,30 @@ describe('availability exceptions round trip', () => {
     const av = app.App.computeAvailabilityFromExceptions([{ day: 1, start: '15:00', end: '22:00' }]);
     assert.ok(!av[1] || !av[1].on, 'a full-day block should switch the day off');
   });
+
+  test('a day cut into two windows reports the one it has to discard', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ settings: cfg });
+    // 15:00-17:00 free, blocked 17:00-18:00, 18:00-22:00 free. The schema keeps
+    // one window per day, so the 2h morning gap loses to the 4h evening one —
+    // but the user must be told, not silently robbed of two usable hours.
+    const dropped = [];
+    const av = app.App.computeAvailabilityFromExceptions(
+      [{ day: 1, start: '17:00', end: '18:00' }], dropped);
+    assert.equal(av[1].start, '18:00');
+    assert.equal(av[1].end, '22:00');
+    assert.equal(dropped.length, 1, 'the discarded window should be reported');
+    assert.equal(dropped[0].start, '15:00');
+    assert.equal(dropped[0].end, '17:00');
+  });
+
+  test('nothing is reported when only one window survives', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ settings: cfg });
+    const dropped = [];
+    app.App.computeAvailabilityFromExceptions([{ day: 1, start: '15:00', end: '17:00' }], dropped);
+    assert.equal(dropped.length, 0);
+  });
 });

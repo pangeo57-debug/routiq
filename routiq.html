@@ -689,7 +689,7 @@ const I18N = {
     settings_test_algo:'Δοκιμή αλγορίθμου', settings_language:'Γλώσσα',
     settings_theme:'Θέμα εμφάνισης', theme_system:'Σύστημα (αυτόματο)', theme_light:'Ανοιχτό', theme_dark:'Σκοτεινό',
     btn_save:'Αποθήκευση', btn_cancel:'Άκυρο', btn_add:'Προσθήκη', common_loading:'Φόρτωση...', common_please_wait:'Παρακαλώ περιμένετε', unit_min:'λ', unit_hr:'ω', unit_meter:'μ', unit_km:'χλμ',
-    btn_delete:'Διαγραφή', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
+    btn_delete:'Διαγραφή', btn_load:'Φόρτωση', btn_edit:'Επεξεργασία', btn_apply:'Εφαρμογή', btn_calculate:'Υπολογισμός',
     confirm_title:'Επιβεβαίωση', block_drawer_title:'Μπλοκαρισμένη Ώρα',
     greeting_morning:'Καλημέρα', greeting_afternoon:'Καλό απόγευμα', greeting_evening:'Καλησπέρα',
     home_welcome:' — Καλώς ήρθατε', home_schedule_stale_title:'Πρόγραμμα μη ενημερωμένο',
@@ -739,6 +739,7 @@ const I18N = {
     toast_enter_fullname:'Εισάγετε ονοματεπώνυμο', toast_enter_address:'Εισάγετε διεύθυνση',
     saving_ellipsis:'Αποθήκευση...', toast_select_day:'Επιλέξτε τουλάχιστον μία ημέρα',
     toast_avail_exception_invalid:'Μη έγκυρη εξαίρεση — ελέγξτε ημέρα/ώρες',
+    toast_avail_windows_dropped:'Το πρόγραμμα δέχεται ένα διάστημα ανά ημέρα — δεν θα χρησιμοποιηθούν: {windows}',
     toast_client_updated:'ενημερώθηκε', toast_client_added:'προστέθηκε', toast_client_deleted:'διαγράφηκε',
     confirm_delete_client_title:'Διαγραφή {client}', confirm_delete_client_text:'Είστε σίγουροι ότι θέλετε να διαγράψετε τον/την {name}; Όλα τα δεδομένα θα χαθούν.',
     toast_geocoded_count:'Τοποθεσίες', schedule_export_pdf_title:'Εξαγωγή ως PDF',
@@ -871,7 +872,7 @@ const I18N = {
     settings_test_algo:'Algorithm Test', settings_language:'Language',
     settings_theme:'Appearance', theme_system:'System (automatic)', theme_light:'Light', theme_dark:'Dark',
     btn_save:'Save', btn_cancel:'Cancel', btn_add:'Add', common_loading:'Loading...', common_please_wait:'Please wait', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
-    btn_delete:'Delete', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
+    btn_delete:'Delete', btn_load:'Load', btn_edit:'Edit', btn_apply:'Apply', btn_calculate:'Calculate',
     confirm_title:'Confirm', block_drawer_title:'Blocked Time',
     greeting_morning:'Good morning', greeting_afternoon:'Good afternoon', greeting_evening:'Good evening',
     home_welcome:' — Welcome', home_schedule_stale_title:'Schedule out of date',
@@ -921,6 +922,7 @@ const I18N = {
     toast_enter_fullname:'Enter full name', toast_enter_address:'Enter address',
     saving_ellipsis:'Saving...', toast_select_day:'Select at least one day',
     toast_avail_exception_invalid:'Invalid exception — check the day/times',
+    toast_avail_windows_dropped:'The schedule takes one window per day — these will not be used: {windows}',
     toast_client_updated:'updated', toast_client_added:'added', toast_client_deleted:'deleted',
     confirm_delete_client_title:'Delete {client}', confirm_delete_client_text:'Are you sure you want to delete {name}? All data will be lost.',
     toast_geocoded_count:'Locations', schedule_export_pdf_title:'Export as PDF',
@@ -1053,7 +1055,7 @@ const I18N = {
     settings_test_algo:'Test algorithme', settings_language:'Langue',
     settings_theme:'Apparence', theme_system:'Système (auto)', theme_light:'Clair', theme_dark:'Sombre',
     btn_save:'Enregistrer', btn_cancel:'Annuler', btn_add:'Ajouter', common_loading:'Chargement...', common_please_wait:'Veuillez patienter', unit_min:'min', unit_hr:'h', unit_meter:'m', unit_km:'km',
-    btn_delete:'Supprimer', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
+    btn_delete:'Supprimer', btn_load:'Charger', btn_edit:'Modifier', btn_apply:'Appliquer', btn_calculate:'Calculer',
     confirm_title:'Confirmation', block_drawer_title:'Heure bloquée',
     greeting_morning:'Bonjour', greeting_afternoon:'Bon après-midi', greeting_evening:'Bonsoir',
     home_welcome:' — Bienvenue', home_schedule_stale_title:'Programme obsolète',
@@ -1103,6 +1105,7 @@ const I18N = {
     toast_enter_fullname:'Entrez le nom complet', toast_enter_address:"Entrez l'adresse",
     saving_ellipsis:'Enregistrement...', toast_select_day:'Sélectionnez au moins un jour',
     toast_avail_exception_invalid:'Exception invalide — vérifiez le jour/les horaires',
+    toast_avail_windows_dropped:'Le planning accepte une plage par jour — non utilisées : {windows}',
     toast_client_updated:'mis à jour', toast_client_added:'ajouté', toast_client_deleted:'supprimé',
     confirm_delete_client_title:'Supprimer {client}', confirm_delete_client_text:'Voulez-vous vraiment supprimer {name} ? Toutes les données seront perdues.',
     toast_geocoded_count:'Lieux', schedule_export_pdf_title:'Exporter en PDF',
@@ -1235,7 +1238,7 @@ const I18N = {
     settings_test_algo:'Algorithmus-Test', settings_language:'Sprache',
     settings_theme:'Erscheinungsbild', theme_system:'System (automatisch)', theme_light:'Hell', theme_dark:'Dunkel',
     btn_save:'Speichern', btn_cancel:'Abbrechen', btn_add:'Hinzufügen', common_loading:'Lädt...', common_please_wait:'Bitte warten', unit_min:'Min', unit_hr:'Std', unit_meter:'m', unit_km:'km',
-    btn_delete:'Löschen', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
+    btn_delete:'Löschen', btn_load:'Laden', btn_edit:'Bearbeiten', btn_apply:'Anwenden', btn_calculate:'Berechnen',
     confirm_title:'Bestätigung', block_drawer_title:'Blockierte Zeit',
     greeting_morning:'Guten Morgen', greeting_afternoon:'Guten Tag', greeting_evening:'Guten Abend',
     home_welcome:' — Willkommen', home_schedule_stale_title:'Plan veraltet',
@@ -1285,6 +1288,7 @@ const I18N = {
     toast_enter_fullname:'Vollständigen Namen eingeben', toast_enter_address:'Adresse eingeben',
     saving_ellipsis:'Speichern...', toast_select_day:'Wählen Sie mindestens einen Tag',
     toast_avail_exception_invalid:'Ungültige Ausnahme — Tag/Zeiten prüfen',
+    toast_avail_windows_dropped:'Der Plan nimmt ein Zeitfenster pro Tag — nicht genutzt: {windows}',
     toast_client_updated:'aktualisiert', toast_client_added:'hinzugefügt', toast_client_deleted:'gelöscht',
     confirm_delete_client_title:'{client} löschen', confirm_delete_client_text:'Möchten Sie {name} wirklich löschen? Alle Daten gehen verloren.',
     toast_geocoded_count:'Standorte', schedule_export_pdf_title:'Als PDF exportieren',
@@ -3792,7 +3796,23 @@ const App = {
     document.head.appendChild(s);
   },
 
+  // Leaflet keeps DOM/event/timer references alive for as long as a map object
+  // exists. Every render* function rebuilds its screen with innerHTML, which
+  // orphans the container element but NOT the map that was attached to it — so
+  // each navigation away and back used to leak a whole map (visible on iOS as
+  // the app getting progressively slower, then being killed). Destroy them all
+  // before any screen is re-rendered; they are re-created on demand.
+  destroyMaps(){
+    document.querySelectorAll('.screen [id$="-map"]').forEach(el=>{
+      if(!el._leaflet_map) return;
+      try{ el._leaflet_map.remove(); }catch(e){}
+      el._leaflet_map = null;
+      el._leaflet_marker = null;
+    });
+  },
+
   nav(screen){
+    this.destroyMaps();
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
     document.getElementById('screen-'+screen).classList.add('active');
@@ -5380,7 +5400,12 @@ const App = {
   // Given exceptions [{day,start,end}], returns per-day {on,start,end} availability
   // by taking the working-hours window and keeping the largest free gap left after
   // removing the exception blocks (single-window schema, so only one gap can win).
-  computeAvailabilityFromExceptions(exceptions){
+  //
+  // When a day is cut into several usable gaps, the smaller ones are genuinely
+  // lost — the scheduler only understands one window per day. Rather than let
+  // that happen silently, every discarded gap is pushed into the optional
+  // `dropped` array so the caller can tell the user what will not be used.
+  computeAvailabilityFromExceptions(exceptions, dropped){
     const workDays = state.settings.workDays||[1,2,3,4,5];
     const dayHours = state.settings.dayHours||{};
     const availability = {};
@@ -5411,6 +5436,14 @@ const App = {
       if(gaps.length===0){ availability[d] = {on:false}; return; }
       let best = gaps[0];
       gaps.forEach(g=>{ if((g[1]-g[0])>(best[1]-best[0])) best=g; });
+      if(dropped){
+        // Ignore slivers no lesson could ever fit into; reporting those would
+        // just be noise.
+        gaps.forEach(g=>{
+          if(g===best || (g[1]-g[0])<30) return;
+          dropped.push({ day:d, start:Scheduler.minToTime(g[0]), end:Scheduler.minToTime(g[1]) });
+        });
+      }
       availability[d] = { on:true, start:Scheduler.minToTime(best[0]), end:Scheduler.minToTime(best[1]) };
     });
     return availability;
@@ -5451,9 +5484,15 @@ const App = {
     if(saveBtn){ saveBtn.disabled=true; saveBtn.style.opacity='0.6'; saveBtn.textContent=t('saving_ellipsis'); }
 
     const availabilityExceptions = this._editingExceptions||[];
-    const availability = this.computeAvailabilityFromExceptions(availabilityExceptions);
+    const droppedWindows = [];
+    const availability = this.computeAvailabilityFromExceptions(availabilityExceptions, droppedWindows);
     if(!Object.values(availability).some(av=>av.on)){
       Toast.show(t('toast_select_day'),'error'); return
+    }
+    // Don't quietly throw away usable time — say which windows won't be used.
+    if(droppedWindows.length){
+      const list = droppedWindows.map(w=>`${DAYS[w.day]} ${w.start}-${w.end}`).join(', ');
+      Toast.show(tf('toast_avail_windows_dropped', {windows:list}), 'info', 6000);
     }
 
     const st = {
@@ -6847,7 +6886,9 @@ const App = {
         state._scheduleStale = true;
         Toast.show(tf('toast_demo_sample_loaded',{city:cityLabel, hours:targetHours, n:seeded.length}),'info');
         this.nav('schedule');
-      }
+      },
+      t('btn_load'),
+      false
     );
   },
 
@@ -6929,10 +6970,16 @@ const App = {
   },
 
   // ---- CONFIRM ----
-  confirm(title, text, cb, okLabel){
+  // `danger` defaults to true because most confirmations here really are
+  // destructive; pass false for the ones that only add data, so the user isn't
+  // asked to press a red "Delete" to load demo students.
+  confirm(title, text, cb, okLabel, danger=true){
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-text').textContent = text;
-    document.getElementById('confirm-ok-btn').textContent = okLabel || t('btn_delete');
+    const ok = document.getElementById('confirm-ok-btn');
+    ok.textContent = okLabel || t('btn_delete');
+    ok.classList.toggle('btn-danger', !!danger);
+    ok.classList.toggle('btn-primary', !danger);
     state.confirmCallback = cb;
     document.getElementById('confirm-overlay').classList.add('open');
   },
