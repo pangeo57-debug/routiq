@@ -119,6 +119,48 @@ describe('core invariants under load', () => {
     assert.ok(totalPlaced(sched, cfg.workDays) > 0, 'should place at least some lessons');
   });
 
+  test('optimization reduces distance without dropping any placements', async () => {
+    // The optimizer runs AFTER the placement search and must only ever improve
+    // the route — a common failure mode in destroy/repair is quietly failing to
+    // reinsert something it removed, trading placements for a shorter drive.
+    // Placement count is the primary objective; distance only breaks ties.
+    const app = loadApp();
+    const sts = Array.from({ length: 18 }, (_, i) =>
+      student('s' + i, { lessonDuration: [60, 60, 90][i % 3], lessonsPerWeek: (i % 2) + 1 }));
+    const cfg = settings();
+    const coords = cityCoords(sts);
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const S = app.Scheduler;
+
+    const totalKm = (sch) => {
+      let km = 0;
+      for (const d of cfg.workDays) {
+        const sl = (sch[d] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+        let prev = coords.home, prevId = null;
+        for (const s of sl) {
+          const c = coords[s.studentId] || prev;
+          if (prevId !== s.studentId) km += S.haversineKm(prev, c) * 1.4;
+          prev = c; prevId = s.studentId;
+        }
+        if (sl.length) km += S.haversineKm(prev, coords.home) * 1.4;
+      }
+      return km;
+    };
+
+    const r = await S.runMultiAttempt(sts, cfg, coords, 3, false);
+    const placedBefore = S.countTotal(r.schedule);
+    const kmBefore = totalKm(r.schedule);
+
+    await S.alnsOptimize(r.schedule, sts, cfg, coords, 2000);
+
+    assert.ok(S.countTotal(r.schedule) >= placedBefore,
+      `optimizer dropped placements: ${placedBefore} -> ${S.countTotal(r.schedule)}`);
+    assert.ok(totalKm(r.schedule) <= kmBefore + 1e-6,
+      `optimizer increased distance: ${kmBefore.toFixed(1)} -> ${totalKm(r.schedule).toFixed(1)}`);
+    assertClean(auditSchedule(S, r.schedule, sts, cfg));
+  });
+
   test('students with narrow windows are never placed outside them', async () => {
     const app = loadApp();
     const sts = [

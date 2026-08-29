@@ -3192,6 +3192,13 @@ const Scheduler = {
       const student=studentsById[sid];
       const opts=[];
       for(const d of candidateDays(sid)){
+        // Never offer a day this student is already on. Removal only strips
+        // them from the ONE day it picked, so their other days survive — and
+        // without this check the repair step happily re-inserts them onto a
+        // day they still occupy, producing two lessons in one day for someone
+        // who asked for them on separate days. (A forceMerge student did ask
+        // for same-day, so they are exempt.)
+        if(!student.forceMerge && (sc[d]||[]).some(s=>s.studentId===sid)) continue;
         const order=(sc[d]||[]).map(s=>s.studentId);
         for(let pos=0;pos<=order.length;pos++){
           const trial=[...order.slice(0,pos), sid, ...order.slice(pos)];
