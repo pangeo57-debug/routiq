@@ -18,7 +18,15 @@ function assertClean(issues, msg) {
   assert.deepStrictEqual(Array.from(issues || []), [], msg);
 }
 
-/** Run the same phase order runAndNotify uses, so tests cover the real pipeline. */
+/**
+ * Run the same phase order runAndNotify uses, so tests cover the real
+ * pipeline.
+ *
+ * Keep this in step with runAndNotify. It had already drifted once: guardedPass
+ * and compactDays were added to the app and not here, so every invariant test
+ * was checking a schedule the user never actually sees — and compactDays is
+ * precisely the phase that rewrites lesson times.
+ */
 async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
   const S = app.Scheduler;
   app.setState({ coords, students, settings: cfg,
@@ -26,9 +34,10 @@ async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
   const r = await S.runMultiAttempt(students, cfg, coords, 2, false);
   await S.alnsOptimize(r.schedule, students, cfg, coords, budget);
   S.saRepair(r.schedule, students, cfg, r);
-  await S.lnsRepair(r.schedule, students, cfg, budget);
+  await S.guardedPass(r.schedule, cfg, (sch) => S.lnsRepair(sch, students, cfg, budget));
   S.enforceConstraints(r.schedule, students, cfg);
   S.collapseForceMergeFragments(r.schedule, students, cfg);
+  S.compactDays(r.schedule, students, cfg);
   return r.schedule;
 }
 
@@ -101,6 +110,76 @@ describe('blocked times (how a split working day is expressed)', () => {
     });
     const sched = await runPipeline(app, sts, cfg, cityCoords(sts));
     assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
+  });
+});
+
+describe('the constraints hold without the scheduler simply giving up', () => {
+  // Respecting every rule is trivial if you place nothing. These two cases have
+  // a capacity that can be worked out by hand, so they check BOTH halves at
+  // once: no violations, and the free space actually used.
+
+  test('a day chopped into one-hour gaps is filled exactly to its capacity', async () => {
+    const app = loadApp();
+    // Monday: free only 20:00-21:00                       -> 1 lesson
+    // Tuesday: free 15-16, 17-18, 19-20, 21-22            -> 4 lessons
+    const cfg = settings({
+      workDays: [1, 2],
+      blockedSlots: [
+        { day: 1, start: '15:00', end: '20:00' }, { day: 1, start: '21:00', end: '22:00' },
+        { day: 2, start: '16:00', end: '17:00' }, { day: 2, start: '18:00', end: '19:00' },
+        { day: 2, start: '20:00', end: '21:00' },
+      ],
+    });
+    const sts = Array.from({ length: 12 }, (_, i) =>
+      student('s' + i, { lessonsPerWeek: 1, lessonDuration: 60, days: [1, 2] }));
+
+    const sched = await runPipeline(app, sts, cfg, cityCoords(sts));
+
+    assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
+    assert.equal(totalPlaced(sched, cfg.workDays), 5,
+      'five one-hour gaps exist and all five should be used');
+  });
+
+  test('two-hour lessons fill a four-hour day exactly twice', async () => {
+    const app = loadApp();
+    const cfg = settings({
+      workDays: [1, 2],
+      dayHours: { 1: { start: '16:00', end: '20:00' }, 2: { start: '16:00', end: '20:00' } },
+    });
+    const sts = Array.from({ length: 10 }, (_, i) => student('s' + i, {
+      lessonsPerWeek: 1, lessonDuration: 120, days: [1, 2],
+      window: { start: '16:00', end: '20:00' },
+    }));
+
+    const sched = await runPipeline(app, sts, cfg, cityCoords(sts));
+
+    assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
+    assert.equal(totalPlaced(sched, cfg.workDays), 4,
+      'two days of four hours hold exactly four two-hour lessons');
+  });
+
+  test('six days, 60 students, pairs and two-hour blocks: still no violation', async () => {
+    const app = loadApp();
+    const sts = Array.from({ length: 60 }, (_, i) => student('s' + i, {
+      lessonsPerWeek: (i % 3) + 1, lessonDuration: [60, 90, 120][i % 3],
+      days: [1, 2, 3, 4, 5, 6].filter(d => (i + d) % 3 !== 0),
+    }));
+    sts[0].pairedWith = 's1'; sts[1].pairedWith = 's0';
+    for (const i of [7, 19, 31, 43]) {
+      sts[i].forceMerge = true; sts[i].mergeMode = 'always'; sts[i].lessonsPerWeek = 2;
+    }
+    const cfg = settings({
+      workDays: [1, 2, 3, 4, 5, 6],
+      dayHours: Object.fromEntries([1, 2, 3, 4, 5, 6].map(d => [d, { start: '15:00', end: '22:00' }])),
+      blockedSlots: [{ day: 1, start: '18:00', end: '19:00' },
+                     { day: 4, start: '16:00', end: '17:30' },
+                     { day: 6, start: '15:00', end: '18:00' }],
+    });
+
+    const sched = await runPipeline(app, sts, cfg, cityCoords(sts), { budget: 1200 });
+
+    assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
+    assert.ok(totalPlaced(sched, cfg.workDays) > 15, 'and it should still fill the week');
   });
 });
 
