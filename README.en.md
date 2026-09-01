@@ -56,6 +56,7 @@ A multi-phase algorithm (the `Scheduler` object inside `routiq.html`):
 5. **LNS (Large Neighborhood Search)** — destroy-repair for hard cases, with a "persistent" search extending up to 7 minutes if needed
 6. **`enforceConstraints()`** — final safety net: removes any placement that violates a student's availability and retries elsewhere
 7. **`compactDays()`** — pulls every lesson as early as it legally can (without reordering), closing the holes the repair passes leave behind
+8. **Ratchet** — the schedule already on screen is used as a warm start and as a floor: a rerun keeps the previous result unless it beats it (more lessons placed, or the same number in fewer km)
 
 ## Development
 
@@ -67,7 +68,7 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 npm test
 ```
 
-56 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+65 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run

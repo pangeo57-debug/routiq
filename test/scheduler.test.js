@@ -437,3 +437,120 @@ describe('day compaction', () => {
     assert.equal(JSON.stringify(sch), before);
   });
 });
+
+describe('reruns never make the schedule worse', () => {
+  const worseThan = (app, a, b) => !app.App._isBetterSchedule(a, b) && app.App._isBetterSchedule(b, a);
+
+  test('more lessons placed beats fewer kilometres', () => {
+    const app = loadApp();
+    assert.ok(app.App._isBetterSchedule({ placed: 20, km: 300 }, { placed: 19, km: 100 }),
+      'a shorter week that teaches fewer people is not an improvement');
+  });
+
+  test('with the same placements, fewer kilometres wins', () => {
+    const app = loadApp();
+    assert.ok(app.App._isBetterSchedule({ placed: 20, km: 140 }, { placed: 20, km: 170 }));
+    assert.ok(worseThan(app, { placed: 20, km: 170 }, { placed: 20, km: 140 }),
+      '170 km must be recognised as worse than 140 km, not merely "not better"');
+  });
+
+  test('a rounding-sized difference is not an improvement', () => {
+    const app = loadApp();
+    assert.ok(!app.App._isBetterSchedule({ placed: 20, km: 139.95 }, { placed: 20, km: 140 }),
+      'swapping schedules over 50 metres is churn, not progress');
+  });
+
+  test('counts every lesson across every day', () => {
+    const app = loadApp();
+    assert.equal(app.App._countPlaced({ 1: [1, 2], 3: [1], 5: [] }), 3);
+    assert.equal(app.App._countPlaced({}), 0);
+    assert.equal(app.App._countPlaced(null), 0);
+  });
+
+  test('a schedule referencing a deleted student is not a valid floor', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const sts = [student('s1', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 })];
+    app.setState({ students: sts, settings: cfg, coords: { s1: { lat: 38.246, lon: 21.734 } } });
+    // s2 was deleted since this schedule was built.
+    assert.ok(!app.App._scheduleStillValid({ 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+      { studentId: 's2', address: 'gone', start: '16:10', end: '17:10' },
+    ]}), 'a stale schedule must not pin a rerun');
+  });
+
+  test('a schedule that breaks the current settings is not a valid floor', () => {
+    const app = loadApp();
+    // The user has since reserved 15:00-17:00, so the old schedule is illegal.
+    const cfg = settings({
+      workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } },
+      blockedSlots: [{ day: 1, start: '15:00', end: '17:00' }],
+    });
+    const sts = [student('s1', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 })];
+    app.setState({ students: sts, settings: cfg, coords: { s1: { lat: 38.246, lon: 21.734 } } });
+    assert.ok(!app.App._scheduleStillValid({ 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+    ]}), 'a schedule violating the new settings must not be restored over a fresh one');
+  });
+
+  test('a still-legal schedule is a valid floor', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const sts = [student('s1', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 })];
+    app.setState({ students: sts, settings: cfg, coords: { s1: { lat: 38.246, lon: 21.734 } } });
+    assert.ok(app.App._scheduleStillValid({ 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+    ]}));
+  });
+
+  test('repeated reruns never report a worse week', async () => {
+    // The actual complaint: 140 km, then 170, then 115, then 165. Reruns are
+    // randomized searches, so without a floor the result is a lottery. This
+    // walks the real phases several times and asserts the sequence only ever
+    // improves. Removing either the warm start or the floor makes it fail.
+    const app = loadApp();
+    const sts = Array.from({ length: 12 }, (_, i) => student('s' + i, { lessonsPerWeek: (i % 2) + 1 }));
+    const cfg = settings();
+    const coords = cityCoords(sts);
+    app.setState({ students: sts, settings: cfg, coords,
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const S = app.Scheduler, A = app.App;
+
+    let best = null, bestScore = null;
+    const seen = [];
+    for (let i = 0; i < 4; i++) {
+      const prev = best ? JSON.parse(JSON.stringify(best)) : null;
+      const usable = prev && A._scheduleStillValid(prev);
+
+      const r = await S.runMultiAttempt(sts, cfg, coords, 2, false);
+      let sched = r.schedule;
+      if (usable && !A._isBetterSchedule(
+            { placed: A._countPlaced(sched), km: A._estimateTotalKm(sched) },
+            { placed: A._countPlaced(prev),  km: A._estimateTotalKm(prev) })) {
+        sched = JSON.parse(JSON.stringify(prev));   // warm start
+      }
+      await S.alnsOptimize(sched, sts, cfg, coords, 400);
+      S.enforceConstraints(sched, sts, cfg);
+      S.compactDays(sched, sts, cfg);
+
+      let score = { placed: A._countPlaced(sched), km: A._estimateTotalKm(sched) };
+      if (usable) {
+        const was = { placed: A._countPlaced(prev), km: A._estimateTotalKm(prev) };
+        if (A._isBetterSchedule(was, score)) { sched = prev; score = was; }  // floor
+      }
+      if (bestScore) {
+        assert.ok(!A._isBetterSchedule(bestScore, score),
+          `run ${i + 1} came back worse: ${JSON.stringify(bestScore)} -> ${JSON.stringify(score)} (${seen.join(' -> ')})`);
+      }
+      best = sched; bestScore = score;
+      seen.push(`${score.placed}/${score.km.toFixed(1)}km`);
+    }
+  });
+
+  test('an empty schedule is never a floor', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings() });
+    assert.ok(!app.App._scheduleStillValid({}));
+    assert.ok(!app.App._scheduleStillValid(null));
+  });
+});

@@ -859,6 +859,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Το πρόγραμμα είναι έτοιμο ✓',
     phase_km_title:'Υπολογισμός διαδρομής', phase_km_sub:'Υπολογίζουμε την πραγματική απόσταση…',
     phase_persist_title:'Αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — μη κλείνετε την εφαρμογή…',
+    toast_kept_previous:'Δεν βρέθηκε καλύτερο — κράτησα το προηγούμενο πρόγραμμα',
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
     toast_here_updated:'Χρόνοι κίνησης ενημερώθηκαν ✓ (peak + off-peak)', toast_here_failed:'HERE API απέτυχε — χρήση εκτίμησης',
@@ -1043,6 +1044,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Your schedule is ready ✓',
     phase_km_title:'Calculating your route', phase_km_sub:'Working out the real distance…',
     phase_persist_title:'Looking for a solution', phase_persist_sub:"{n} student(s) left — don't close the app…",
+    toast_kept_previous:'Nothing better found — kept your previous schedule',
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
     toast_here_updated:'Travel times updated ✓ (peak + off-peak)', toast_here_failed:'HERE API failed — using estimate',
@@ -1227,6 +1229,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Votre programme est prêt ✓',
     phase_km_title:'Calcul de votre itinéraire', phase_km_sub:'Nous calculons la distance réelle…',
     phase_persist_title:'Recherche d\'une solution', phase_persist_sub:'{n} élève(s) restant(s) — ne fermez pas l\'application…',
+    toast_kept_previous:'Rien de mieux trouvé — programme précédent conservé',
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
     toast_here_updated:'Temps de trajet mis à jour ✓ (heures de pointe + creuses)', toast_here_failed:'Échec de l\'API HERE — utilisation d\'une estimation',
@@ -1411,6 +1414,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Ihr Stundenplan ist fertig ✓',
     phase_km_title:'Route wird berechnet', phase_km_sub:'Die tatsächliche Entfernung wird ermittelt…',
     phase_persist_title:'Lösung wird gesucht', phase_persist_sub:'noch {n} Schüler — App bitte nicht schließen…',
+    toast_kept_previous:'Nichts Besseres gefunden — bisheriger Plan bleibt',
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
     toast_here_updated:'Fahrzeiten aktualisiert ✓ (Stoßzeit + Nebenzeit)', toast_here_failed:'HERE-API fehlgeschlagen — Schätzung wird verwendet',
@@ -4067,6 +4071,49 @@ const App = {
     this.renderSchedule();
   },
 
+  // How many lessons a schedule actually places. The primary objective —
+  // a shorter week that teaches fewer people is not an improvement.
+  _countPlaced(schedule){
+    let n = 0;
+    for(const d of Object.keys(schedule||{})) n += (schedule[d]||[]).length;
+    return n;
+  },
+
+  // Strictly better = more lessons placed, or the same number in fewer km.
+  // The 0.1 km deadband stops two effectively identical schedules from
+  // swapping places on rounding noise.
+  _isBetterSchedule(a, b){
+    if(!b) return true;
+    if(a.placed !== b.placed) return a.placed > b.placed;
+    return a.km < b.km - 0.1;
+  },
+
+  // Is the schedule currently on screen still a legal answer to the CURRENT
+  // students and settings? Only then may it be used as a floor for a rerun —
+  // otherwise a rerun after editing availability would be pinned to a schedule
+  // that is no longer valid.
+  _scheduleStillValid(schedule){
+    if(!schedule || this._countPlaced(schedule) === 0) return false;
+    const ids = new Set(state.students.map(s=>s.id));
+    for(const d of Object.keys(schedule)){
+      for(const sl of (schedule[d]||[])){
+        // References a deleted student — stale by definition.
+        if(!ids.has(sl.studentId)) return false;
+      }
+    }
+    try{
+      return Scheduler.verifySchedule(schedule, state.students, state.settings).length === 0;
+    }catch(e){ return false; }
+  },
+
+  // Real road km for a schedule, falling back to the straight-line estimate.
+  // Both sides of a comparison must go through the same function or the
+  // comparison is meaningless.
+  async _kmOf(schedule){
+    try{ return await this._estimateTotalKmReal(schedule); }
+    catch(e){ return this._estimateTotalKm(schedule); }
+  },
+
   // Straight-line ("as the crow flies") estimate — instant, no network. Used as
   // an immediate placeholder and as the per-day fallback when OSRM is
   // unreachable for _estimateTotalKmReal below.
@@ -4337,6 +4384,9 @@ const App = {
     // there before "Ανανέωση" was pressed.
     const scheduleBackup = JSON.parse(JSON.stringify(state.schedule));
     const kmBeforeBackup = state.scheduleKmBefore, kmAfterBackup = state.scheduleKmAfter;
+    // Whether that snapshot may act as a quality floor for this run. Decided
+    // once, up front, before anything has been mutated.
+    const prevUsable = this._scheduleStillValid(scheduleBackup);
     const cancelledCleanup = ()=>{
       // Superseded rather than genuinely cancelled — the newer run owns the
       // schedule now, so restoring this run's pre-start snapshot would undo
@@ -4488,6 +4538,29 @@ const App = {
 
     if(state._schedulingCancelled) return cancelledCleanup();
 
+    // Warm start. Phase 1 is a randomized search, so a rerun used to begin from
+    // a completely fresh draw and the result bounced around — 140 km, then 170,
+    // then 115, then 165. That is not what "recalculate" should mean.
+    //
+    // If the schedule already on screen is still legal under the current
+    // students and settings, and phase 1's fresh draw is not better than it,
+    // hand the OLD schedule to the optimizer instead. ALNS is destroy-repair
+    // and keeps the best solution it has seen, so starting from the incumbent
+    // means a rerun can only refine it. Combined with the floor check at the
+    // end of the run, pressing Refresh again is now monotonic: same or better,
+    // never worse.
+    if(prevUsable){
+      const fresh = { placed: this._countPlaced(state.schedule), km: this._estimateTotalKm(state.schedule) };
+      const prev  = { placed: this._countPlaced(scheduleBackup),  km: this._estimateTotalKm(scheduleBackup) };
+      if(!this._isBetterSchedule(fresh, prev)){
+        state.schedule = JSON.parse(JSON.stringify(scheduleBackup));
+        if(r) r.schedule = state.schedule;
+        console.info('warm start: optimizing from the previous schedule',
+          `(${prev.placed} placed / ${prev.km.toFixed(1)} km) rather than this run's draw`,
+          `(${fresh.placed} / ${fresh.km.toFixed(1)} km)`);
+      }
+    }
+
     // Phase 2+3: route optimization (ALNS — destroy/repair with adaptive
     // operator weights, replaces the old geoOptimize+SA two-step pipeline;
     // optimizes against real road distance via travelEstKm/travelEstMin
@@ -4563,20 +4636,37 @@ const App = {
 
     if(r){
       // Instant straight-line placeholder so the stat isn't blank while the
-      // real-road-distance request (below) is in flight.
+      // real-road-distance figures are being computed.
       state.scheduleKmBefore = this._estimateTotalKm(state.schedule);
-      // Phases 2-5 (geoOptimize/SA/repairs) can place students that were still
-      // unplaced after Phase 1 — recompute the unplaced list from the FINAL
-      // schedule instead of reusing Phase 1's now-stale snapshot.
+      schedProgress(97,t('phase_km_title'),t('phase_km_sub'),'🚗');
+
+      // The floor. Both sides are measured with the SAME function — the real
+      // road distance the user is about to read — so the comparison is the one
+      // they would make themselves. If this run did not beat what was already
+      // there, the old schedule stays and we say so, rather than quietly
+      // replacing 140 km with 170 km because the search rolled badly.
+      let km = await this._kmOf(state.schedule);
+      let keptPrevious = false;
+      if(prevUsable){
+        const prevKm = await this._kmOf(scheduleBackup);
+        const now = { placed: this._countPlaced(state.schedule), km };
+        const was = { placed: this._countPlaced(scheduleBackup),  km: prevKm };
+        if(this._isBetterSchedule(was, now)){
+          state.schedule = scheduleBackup;
+          km = prevKm;
+          keptPrevious = true;
+        }
+      }
+      state.scheduleKmBefore = km;
+      state._keptPreviousSchedule = keptPrevious;
+
+      // Phases 2-5 can place students that were still unplaced after phase 1 —
+      // recompute the unplaced list from the FINAL schedule (which may now be
+      // the restored previous one) instead of reusing a stale snapshot.
       state.scheduleAttempts[0] = { ...r, schedule: state.schedule, unplaced: this.computeUnplacedLive() };
       state.schedulerResult = state.scheduleAttempts[0];
       if(isStale()) return;
       Storage.saveSchedule(state.schedule);
-
-      schedProgress(97,t('phase_km_title'),t('phase_km_sub'),'🚗');
-      try{
-        state.scheduleKmBefore = await this._estimateTotalKmReal(state.schedule);
-      }catch(e){ /* keep the straight-line placeholder */ }
     }
 
     // A newer run took over while this one was finishing: it owns the state
@@ -4606,7 +4696,13 @@ const App = {
     const placed = total - r.unplaced.reduce((a,u)=>a+(u.needed-u.placed),0);
     const att = r._attempts || 1;
     const attLabel = att > 1 ? tf('toast_attempts_suffix',{n:att}) : '';
-    Toast.show(tf('toast_placed_summary',{placed,total,attempts:attLabel}),'success');
+    // Say which of the two happened. Silently keeping the old schedule would
+    // look like the button did nothing.
+    if(state._keptPreviousSchedule){
+      Toast.show(t('toast_kept_previous'),'info');
+    } else {
+      Toast.show(tf('toast_placed_summary',{placed,total,attempts:attLabel}),'success');
+    }
   },
 
   // ---- HOME ----
