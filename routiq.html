@@ -1627,6 +1627,60 @@ const Scheduler = {
     return Object.values(schedule).reduce((a,d)=>a+d.reduce((b,s)=>b+(s.isGroup?(s.groupMemberCount||2):(s.mergedCount||1)),0),0);
   },
 
+  // Score a schedule the way the user judges it: lessons placed first,
+  // kilometres second. Uses the same road distances the schedule was planned
+  // with, so a phase cannot look like an improvement under one metric while
+  // being a regression under the one on screen.
+  scoreOf(schedule, settings){
+    const homeAddr = (settings && settings.homeAddress) || '';
+    let km = 0;
+    for(const d of (settings.workDays||[])){
+      const slots = (schedule[d]||[]).slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+      if(!slots.length) continue;
+      let prevId='home', prevAddr=homeAddr, prevSl=null;
+      for(const s of slots){
+        const sameLocation = prevSl && (prevSl.studentId===s.studentId ||
+          (prevSl.groupCode && prevSl.groupCode===s.groupCode));
+        if(!sameLocation) km += this.travelEstKm(prevId, prevAddr, s.studentId, s.address, d);
+        prevId=s.studentId; prevAddr=s.address; prevSl=s;
+      }
+      km += this.travelEstKm(prevId, prevAddr, 'home', homeAddr, d);
+    }
+    return { placed: this.countTotal(schedule), km };
+  },
+
+  // Not worse = at least as many lessons placed, and not meaningfully further
+  // to drive. Placing more people justifies any amount of extra driving;
+  // placing the same number never does.
+  notWorse(after, before){
+    if(after.placed !== before.placed) return after.placed > before.placed;
+    return after.km <= before.km + 0.1;
+  },
+
+  // Run one pass against a COPY and adopt its output only if it did not make
+  // things worse.
+  //
+  // Measured on constrained weeks, lnsRepair regularly handed back the same
+  // number of lessons for 4-10 more km (27.8 -> 41.5 km in the worst case) —
+  // it destroys part of the schedule and repairs it, and nothing checked that
+  // the repair was actually an improvement over what it tore up. That is a
+  // real loss, and it is invisible: the run "succeeded".
+  //
+  // Only for optional improvement passes. Correctness passes
+  // (enforceConstraints, collapseForceMergeFragments, compactDays) must always
+  // be applied — rejecting those to save kilometres would ship a schedule that
+  // violates the user's own constraints.
+  async guardedPass(schedule, settings, mutate){
+    const before = this.scoreOf(schedule, settings);
+    const copy = JSON.parse(JSON.stringify(schedule));
+    await mutate(copy);
+    const after = this.scoreOf(copy, settings);
+    if(!this.notWorse(after, before)) return { kept:false, before, after };
+    for(const d of Object.keys(schedule)) delete schedule[d];
+    for(const d of Object.keys(copy)) schedule[d] = copy[d];
+    return { kept:true, before, after };
+  },
+
   // ── TWO-PHASE SCHEDULER ──────────────────────────────────────────────────
   // Phase 1 (scheduleAll): backtracking with fixed 15-min buffer → place EVERYONE
   // Phase 2 (geoOptimize): nearest-neighbor reorder → min km, only with real coords
@@ -4074,9 +4128,11 @@ const App = {
   // How many lessons a schedule actually places. The primary objective —
   // a shorter week that teaches fewer people is not an improvement.
   _countPlaced(schedule){
-    let n = 0;
-    for(const d of Object.keys(schedule||{})) n += (schedule[d]||[]).length;
-    return n;
+    if(!schedule) return 0;
+    // Scheduler.countTotal, not a raw slot count: a group block of three is
+    // three lessons placed, so the ratchet cannot trade a group away for a
+    // shorter drive and call it an improvement.
+    try{ return Scheduler.countTotal(schedule); }catch(e){ return 0; }
   },
 
   // Strictly better = more lessons placed, or the same number in fewer km.
@@ -4588,7 +4644,14 @@ const App = {
     // Phase 5: LNS
     schedProgress(92,t('phase5_title'),t('phase5b_sub'),'🔍');
     await new Promise(r=>setTimeout(r,40));
-    try{ await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 10000); }catch(e){}
+    // Guarded: LNS destroys and repairs, and its repair is not guaranteed to
+    // beat what it tore up. Keep its work only if it placed more lessons, or
+    // held the same number without adding kilometres.
+    try{
+      const g = await Scheduler.guardedPass(state.schedule, state.settings,
+        (sch)=>Scheduler.lnsRepair(sch, state.students, state.settings, 10000));
+      if(!g.kept) console.info(`lnsRepair rejected: ${g.before.placed}/${g.before.km.toFixed(1)}km -> ${g.after.placed}/${g.after.km.toFixed(1)}km`);
+    }catch(e){}
 
     // Safety net: forcibly fix (or drop) any slot that still violates a
     // student's own availability, regardless of which phase caused it.
@@ -4605,9 +4668,10 @@ const App = {
     // a real, valid slot on a lightly-loaded day. Only runs when actually needed.
     if(this.computeUnplacedLive().length > 0){
       try{
-        await Scheduler.lnsRepair(state.schedule, state.students, state.settings, 420000, (nLeft, elapsed)=>{
-          schedProgress(93, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}), '🔁');
-        });
+        await Scheduler.guardedPass(state.schedule, state.settings, (sch)=>
+          Scheduler.lnsRepair(sch, state.students, state.settings, 420000, (nLeft, elapsed)=>{
+            schedProgress(93, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}), '🔁');
+          }));
         const fixResult2 = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
         if(fixResult2.repaired) console.warn(`⚠ enforceConstraints (after persistent search): repaired ${fixResult2.repaired-fixResult2.dropped}, dropped ${fixResult2.dropped}`);
         Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);

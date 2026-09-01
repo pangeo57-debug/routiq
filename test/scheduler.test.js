@@ -438,6 +438,91 @@ describe('day compaction', () => {
   });
 });
 
+describe('a pass that makes things worse is rejected', () => {
+  // Three stops in a line out from home. A two-stop round trip is the same
+  // length in either direction, so order only starts to matter at three —
+  // visiting the middle one second (s2, s1, s3) is a measurable detour.
+  const scenario = (app) => {
+    const sts = [1, 2, 3].map(i => student('s' + i, { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }));
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ students: sts, settings: cfg,
+      coords: { home: { lat: 38.240, lon: 21.730 },
+                s1: { lat: 38.250, lon: 21.730 },
+                s2: { lat: 38.260, lon: 21.730 },
+                s3: { lat: 38.270, lon: 21.730 } } });
+    const inOrder = { 1: sts.map((st, i) => ({
+      studentId: st.id, address: st.address,
+      start: `1${5 + i}:00`, end: `1${6 + i}:00`,
+    })) };
+    return { sts, cfg, inOrder };
+  };
+  // Swap WHO is visited first, keeping the clock times — a schedule is always
+  // read in time order, so reordering the array alone changes nothing.
+  const swapFirstTwo = (copy) => {
+    const a = copy[1];
+    [a[0].studentId, a[1].studentId] = [a[1].studentId, a[0].studentId];
+    [a[0].address, a[1].address] = [a[1].address, a[0].address];
+  };
+
+  test('a pass that costs kilometres for nothing is thrown away', async () => {
+    const app = loadApp();
+    const { cfg, inOrder: sch } = scenario(app);
+    const before = JSON.stringify(sch);
+
+    // A pass that detours through the middle stop — same lessons, longer drive.
+    const g = await app.Scheduler.guardedPass(sch, cfg, swapFirstTwo);
+
+    assert.equal(g.kept, false, 'same placements for more km is not an improvement');
+    assert.equal(JSON.stringify(sch), before, 'the schedule must be left untouched');
+  });
+
+  test('a pass that places one more lesson is kept even if it costs kilometres', async () => {
+    const app = loadApp();
+    const { sts, cfg } = scenario(app);
+    const sch = { 1: [{ studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' }] };
+
+    const g = await app.Scheduler.guardedPass(sch, cfg, (copy) => {
+      copy[1].push({ studentId: 's3', address: sts[2].address, start: '16:10', end: '17:10' });
+    });
+
+    assert.equal(g.kept, true, 'reaching one more person justifies the drive');
+    assert.equal(sch[1].length, 2);
+    assert.ok(g.after.km > g.before.km, 'and it did cost km, so this is the real case');
+  });
+
+  test('a pass is judged on a copy, so a rejected one leaves nothing behind', async () => {
+    const app = loadApp();
+    const { cfg, inOrder: sch } = scenario(app);
+    await app.Scheduler.guardedPass(sch, cfg, (copy) => {
+      swapFirstTwo(copy);
+      copy[1][0].end = '99:99';          // vandalise the copy
+      copy[2] = [];                     // and add a day that should not survive
+    });
+    assert.equal(sch[1][0].studentId, 's1');
+    assert.equal(sch[1][0].end, '16:00');
+    assert.ok(!sch[2], 'a rejected pass must not leak a new day into the schedule');
+  });
+
+  test('dropping a lesson is never accepted, however short the week becomes', async () => {
+    const app = loadApp();
+    const { cfg, inOrder: sch } = scenario(app);
+    const g = await app.Scheduler.guardedPass(sch, cfg, (copy) => { copy[1] = []; });
+    assert.equal(g.kept, false);
+    assert.equal(sch[1].length, 3);
+  });
+
+  test('scoreOf counts a group block as everyone in it', () => {
+    const app = loadApp();
+    const { sts, cfg } = scenario(app);
+    const solo = { 1: [{ studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' }] };
+    const group = { 1: [{ studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00',
+                          isGroup: true, groupMemberCount: 3 }] };
+    assert.equal(app.Scheduler.scoreOf(solo, cfg).placed, 1);
+    assert.equal(app.Scheduler.scoreOf(group, cfg).placed, 3,
+      'otherwise a group of three could be traded away for a shorter drive');
+  });
+});
+
 describe('reruns never make the schedule worse', () => {
   const worseThan = (app, a, b) => !app.App._isBetterSchedule(a, b) && app.App._isBetterSchedule(b, a);
 
