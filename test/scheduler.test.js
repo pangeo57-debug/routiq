@@ -335,3 +335,105 @@ describe('distance maths', () => {
     assert.ok(app.Scheduler.travelEstMin('home', 'H', 's1', 'a', 1) > 0);
   });
 });
+
+describe('day compaction', () => {
+  test('a hole left by a repair pass is closed to travel + margin', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const sts = [1, 2].map(i => student('s' + i,
+      { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }));
+    app.setState({
+      students: sts, settings: cfg,
+      coords: { s1: { lat: 38.246, lon: 21.734 }, s2: { lat: 38.252, lon: 21.741 } },
+    });
+    const sch = { 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+      { studentId: 's2', address: sts[1].address, start: '19:30', end: '20:30' },
+    ]};
+
+    app.Scheduler.compactDays(sch, sts, cfg);
+
+    const drive = app.Scheduler.travelEstMin('s1', sts[0].address, 's2', sts[1].address, 1);
+    const margin = cfg.travelMargin ?? 2;
+    const gap = app.Scheduler.toMin(sch[1][1].start) - app.Scheduler.toMin(sch[1][0].end);
+    assert.equal(gap, drive + margin,
+      `expected the second lesson ${drive + margin} min after the first, got ${gap}`);
+    // The lesson keeps its length — compaction moves, it does not trim.
+    assert.equal(app.Scheduler.toMin(sch[1][1].end) - app.Scheduler.toMin(sch[1][1].start), 60);
+  });
+
+  test('compaction never pulls a lesson before the student is free', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const sts = [
+      student('s1', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }),
+      // Only free from 19:00 — the hole in front of them is not removable.
+      student('s2', { days: [1], window: { start: '19:00', end: '22:00' }, lessonsPerWeek: 1, lessonDuration: 60 }),
+    ];
+    app.setState({ students: sts, settings: cfg,
+      coords: { s1: { lat: 38.246, lon: 21.734 }, s2: { lat: 38.252, lon: 21.741 } } });
+    const sch = { 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+      { studentId: 's2', address: sts[1].address, start: '19:30', end: '20:30' },
+    ]};
+
+    app.Scheduler.compactDays(sch, sts, cfg);
+    assert.equal(sch[1][1].start, '19:00', 'should stop at the availability edge, not before it');
+  });
+
+  test('compaction respects a break the user reserved', () => {
+    const app = loadApp();
+    const cfg = settings({
+      workDays: [1],
+      dayHours: { 1: { start: '15:00', end: '22:00' } },
+      blockedSlots: [{ day: 1, start: '16:00', end: '17:00' }],
+    });
+    const sts = [1, 2].map(i => student('s' + i,
+      { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }));
+    app.setState({ students: sts, settings: cfg,
+      coords: { s1: { lat: 38.246, lon: 21.734 }, s2: { lat: 38.252, lon: 21.741 } } });
+    const sch = { 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+      { studentId: 's2', address: sts[1].address, start: '20:00', end: '21:00' },
+    ]};
+
+    app.Scheduler.compactDays(sch, sts, cfg);
+    assert.equal(sch[1][1].start, '17:00', 'should land after the break, never inside it');
+    assert.ok(!app.Scheduler.isBlocked(
+      app.Scheduler.toMin(sch[1][1].start), app.Scheduler.toMin(sch[1][1].end), 1, cfg));
+  });
+
+  test('two lessons for the same student stay one continuous block', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const st = student('s1', { days: [1], lessonsPerWeek: 2, lessonDuration: 60 });
+    st.forceMerge = true;
+    app.setState({ students: [st], settings: cfg, coords: { s1: { lat: 38.246, lon: 21.734 } } });
+    const sch = { 1: [
+      { studentId: 's1', address: st.address, start: '15:00', end: '16:00' },
+      { studentId: 's1', address: st.address, start: '16:20', end: '17:20' },
+    ]};
+
+    app.Scheduler.compactDays(sch, [st], cfg);
+    assert.equal(sch[1][1].start, '16:00', 'a δίωρο gets no travel time and no margin');
+    assert.equal(sch[1][1].end, '17:00');
+  });
+
+  test('compaction never moves a lesson later', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const sts = [1, 2].map(i => student('s' + i,
+      { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }));
+    app.setState({ students: sts, settings: cfg,
+      coords: { s1: { lat: 38.246, lon: 21.734 }, s2: { lat: 38.252, lon: 21.741 } } });
+    // Already tighter than travel time allows — a bad input, but compaction is
+    // not the pass that fixes it and must not make it worse by shuffling times.
+    const sch = { 1: [
+      { studentId: 's1', address: sts[0].address, start: '15:00', end: '16:00' },
+      { studentId: 's2', address: sts[1].address, start: '16:01', end: '17:01' },
+    ]};
+    const before = JSON.stringify(sch);
+    app.Scheduler.compactDays(sch, sts, cfg);
+    assert.equal(JSON.stringify(sch), before);
+  });
+});

@@ -746,6 +746,7 @@ const I18N = {
     schedule_random_placement_label:'ΤΥΧΑΙΑ ΤΟΠΟΘΕΤΗΣΗ ΒΑΣΕΙ ΠΕΡΙΟΡΙΣΜΩΝ', schedule_attempt_label:'Δοκιμή',
     schedule_km_before_after:'Πριν: {before}km → Μετά: {after}km · Εξοικονόμηση: {saved}km',
     schedule_optimize_btn:'Βελτιστοποίηση με χάρτη (OpenStreetMap)', schedule_gap_same_location:'📍 ίδια τοποθεσία',
+    schedule_gap_idle:' + {min}λ αναμονή', schedule_add_break:'Πρόσθεσε διάλειμμα', schedule_break_reason:'Διάλειμμα', toast_break_added:'Προστέθηκε διάλειμμα {min} λεπτών', toast_break_no_room:'Δεν χωράει διάλειμμα — δεν προλαβαίνει {name}',
     schedule_gap_travel:'🚗 ~{min}λ μετακίνηση', schedule_gap_safety:' + {min}λ ασφαλείας', schedule_gap_not_geocoded:'⚠ Απόσταση μη διαθέσιμη — η διεύθυνση δεν έχει γεωκωδικοποιηθεί ακόμα',
     toast_no_free_time:'Δεν υπάρχει ελεύθερη ώρα', unplaced_group_badge:'μαθ.',
     toast_slot_picked:'{name} — πάτα άλλο μάθημα (ανταλλαγή) ή ημέρα (μετακίνηση)',
@@ -929,6 +930,7 @@ const I18N = {
     schedule_random_placement_label:'RANDOM CONSTRAINT-BASED PLACEMENT', schedule_attempt_label:'Attempt',
     schedule_km_before_after:'Before: {before}km → After: {after}km · Saved: {saved}km',
     schedule_optimize_btn:'Optimize with map (OpenStreetMap)', schedule_gap_same_location:'📍 same location',
+    schedule_gap_idle:' + {min}min waiting', schedule_add_break:'Add a break', schedule_break_reason:'Break', toast_break_added:'Added a {min}-minute break', toast_break_no_room:'No room for a break — {name} would not fit',
     schedule_gap_travel:'🚗 ~{min}min travel', schedule_gap_safety:' + {min}min safety', schedule_gap_not_geocoded:'⚠ Distance unavailable — address not geocoded yet',
     toast_no_free_time:'No free time available', unplaced_group_badge:'ls.',
     toast_slot_picked:'{name} — tap another lesson (swap) or a day (move)',
@@ -1112,6 +1114,7 @@ const I18N = {
     schedule_random_placement_label:'PLACEMENT ALÉATOIRE SOUS CONTRAINTES', schedule_attempt_label:'Essai',
     schedule_km_before_after:'Avant : {before}km → Après : {after}km · Économie : {saved}km',
     schedule_optimize_btn:'Optimiser avec carte (OpenStreetMap)', schedule_gap_same_location:'📍 même lieu',
+    schedule_gap_idle:' + {min}min attente', schedule_add_break:'Ajouter une pause', schedule_break_reason:'Pause', toast_break_added:'Pause de {min} minutes ajoutée', toast_break_no_room:'Pas de place pour une pause — {name} ne rentre plus',
     schedule_gap_travel:'🚗 ~{min}min trajet', schedule_gap_safety:' + {min}min sécurité', schedule_gap_not_geocoded:'⚠ Distance indisponible — adresse pas encore géocodée',
     toast_no_free_time:'Aucun créneau libre disponible', unplaced_group_badge:'cr.',
     toast_slot_picked:'{name} — touchez un autre cours (échanger) ou un jour (déplacer)',
@@ -1295,6 +1298,7 @@ const I18N = {
     schedule_random_placement_label:'ZUFÄLLIGE PLATZIERUNG NACH EINSCHRÄNKUNGEN', schedule_attempt_label:'Versuch',
     schedule_km_before_after:'Vorher: {before}km → Nachher: {after}km · Ersparnis: {saved}km',
     schedule_optimize_btn:'Mit Karte optimieren (OpenStreetMap)', schedule_gap_same_location:'📍 gleicher Ort',
+    schedule_gap_idle:' + {min}min Wartezeit', schedule_add_break:'Pause hinzufügen', schedule_break_reason:'Pause', toast_break_added:'{min}-Minuten-Pause hinzugefügt', toast_break_no_room:'Kein Platz für eine Pause — {name} passt nicht mehr',
     schedule_gap_travel:'🚗 ~{min}min Fahrt', schedule_gap_safety:' + {min}min Sicherheit', schedule_gap_not_geocoded:'⚠ Entfernung nicht verfügbar — Adresse noch nicht geocodiert',
     toast_no_free_time:'Keine freie Zeit verfügbar', unplaced_group_badge:'Std.',
     toast_slot_picked:'{name} — andere Stunde antippen (tauschen) oder Tag (verschieben)',
@@ -2873,6 +2877,86 @@ const Scheduler = {
     return { repaired, dropped };
   },
 
+  // Pull every lesson as early as it can legally go, without changing the
+  // order of the day.
+  //
+  // Why this is needed: ALNS's rebuildDay already packs a day tightly, but
+  // every pass that runs AFTER it (saRepair, lnsRepair, enforceConstraints)
+  // inserts, removes and relocates individual lessons without ever re-laying
+  // out the day around them. So a lesson that got dropped left a hole, and
+  // nothing closed it — the schedule could show a 10-minute drive followed by
+  // an hour and a half of dead time, which is simply wrong to a user reading
+  // it.
+  //
+  // This only ever moves lessons EARLIER, and never past anything: the day's
+  // opening time, every occupant's own availability, travel time plus margin
+  // from the previous stop, and the user's blocked times (their breaks) are
+  // all respected. Reordering stays the optimizer's job; this just removes
+  // dead air from the order it produced.
+  compactDays(schedule, students, settings){
+    const sm = Object.fromEntries(students.map(s=>[s.id,s]));
+    const margin = (settings.travelMargin ?? 2);
+    let moved = 0, savedMin = 0;
+
+    for(const d of settings.workDays){
+      const dh = settings.dayHours && settings.dayHours[d];
+      if(!dh) continue;
+      const dayStart = this.toMin(dh.start);
+      const slots = (schedule[d] || []).slice()
+        .sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+      if(!slots.length) continue;
+      const breaks = (settings.blockedSlots||[]).filter(b=>b.day===d)
+        .map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)}));
+
+      let prev = null;
+      for(const sl of slots){
+        const s0 = this.toMin(sl.start), dur = this.toMin(sl.end) - s0;
+
+        // Earliest this slot may start, per the people actually in it — a
+        // group/paired block is filed under one id, so checking only
+        // sl.studentId would move it before the other member is free.
+        const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
+          ? sl.groupMemberIds
+          : [sl.studentId, sl.pairedStudentId].filter(Boolean);
+        let earliest = dayStart, known = ids.length > 0;
+        for(const id of ids){
+          const av = sm[id] && sm[id].availability && sm[id].availability[d];
+          if(!av || !av.on){ known = false; break; }
+          earliest = Math.max(earliest, this.toMin(av.start));
+        }
+        // Unknown constraints — leave it exactly where it is rather than guess.
+        if(!known){ prev = sl; continue; }
+
+        if(prev){
+          // Same student back-to-back (a δίωρο) is one continuous block: no
+          // travel, no margin. Anything else needs the real drive plus margin.
+          const need = prev.studentId === sl.studentId
+            ? 0
+            : this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, d) + margin;
+          earliest = Math.max(earliest, this.toMin(prev.end) + need);
+        }
+
+        // Land after any break it would otherwise overlap (pushing past one
+        // break can land inside the next, hence the loop).
+        for(let guard=0; guard<breaks.length+1; guard++){
+          const hit = breaks.find(b => earliest < b.end && earliest+dur > b.start);
+          if(!hit) break;
+          earliest = hit.end;
+        }
+
+        if(earliest < s0 && !this.isBlocked(earliest, earliest+dur, d, settings)){
+          sl.start = this.toTime(earliest);
+          sl.end   = this.toTime(earliest+dur);
+          savedMin += s0 - earliest;
+          moved++;
+        }
+        prev = sl;
+      }
+      schedule[d] = slots;
+    }
+    return { moved, savedMin };
+  },
+
   // A forceMerge ("δίωρο ίδια μέρα") student is only guaranteed to land as
   // ONE continuous block by Phase 0's initial placement — a later repair
   // pass (enforceConstraints, LNS) can legally re-place their sessions as
@@ -4377,6 +4461,14 @@ const App = {
     }
 
     if(state._schedulingCancelled) return cancelledCleanup();
+
+    // Close the holes the repair passes leave behind. Runs last, after every
+    // pass that can insert or remove a lesson, and before verification — a
+    // compacted day is what the user actually reads.
+    try{
+      const packed = Scheduler.compactDays(state.schedule, state.students, state.settings);
+      if(packed.moved) console.info(`compactDays: pulled ${packed.moved} lessons earlier, ${packed.savedMin} min of dead time removed`);
+    }catch(e){}
 
     // Verify constraints — surfaced to the user, not just the console, so a
     // scheduling bug that violates someone's availability doesn't ship silently.
@@ -5924,11 +6016,111 @@ const App = {
           // how far the two addresses actually are.
           const margin = state.settings.travelMargin ?? 3;
           const driveMin = Scheduler.travelEstMin(slot.studentId, slot.address, slots[i+1].studentId, slots[i+1].address, state.scheduleDay);
-          html += `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}</div>`;
+          // Whatever is left over after the drive and the margin is genuine
+          // waiting time. It used to be invisible, so a 10-minute drive with an
+          // hour of dead air behind it looked identical to a tight handover.
+          const idle = Scheduler.toMin(slots[i+1].start) - Scheduler.toMin(slot.end) - driveMin - margin;
+          html += `<div class="slot-gap">${tf('schedule_gap_travel',{min:driveMin})}${margin?tf('schedule_gap_safety',{min:margin}):''}` +
+            (idle >= 5 ? `<span style="color:var(--text-muted,#888)">${tf('schedule_gap_idle',{min:idle})}</span>` : '') +
+            this._breakMenuHtml(displayEnd) + `</div>`;
         }
+        // Any break the user has put in this gap, shown where it actually
+        // falls and removable from here — otherwise it exists only in Settings
+        // and looks like unexplained dead time on the schedule.
+        (state.settings.blockedSlots||[]).forEach((b, bi)=>{
+          if(b.day!==state.scheduleDay) return;
+          if(Scheduler.toMin(b.start) < Scheduler.toMin(displayEnd)) return;
+          if(Scheduler.toMin(b.start) >= Scheduler.toMin(slots[i+1].start)) return;
+          html += `<div class="slot-gap" style="color:var(--text-muted,#888)">☕ ${esc(b.start)}–${esc(b.end)}${b.reason?' · '+esc(b.reason):''}
+            <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:2px 7px;margin-left:6px"
+              onclick="event.stopPropagation();App.removeBreak(${bi})">✕</button></div>`;
+        });
       }
     }
     container.innerHTML = html;
+  },
+
+  // "+ break" affordance on a gap row. The schedule is packed tight now, so a
+  // pause has to be asked for rather than found — this is where the user buys
+  // back the time the compaction pass removed, and because a break is stored
+  // as a normal blocked slot the scheduler counts it like any other constraint.
+  // Keyed by the end TIME of the block above, not by its index: the schedule
+  // view merges consecutive same-student slots for display, so a display index
+  // does not address the same lesson as a raw schedule index.
+  _breakMenuHtml(afterEnd){
+    const opts = [15,30,45,60].map(m =>
+      `<button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:2px 7px"
+        onclick="event.stopPropagation();App.addBreakAfter(${state.scheduleDay},'${afterEnd}',${m})">${m}${t('unit_min')}</button>`
+    ).join('');
+    return `<span class="break-add" style="display:inline-flex;align-items:center;gap:4px;margin-left:8px">
+      <button class="chip chip-gray" title="${esc(t('schedule_add_break'))}"
+        style="border:none;cursor:pointer;font-size:12px;padding:2px 8px;font-weight:700"
+        onclick="event.stopPropagation();this.nextElementSibling.hidden=!this.nextElementSibling.hidden">＋</button>
+      <span hidden style="display:inline-flex;gap:4px">${opts}</span>
+    </span>`;
+  },
+
+  // Insert a break of `mins` right after slot `idx`, pushing the rest of the
+  // day later. Refuses rather than half-applies: everything after the break is
+  // re-laid out in a dry run first, and if any lesson would fall outside its
+  // student's availability or past the end of the working day, nothing changes
+  // and the user is told.
+  addBreakAfter(day, afterEnd, mins){
+    const slots = [...(state.schedule[day]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const breakStart = Scheduler.toMin(afterEnd), breakEnd = breakStart + mins;
+    // Last lesson finishing at or before the break — the one we drive from.
+    const after = slots.filter(s=>Scheduler.toMin(s.end)<=breakStart).pop();
+    if(!after) return;
+    const margin = state.settings.travelMargin ?? 2;
+    const dh = state.settings.dayHours && state.settings.dayHours[day];
+
+    const moves = [];
+    let prevEnd = breakEnd, prev = after;
+    for(const sl of slots){
+      if(Scheduler.toMin(sl.start) < breakStart) continue;
+      const dur = Scheduler.toMin(sl.end) - Scheduler.toMin(sl.start);
+      const need = prev.studentId === sl.studentId ? 0
+        : Scheduler.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, day) + margin;
+      const start = Math.max(Scheduler.toMin(sl.start), prevEnd + need), end = start + dur;
+      const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
+        ? sl.groupMemberIds : [sl.studentId, sl.pairedStudentId].filter(Boolean);
+      for(const id of ids){
+        const st = state.students.find(s=>s.id===id);
+        const av = st && st.availability && st.availability[day];
+        if(!av || !av.on || end > Scheduler.toMin(av.end)+15){
+          Toast.show(tf('toast_break_no_room',{name: st?st.name:''}),'error'); return;
+        }
+      }
+      if(dh && end > Scheduler.toMin(dh.end)+15){
+        Toast.show(tf('toast_break_no_room',{name:''}),'error'); return;
+      }
+      moves.push({slot: sl, start, end});
+      prevEnd = end; prev = sl;
+    }
+
+    moves.forEach(m=>{ m.slot.start = Scheduler.toTime(m.start); m.slot.end = Scheduler.toTime(m.end); });
+    state.settings.blockedSlots = state.settings.blockedSlots || [];
+    state.settings.blockedSlots.push({
+      day, start: Scheduler.toTime(breakStart), end: Scheduler.toTime(breakEnd), reason: t('schedule_break_reason'),
+    });
+    Storage.saveSettings(state.settings);
+    Storage.saveSchedule(state.schedule);
+    Toast.show(tf('toast_break_added',{min:mins}),'info');
+    this.renderSchedule();
+    this.renderHome();
+  },
+
+  // Removing a break gives the time straight back: compaction pulls the rest
+  // of the day up again, so the schedule never keeps a hole the user cancelled.
+  removeBreak(bi){
+    const list = state.settings.blockedSlots || [];
+    if(!list[bi]) return;
+    list.splice(bi, 1);
+    Storage.saveSettings(state.settings);
+    try{ Scheduler.compactDays(state.schedule, state.students, state.settings); }catch(e){}
+    Storage.saveSchedule(state.schedule);
+    this.renderSchedule();
+    this.renderHome();
   },
 
   _onSlotDragStart(e, day, idx){
