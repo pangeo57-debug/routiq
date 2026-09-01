@@ -13,6 +13,7 @@ A scheduling and route-optimization app for private tutors and other mobile prof
 - Supports group lessons, student pairs, and combined time blocks
 - Exports the schedule to PDF
 - Map view with student locations and the suggested route
+- Each route stop opens in Google Maps for turn-by-turn navigation
 - Multilingual UI (Greek, English, French, German)
 - Dark mode
 - Works as a PWA — installs to the home screen like a native app
@@ -68,7 +69,7 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 npm test
 ```
 
-70 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+74 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run

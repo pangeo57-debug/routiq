@@ -270,3 +270,44 @@ describe('scheduling progress bar', () => {
     assert.ok(widths[widths.length - 1] > 99.8);
   });
 });
+
+describe('opening a stop in Google Maps', () => {
+  function setup() {
+    const app = loadApp();
+    const sts = [1, 2].map(i => student('s' + i, { days: [1], lessonsPerWeek: 1 }));
+    app.setState({
+      students: sts,
+      settings: settings({ homeAddress: 'Πλατεία Γεωργίου 1, Πάτρα' }),
+      // s2 is deliberately not geocoded.
+      coords: { home: { lat: 38.246, lon: 21.734 }, s1: { lat: 38.250, lon: 21.740 } },
+    });
+    return { app, sts };
+  }
+
+  test('a geocoded stop is handed over as coordinates, not as text', () => {
+    const { app, sts } = setup();
+    const url = new URL(app.App.buildGoogleStopUrl('s1', sts[0].address));
+    assert.equal(url.searchParams.get('destination'), '38.25,21.74',
+      'the address was already resolved here; re-resolving it elsewhere is how you end up on the wrong street');
+    assert.equal(url.searchParams.get('travelmode'), 'driving');
+  });
+
+  test('a stop with no coordinate falls back to its address', () => {
+    const { app, sts } = setup();
+    const url = new URL(app.App.buildGoogleStopUrl('s2', sts[1].address));
+    assert.equal(url.searchParams.get('destination'), sts[1].address);
+  });
+
+  test('a stop with neither coordinate nor address produces no link', () => {
+    const { app } = setup();
+    assert.equal(app.App.buildGoogleStopUrl('nobody', ''), null);
+  });
+
+  test('an address cannot inject parameters into the link', () => {
+    const { app } = setup();
+    const url = new URL(app.App.buildGoogleStopUrl('nobody', 'Οδός 1&travelmode=walking#x'));
+    assert.equal(url.searchParams.get('travelmode'), 'driving', 'not overridden by the address');
+    assert.equal(url.searchParams.get('destination'), 'Οδός 1&travelmode=walking#x',
+      'the address survives intact as data');
+  });
+});

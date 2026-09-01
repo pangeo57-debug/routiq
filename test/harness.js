@@ -90,7 +90,13 @@ function loadApp(opts = {}) {
     },
     fetch: opts.fetch || (async () => ({ ok: false, json: async () => ({}) })),
     Notification: undefined,
-    URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
+    // Real URL/URLSearchParams — the app builds navigation deep links with
+    // them, and a stub would let a broken link pass. The object-URL helpers
+    // ride along as statics, the way they do in a browser.
+    URL: Object.assign(
+      class extends URL {},
+      { createObjectURL: () => 'blob:test', revokeObjectURL() {} }),
+    URLSearchParams,
     Blob: function Blob(parts) { this.parts = parts; },
     L: undefined, // Leaflet absent — map init paths no-op
   };

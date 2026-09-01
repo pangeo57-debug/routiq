@@ -859,6 +859,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Το πρόγραμμα είναι έτοιμο ✓',
     phase_km_title:'Υπολογισμός διαδρομής', phase_km_sub:'Υπολογίζουμε την πραγματική απόσταση…',
     phase_persist_title:'Αναζήτηση λύσης', phase_persist_sub:'{n} μαθητής/ές ακόμα — μη κλείνετε την εφαρμογή…',
+    toast_no_stop_location:'Δεν υπάρχει τοποθεσία για αυτή τη στάση',
     toast_kept_previous:'Δεν βρέθηκε καλύτερο — κράτησα το προηγούμενο πρόγραμμα',
     toast_placed_summary:'Πρόγραμμα: {placed}/{total} μαθήματα τοποθετήθηκαν{attempts}',
     toast_attempts_suffix:' ({n} δοκιμές)', toast_here_fetching:'Λήψη χρόνων κίνησης (HERE)…',
@@ -1044,6 +1045,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Your schedule is ready ✓',
     phase_km_title:'Calculating your route', phase_km_sub:'Working out the real distance…',
     phase_persist_title:'Looking for a solution', phase_persist_sub:"{n} student(s) left — don't close the app…",
+    toast_no_stop_location:'No location for this stop',
     toast_kept_previous:'Nothing better found — kept your previous schedule',
     toast_placed_summary:'Schedule: {placed}/{total} lessons scheduled{attempts}',
     toast_attempts_suffix:' ({n} attempts)', toast_here_fetching:'Fetching travel times (HERE)…',
@@ -1229,6 +1231,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Votre programme est prêt ✓',
     phase_km_title:'Calcul de votre itinéraire', phase_km_sub:'Nous calculons la distance réelle…',
     phase_persist_title:'Recherche d\'une solution', phase_persist_sub:'{n} élève(s) restant(s) — ne fermez pas l\'application…',
+    toast_no_stop_location:'Aucune position pour cet arrêt',
     toast_kept_previous:'Rien de mieux trouvé — programme précédent conservé',
     toast_placed_summary:'Programme : {placed}/{total} cours programmés{attempts}',
     toast_attempts_suffix:' ({n} essais)', toast_here_fetching:'Récupération des temps de trajet (HERE)…',
@@ -1414,6 +1417,7 @@ const I18N = {
     notif_schedule_ready_title:'RoutePal', notif_schedule_ready_body:'Ihr Stundenplan ist fertig ✓',
     phase_km_title:'Route wird berechnet', phase_km_sub:'Die tatsächliche Entfernung wird ermittelt…',
     phase_persist_title:'Lösung wird gesucht', phase_persist_sub:'noch {n} Schüler — App bitte nicht schließen…',
+    toast_no_stop_location:'Kein Standort für diesen Stopp',
     toast_kept_previous:'Nichts Besseres gefunden — bisheriger Plan bleibt',
     toast_placed_summary:'Plan: {placed}/{total} Stunden geplant{attempts}',
     toast_attempts_suffix:' ({n} Versuche)', toast_here_fetching:'Fahrzeiten werden abgerufen (HERE)…',
@@ -6651,6 +6655,42 @@ const App = {
     `;
   },
 
+  // ---- HANDOFF TO GOOGLE MAPS ----
+  // The app plans the week; the phone drives it. A standard Maps link, one
+  // stop at a time — no API key, no account, nothing leaves the device until
+  // the user taps.
+  //
+  // Deliberately per stop rather than a whole-day route: Google's URL API
+  // accepts at most 9 intermediate waypoints, so a full day would silently
+  // lose stops on a busy afternoon. One stop always works.
+  //
+  // A geocoded coordinate is preferred over the address text. The address was
+  // already resolved once here, and re-resolving the same string in another
+  // app is where "it took me to the wrong Γούναρη" comes from.
+  _mapPoint(id, address){
+    const c = id && state.coords[id];
+    if(c && typeof c.lat === 'number' && typeof c.lon === 'number') return `${c.lat},${c.lon}`;
+    return address || '';
+  },
+
+  buildGoogleStopUrl(id, address){
+    const pt = this._mapPoint(id, address);
+    if(!pt) return null;
+    // URLSearchParams, not string concatenation: an address containing & or #
+    // would otherwise inject parameters into the link.
+    return 'https://www.google.com/maps/dir/?' +
+      new URLSearchParams({ api:'1', travelmode:'driving', destination: pt }).toString();
+  },
+
+  openStopInMaps(day, idx){
+    const slots = (state.schedule[day]||[]).sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const stop = this._mergeConsecutiveRouteStops(slots)[idx];
+    if(!stop) return;
+    const url = this.buildGoogleStopUrl(stop.studentId, stop.address);
+    if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
+    window.open(url, '_blank', 'noopener');
+  },
+
   buildStopList(stops, hasReal){
     let html = `
       <div class="stop-item">
@@ -6674,6 +6714,8 @@ const App = {
             <div class="stop-name">${esc(stop.studentName||'—')}${mergeTag}</div>
             <div class="stop-addr">${esc(stop.address||'—')}</div>
             <div class="stop-travel"><span class="stop-travel-row">🕐 ${t('route_arrival_label')} ${stop._start||stop.start} – ${displayEnd} · ${esc(subjectLabel(stop.subject)||'')}</span>${travelRow}</div>
+            <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:3px 9px;margin-top:6px"
+              onclick="App.openStopInMaps(${state.routeDay},${i})">🗺️ Google Maps</button>
           </div>
         </div>
         ${i<stops.length-1?'<div class="stop-connector" style="margin-left:29px"></div>':''}
