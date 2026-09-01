@@ -201,3 +201,72 @@ describe('resource lifecycle', () => {
     assert.ok(!classes.has('btn-primary'));
   });
 });
+
+describe('scheduling progress bar', () => {
+  /** Drive the rAF loop by hand and record everything the bar was told to be. */
+  let clock = 0;
+  function runFrames(app, ms, stepMs = 16) {
+    const widths = [], pcts = [];
+    const bar = { style: {} };
+    const pct = { textContent: '' };
+    app.ctx.document.getElementById = (id) =>
+      id === 'sched-bar' ? bar : id === 'sched-pct' ? pct
+      : { style: {}, textContent: '', classList: { add(){}, remove(){}, toggle(){} } };
+    for (let t = 0; t < ms; t += stepMs) {
+      clock += stepMs;
+      app.ctx._schedFrame(clock);
+      widths.push(parseFloat(bar.style.width));
+      pcts.push(pct.textContent);
+    }
+    return { widths, pcts };
+  }
+
+  test('the bar only ever moves forward, in small steps', () => {
+    const app = loadApp();
+    app.ctx.schedProgress(20, 'Phase', 'sub', '🧩');
+    const { widths } = runFrames(app, 4000);
+    for (let i = 1; i < widths.length; i++) {
+      assert.ok(widths[i] >= widths[i - 1] - 1e-9,
+        `bar went backwards at frame ${i}: ${widths[i - 1]} -> ${widths[i]}`);
+      // A visible jump between adjacent frames is the stutter this replaced.
+      assert.ok(widths[i] - widths[i - 1] < 2,
+        `frame ${i} jumped ${widths[i] - widths[i - 1]}%`);
+    }
+  });
+
+  test('a later phase reporting a lower number does not yank the bar back', () => {
+    const app = loadApp();
+    app.ctx.schedProgress(55, 'Phase 3', 'sub', '🔥');
+    const a = runFrames(app, 8000).widths.pop();     // creep runs well past 55
+    app.ctx.schedProgress(35, 'Phase 2', 'sub', '🗺️'); // an out-of-order update
+    const b = runFrames(app, 200).widths[0];
+    assert.ok(b >= a - 1e-9, `bar jumped back from ${a} to ${b}`);
+  });
+
+  test('the creep slows down and never reaches 100 on its own', () => {
+    const app = loadApp();
+    app.ctx.schedProgress(10, 'Phase', 'sub', '🧩');
+    const { widths } = runFrames(app, 120000);      // two minutes of one phase
+    assert.ok(widths[widths.length - 1] < 100,
+      'an unfinished run must never show a full bar');
+  });
+
+  test('the percentage is whole numbers only', () => {
+    const app = loadApp();
+    app.ctx.schedProgress(20, 'Phase', 'sub', '🧩');
+    const { pcts } = runFrames(app, 3000);
+    for (const p of pcts) {
+      assert.match(p, /^\d+%$/, `expected a whole percent, got "${p}"`);
+    }
+  });
+
+  test('finishing goes all the way to 100 promptly', () => {
+    const app = loadApp();
+    app.ctx.schedProgress(20, 'Phase', 'sub', '🧩');
+    runFrames(app, 1000);
+    app.ctx.schedProgress(100, 'Done', 'sub', '✅');
+    const { widths, pcts } = runFrames(app, 1500);
+    assert.equal(pcts[pcts.length - 1], '100%');
+    assert.ok(widths[widths.length - 1] > 99.8);
+  });
+});

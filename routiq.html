@@ -75,6 +75,29 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
 @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes schedShimmer{from{transform:translateX(-100%)}to{transform:translateX(266%)}}
+/* Progress overlay. The bar's width is driven frame-by-frame from JS, so it
+   deliberately carries NO css transition — a transition on a value that is
+   already animated fights the animation and produces the stutter this used
+   to have. Everything else here is a real transition. */
+#sched-icon{transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .18s ease;will-change:transform}
+#sched-phase,#sched-sub{transition:opacity .18s ease,transform .18s ease}
+#sched-bar{will-change:width}
+#sched-bar::after{
+  content:'';position:absolute;right:0;top:50%;transform:translate(50%,-50%);
+  width:9px;height:9px;border-radius:50%;background:#0891b2;
+  box-shadow:0 0 8px 2px rgba(8,145,178,.55);
+}
+#sched-overlay.done #sched-bar{background:linear-gradient(90deg,#059669,#10b981)}
+#sched-overlay.done #sched-bar::after{background:#10b981;box-shadow:0 0 8px 2px rgba(16,185,129,.55)}
+/* Tabular figures: without them the percentage changes width as digits change
+   and the whole row twitches once a second. */
+#sched-pct{font-variant-numeric:tabular-nums}
+#sched-cancel-btn{transition:background .15s ease,transform .12s ease}
+#sched-cancel-btn:hover{background:var(--bg4,#e4e4e4)}
+#sched-cancel-btn:active{transform:scale(.88)}
+@media (prefers-reduced-motion:reduce){
+  #sched-bar::after,#sched-icon{animation:none!important;transition:none!important}
+}
 
 /* NAV */
 nav{
@@ -485,9 +508,11 @@ input[type=time]{color-scheme:light}
     <div style="flex:1;min-width:0">
       <div id="sched-phase" style="font-size:12.5px;font-weight:700;color:var(--text,#111);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Υπολογισμός...</div>
       <div id="sched-sub" style="font-size:11px;color:var(--text3,#888);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Παρακαλώ περιμένετε</div>
-      <div style="background:var(--bg3,#f0f0f0);border-radius:8px;height:5px;overflow:hidden;margin-top:6px;position:relative">
-        <div id="sched-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#0891b2);border-radius:8px;width:0%;transition:width .25s linear;position:relative;overflow:hidden">
-          <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);width:60%;animation:schedShimmer 1.1s linear infinite"></div>
+      <div style="background:var(--bg3,#f0f0f0);border-radius:8px;height:6px;margin-top:7px;position:relative">
+        <div id="sched-bar" style="height:100%;background:linear-gradient(90deg,#7c3aed,#0891b2);border-radius:8px;width:0%;position:relative">
+          <div style="position:absolute;inset:0;border-radius:8px;overflow:hidden">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);width:60%;animation:schedShimmer 1.6s ease-in-out infinite"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -3734,49 +3759,105 @@ function getLabels(){
   return p ? {client:p.client,clients:p.clients,session:p.session,sessions:p.sessions} : getProfessions()[0];
 }
 
-let _schedCreepTimer=null;
+// The progress bar is animated on requestAnimationFrame rather than by
+// repeatedly setting a css-transitioned width from a timer. The old version
+// wrote a new width every 150ms while css was still transitioning the previous
+// one over 250ms, so each write interrupted the last — the bar visibly
+// stepped instead of moving. Here JS owns the value and css owns nothing.
+//
+// Two eased values, both frame-rate independent (the 1-exp(-dt/tau) form means
+// a dropped frame changes nothing, and a 120Hz screen looks the same as 60Hz):
+//   goal  — creeps toward the ceiling so a long phase never looks frozen, and
+//           decelerates as it goes, so it never implies more progress than
+//           there is.
+//   shown — chases goal quickly; this is what is painted.
+let _schedRaf=null, _schedShown=0, _schedGoal=0, _schedLastTs=0, _schedPctText=-1, _schedCeil=99;
+
+function _schedFrame(ts){
+  _schedRaf=null;
+  // Clamped at BOTH ends: the upper bound stops a backgrounded tab from
+  // jumping the bar forward on return, and the lower bound stops a clock that
+  // goes backwards from driving the easing in reverse.
+  const dt=Math.max(0, Math.min(120, ts-(_schedLastTs||ts))); _schedLastTs=ts;
+  _schedGoal  += (_schedCeil-_schedGoal ) * (1-Math.exp(-dt/9000));
+  // The finish is deliberately much faster than the working animation: the
+  // overlay only stays up for a moment after 100%, and a full green bar the
+  // user never actually sees is a wasted moment.
+  _schedShown += (_schedGoal -_schedShown) * (1-Math.exp(-dt/(_schedCeil>=100?90:260)));
+  // Easing only ever approaches its target. Snap the last fraction so a
+  // finished run paints a genuinely full bar instead of leaving a hairline.
+  if(_schedCeil-_schedShown<0.15) _schedShown=_schedCeil;
+
+  const bar=document.getElementById('sched-bar');
+  const pc=document.getElementById('sched-pct');
+  if(bar) bar.style.width=_schedShown.toFixed(2)+'%';
+  // Only ever show whole percent, and only touch the DOM when that whole
+  // number actually changes — a percentage re-rendering 60 times a second with
+  // decimals reads as noise, not as progress.
+  const whole=Math.round(_schedShown);
+  if(pc && whole!==_schedPctText){ pc.textContent=whole+'%'; _schedPctText=whole; }
+
+  // Settled on the target with nothing left to creep toward: stop burning
+  // frames until the next phase update.
+  if(Math.abs(_schedCeil-_schedShown)>0.15) _schedRaf=requestAnimationFrame(_schedFrame);
+}
+
+function _schedAnimate(){
+  if(_schedRaf===null){ _schedLastTs=0; _schedRaf=requestAnimationFrame(_schedFrame); }
+}
+
+function _schedStopAnim(){
+  if(_schedRaf!==null){ cancelAnimationFrame(_schedRaf); _schedRaf=null; }
+}
+
 function schedProgress(pct, phase, sub, icon){
   const ov=document.getElementById('sched-overlay');
   if(!ov) return;
   if(pct===null){
-    clearInterval(_schedCreepTimer); _schedCreepTimer=null;
+    _schedStopAnim();
     ov.style.opacity='0';
-    setTimeout(()=>{ ov.style.display='none'; ov.style.opacity=''; const wn=document.getElementById('sched-warn'); if(wn) wn.textContent=''; },300);
+    setTimeout(()=>{
+      ov.style.display='none'; ov.style.opacity=''; ov.classList.remove('done');
+      const wn=document.getElementById('sched-warn'); if(wn) wn.textContent='';
+      _schedShown=0; _schedGoal=0; _schedPctText=-1; _schedCeil=99;
+      const bar=document.getElementById('sched-bar'); if(bar) bar.style.width='0%';
+    },300);
     return;
   }
   ov.style.display='block';
-  const bar=document.getElementById('sched-bar');
   const ph=document.getElementById('sched-phase');
   const sb=document.getElementById('sched-sub');
-  const pc=document.getElementById('sched-pct');
   const ic=document.getElementById('sched-icon');
   const wn=document.getElementById('sched-warn');
   if(wn && !wn.textContent) wn.textContent = t('sched_dont_change_settings');
-  if(bar) bar.style.width=pct+'%';
-  // Keep the bar creeping forward continuously between explicit phase updates
-  // — asymptotically toward 99% (never quite arriving) so it never sits
-  // frozen even during a long phase (SA runs ~25s, the persistent search can
-  // run minutes), and always jumps cleanly upward whenever the next real
-  // phase update lands.
-  clearInterval(_schedCreepTimer);
-  let creepPct=pct;
-  _schedCreepTimer=setInterval(()=>{
-    creepPct += (99-creepPct)*0.01;
-    if(bar) bar.style.width=creepPct+'%';
-  },150);
-  if(ph&&phase){
-    ph.style.opacity='0';
-    ph.style.transform='translateY(-4px)';
-    setTimeout(()=>{ ph.textContent=phase; ph.style.opacity='1'; ph.style.transform='translateY(0)'; },150);
+
+  // A phase update only ever moves forward: a later phase reporting a lower
+  // number than the creep has already reached must not yank the bar backwards.
+  _schedGoal=Math.max(_schedGoal, pct);
+  if(pct>=100){
+    // Finished — go straight to the end and turn green. The creep's ~9s time
+    // constant is for looking busy; making the user watch it crawl the last
+    // percent after the work is already done would be theatre.
+    _schedCeil=100; _schedGoal=100; ov.classList.add('done');
+  } else {
+    ov.classList.remove('done');
+    // Never creep past the next phase's starting point, so the bar cannot
+    // promise progress that the following phase then has to walk back.
+    _schedCeil=99;
   }
-  if(sb&&sub){
+  _schedAnimate();
+
+  if(ph&&phase&&ph.textContent!==phase){
+    ph.style.opacity='0'; ph.style.transform='translateY(-4px)';
+    setTimeout(()=>{ ph.textContent=phase; ph.style.opacity='1'; ph.style.transform='translateY(0)'; },160);
+  }
+  if(sb&&sub&&sb.textContent!==sub){
     sb.style.opacity='0';
-    setTimeout(()=>{ sb.textContent=sub; sb.style.opacity='1'; },150);
+    setTimeout(()=>{ sb.textContent=sub; sb.style.opacity='1'; },160);
   }
-  if(pc) pc.textContent=pct+'%';
-  if(ic&&icon){
-    ic.style.transform='scale(0.6)';
-    setTimeout(()=>{ ic.textContent=icon; ic.style.transform='scale(1)'; },100);
+  if(ic&&icon&&ic.textContent!==icon){
+    ic.style.transform='scale(.5)'; ic.style.opacity='0';
+    setTimeout(()=>{ ic.textContent=icon; ic.style.transform='scale(1)'; ic.style.opacity='1'; },140);
   }
 }
 
@@ -4504,7 +4585,9 @@ const App = {
     if(isStale()) return;
 
     schedProgress(100,t('phase_done_title'),t('phase_done_sub'),'✅');
-    await new Promise(r=>setTimeout(r,300));
+    // Long enough for the bar to actually reach the end and turn green before
+    // the overlay fades — the completion is the one frame worth showing.
+    await new Promise(r=>setTimeout(r,600));
     if(isStale()) return;
 
     state._scheduleStale = false;

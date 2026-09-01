@@ -62,6 +62,9 @@ function loadApp(opts = {}) {
     Date, Math, JSON, Object, Array, Map, Set, Promise, Number, String, Boolean,
     RegExp, Error, isNaN, parseInt, parseFloat, encodeURIComponent, decodeURIComponent,
     setTimeout, clearTimeout, setInterval, clearInterval, AbortController,
+    // The progress bar runs on rAF; browsers have it, so the sandbox must too.
+    requestAnimationFrame: (cb) => setTimeout(() => cb(Date.now()), 16),
+    cancelAnimationFrame: (id) => clearTimeout(id),
     document: {
       getElementById: () => stubEl(),
       querySelector: () => null,
@@ -100,7 +103,8 @@ function loadApp(opts = {}) {
   const src = extractScript() +
     '\n;this.__exports = {Scheduler, App, Router, Storage, state, defaultSettings,' +
     ' I18N, PROFESSION_VALUES, SUBJECTS, COLORS, DAYS, DAYS_FULL, esc, t, tf, curLang,' +
-    ' normalizeSearchText, getProfessions, getLabels, subjectLabel, getHereKey};';
+    ' normalizeSearchText, getProfessions, getLabels, subjectLabel, getHereKey,' +
+    ' schedProgress, _schedFrame};';
   vm.runInContext(src, ctx, { filename: 'routiq.html' });
 
   const ex = ctx.__exports;
