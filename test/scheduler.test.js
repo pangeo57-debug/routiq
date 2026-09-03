@@ -799,3 +799,90 @@ describe('swapping two lessons by hand', () => {
     assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
   });
 });
+
+describe('editing the schedule by hand', () => {
+  // The swap bug lived here: a manual-edit path with no test at all, broken in
+  // every case, found only because a user hit it. These are the rest of that
+  // family — moving a lesson to another day, and adding or removing a break.
+  function threeInARow(app, { cfgOv = {}, stOv = {} } = {}) {
+    const sts = [1, 2, 3].map(i => student('s' + i,
+      Object.assign({ days: [1, 2], lessonsPerWeek: 1, lessonDuration: 60 }, stOv)));
+    const cfg = settings(Object.assign({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } }, cfgOv));
+    app.setState({ students: sts, settings: cfg,
+      coords: { home: { lat: 38.240, lon: 21.730 }, s1: { lat: 38.246, lon: 21.734 },
+                s2: { lat: 38.252, lon: 21.741 }, s3: { lat: 38.258, lon: 21.748 } } });
+    app.state.schedule = { 1: [
+      { studentId: 's1', studentName: 's1', address: 'addr-s1', start: '15:00', end: '16:00', duration: 60 },
+      { studentId: 's2', studentName: 's2', address: 'addr-s2', start: '16:10', end: '17:10', duration: 60 },
+      { studentId: 's3', studentName: 's3', address: 'addr-s3', start: '17:20', end: '18:20', duration: 60 },
+    ], 2: [] };
+    return { sts, cfg };
+  }
+  const layout = (app, d) => (app.state.schedule[d] || []).slice()
+    .sort((a, b) => app.Scheduler.toMin(a.start) - app.Scheduler.toMin(b.start))
+    .map(s => `${s.studentId}@${s.start}`).join(' ');
+
+  test('a lesson moved to another day lands on a valid time there', () => {
+    const app = loadApp();
+    const { sts, cfg } = threeInARow(app);
+    app.App._performSlotMoveToDay(1, app.state.schedule[1][1], 2);
+    assert.equal(layout(app, 2), 's2@15:00', 'it should be placed, not dropped');
+    assert.ok(!layout(app, 1).includes('s2'), 'and removed from the day it left');
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+
+  test('a move to a day the student is not available on is refused', () => {
+    const app = loadApp();
+    const { sts, cfg } = threeInARow(app, { cfgOv: { workDays: [1, 2, 3],
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' },
+                  3: { start: '15:00', end: '22:00' } } } });
+    app.state.schedule[3] = [];
+    const before = layout(app, 1);
+    app.App._performSlotMoveToDay(1, app.state.schedule[1][0], 3);   // nobody is free on day 3
+    assert.equal(layout(app, 1), before, 'the lesson must stay where it was');
+    assert.equal(layout(app, 3), '', 'and must not appear on a day nobody is free');
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+
+  test('adding a break pushes the rest of the day later, and is honoured', () => {
+    const app = loadApp();
+    const { sts, cfg } = threeInARow(app);
+    app.App.addBreakAfter(1, '16:00', 30);
+
+    assert.equal(app.state.settings.blockedSlots.length, 1);
+    assert.equal(app.state.settings.blockedSlots[0].start, '16:00');
+    assert.equal(app.state.settings.blockedSlots[0].end, '16:30');
+    // s2 was at 16:10, inside the new break — it has to move past it, plus the
+    // drive from s1.
+    const s2 = app.state.schedule[1].find(s => s.studentId === 's2');
+    assert.ok(app.Scheduler.toMin(s2.start) >= app.Scheduler.toMin('16:30'),
+      `s2 should start after the break, got ${s2.start}`);
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+
+  test('a break nobody has room for is refused without leaving a trace', () => {
+    const app = loadApp();
+    const { sts, cfg } = threeInARow(app, { stOv: { window: { start: '15:00', end: '18:30' } } });
+    const before = layout(app, 1);
+    app.App.addBreakAfter(1, '16:00', 180);   // would push s3 past everyone's window
+    assert.equal(layout(app, 1), before, 'nothing may move when the break is refused');
+    assert.equal(app.state.settings.blockedSlots.length, 0,
+      'and a refused break must not be saved anyway');
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+
+  test('removing a break gives the time straight back', () => {
+    const app = loadApp();
+    const { sts, cfg } = threeInARow(app);
+    app.App.addBreakAfter(1, '16:00', 30);
+    const pushed = app.Scheduler.toMin(app.state.schedule[1].find(s => s.studentId === 's3').start);
+
+    app.App.removeBreak(0);
+
+    assert.equal(app.state.settings.blockedSlots.length, 0);
+    const back = app.Scheduler.toMin(app.state.schedule[1].find(s => s.studentId === 's3').start);
+    assert.ok(back < pushed, `s3 should move back earlier, ${pushed} -> ${back}`);
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+});
