@@ -718,3 +718,84 @@ describe('reruns never make the schedule worse', () => {
     assert.ok(!app.App._scheduleStillValid(null));
   });
 });
+
+describe('swapping two lessons by hand', () => {
+  function twoLessons(app, { gapStart = '17:00', cfgOv = {}, stOv = [{}, {}] } = {}) {
+    const sts = [1, 2].map(i => student('s' + i,
+      Object.assign({ days: [1], lessonsPerWeek: 1, lessonDuration: 60 }, stOv[i - 1])));
+    const cfg = settings(Object.assign(
+      { workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } }, cfgOv));
+    app.setState({ students: sts, settings: cfg,
+      coords: { home: { lat: 38.240, lon: 21.730 },
+                s1: { lat: 38.246, lon: 21.734 }, s2: { lat: 38.252, lon: 21.741 } } });
+    app.state.schedule = { 1: [
+      { studentId: 's1', studentName: 's1', address: 'addr-s1', start: '15:00', end: '16:00', duration: 60 },
+      { studentId: 's2', studentName: 's2', address: 'addr-s2',
+        start: gapStart, end: `${Number(gapStart.slice(0, 2)) + 1}:00`, duration: 60 },
+    ]};
+    return { sts, cfg };
+  }
+  const order = (app) => app.state.schedule[1]
+    .slice().sort((a, b) => app.Scheduler.toMin(a.start) - app.Scheduler.toMin(b.start))
+    .map(s => `${s.studentId}@${s.start}`).join(' ');
+
+  test('two lessons on the same day actually trade places', () => {
+    const app = loadApp();
+    twoLessons(app);
+    // Both free all afternoon, an hour of slack between them: nothing stands
+    // in the way. This was refused every single time — the overlap check took
+    // only one of the two off the board, so each looked like it collided with
+    // the other sitting at the time it was moving into.
+    app.App._performSlotSwap(1, 0, 1, 1);
+    assert.equal(order(app), 's2@15:00 s1@17:00', 'the swap must go through');
+  });
+
+  test('a swap is judged only on the problems it introduces', () => {
+    const app = loadApp();
+    const { cfg } = twoLessons(app);
+    // Pre-existing dent in the schedule, nothing to do with this swap.
+    app.state.schedule[1].push({ studentId: 's1', studentName: 's1', address: 'addr-s1',
+      start: '20:00', end: '21:00', duration: 60 });
+    app.App._performSlotSwap(1, 0, 1, 1);
+    assert.ok(order(app).startsWith('s2@15:00'),
+      'an already-imperfect schedule must not freeze every further edit');
+  });
+
+  test('a swap into a reserved break is still refused', () => {
+    const app = loadApp();
+    twoLessons(app, { cfgOv: { blockedSlots: [{ day: 1, start: '17:00', end: '18:00' }] } });
+    const before = order(app);
+    app.App._performSlotSwap(1, 0, 1, 1);
+    assert.equal(order(app), before, 'the old check ignored blocked times entirely');
+  });
+
+  test('a swap outside a student availability is still refused', () => {
+    const app = loadApp();
+    twoLessons(app, { stOv: [{ window: { start: '15:00', end: '16:30' } }, {}] });
+    const before = order(app);
+    app.App._performSlotSwap(1, 0, 1, 1);
+    assert.equal(order(app), before, 's1 cannot take a 17:00 lesson');
+  });
+
+  test('a swap that leaves no time to drive is still refused', () => {
+    const app = loadApp();
+    // A third lesson right after the gap: moving the far student into 17:00
+    // leaves no room to reach it.
+    twoLessons(app);
+    app.setState({ students: [...app.state.students,
+      student('s3', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 })] });
+    app.state.coords.s3 = { lat: 38.34, lon: 21.90 };   // far away
+    app.state.schedule[1].push({ studentId: 's3', studentName: 's3', address: 'addr-s3',
+      start: '16:02', end: '17:02', duration: 60 });
+    const before = order(app);
+    app.App._performSlotSwap(1, 0, 1, 2);
+    assert.equal(order(app), before, 'travel time was never checked by the old code');
+  });
+
+  test('the swap leaves the schedule valid, checked independently', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoLessons(app);
+    app.App._performSlotSwap(1, 0, 1, 1);
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+});
