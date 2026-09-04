@@ -779,6 +779,8 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    route_detour_note:'🔄 Αυτή η μέρα έχει {km}χλμ πηγαινέλα ({pct}% παραπάνω). Οι ώρες που είναι ελεύθεροι οι μαθητές το επιβάλλουν — άλλαξε ένα μάθημα μέρα ή διεύρυνε ένα παράθυρο για να μειωθεί.',
+    swap_reason_no_room:'Δεν υπάρχει χώρος στη μέρα',
     unplaced_solution_combo:'Λύση Α: Συνδυαστικό μπλοκ {block}', unplaced_combo_detail:'{needed} × {dur}λ → 1 × {total}λ σε μία μέρα',
     unplaced_apply_block:'Εφαρμογή ως {block} μπλοκ', unplaced_solution_extend_hours:'Λύση {letter}: Παράταση ωραρίου σου',
     unplaced_extend_hours_detail:'Αν παρατείνεις το ωράριό σου τη {day} κατά +{min} λεπτά, χωράει κανονικά.',
@@ -964,6 +966,8 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    route_detour_note:'🔄 This day backtracks {km}km ({pct}% further than the stops need). The times people are free force it — move a lesson to another day or widen a window to cut it.',
+    swap_reason_no_room:"there isn't room in the day",
     unplaced_solution_combo:'Solution A: Combined block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min in one day',
     unplaced_apply_block:'Apply as {block} block', unplaced_solution_extend_hours:'Solution {letter}: Extend your hours',
     unplaced_extend_hours_detail:'If you extend your working hours on {day} by +{min} minutes, it fits normally.',
@@ -1149,6 +1153,8 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    route_detour_note:"🔄 Cette journée fait {km}km de va-et-vient ({pct}% de plus). Les disponibilités l'imposent — déplacez un cours ou élargissez une plage pour la réduire.",
+    swap_reason_no_room:'pas de place dans la journée',
     unplaced_solution_combo:'Solution A : Bloc combiné {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min en un jour',
     unplaced_apply_block:'Appliquer comme bloc {block}', unplaced_solution_extend_hours:'Solution {letter} : Prolonger vos horaires',
     unplaced_extend_hours_detail:'Si vous prolongez vos horaires le {day} de +{min} minutes, cela rentre normalement.',
@@ -1334,6 +1340,8 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    route_detour_note:'🔄 Dieser Tag fährt {km}km hin und zurück ({pct}% mehr). Die Verfügbarkeiten erzwingen das — verschieben Sie eine Stunde oder erweitern Sie ein Zeitfenster.',
+    swap_reason_no_room:'kein Platz an diesem Tag',
     unplaced_solution_combo:'Lösung A: Kombinierter Block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min an einem Tag',
     unplaced_apply_block:'Als {block} Block anwenden', unplaced_solution_extend_hours:'Lösung {letter}: Arbeitszeit verlängern',
     unplaced_extend_hours_detail:'Wenn Sie Ihre Arbeitszeit am {day} um +{min} Minuten verlängern, passt es normal.',
@@ -2976,6 +2984,171 @@ const Scheduler = {
   // from the previous stop, and the user's blocked times (their breaks) are
   // all respected. Reordering stays the optimizer's job; this just removes
   // dead air from the order it produced.
+  // Lay out ONE day's lessons, in the order given, each as early as it legally
+  // can go: the day's opening time, every occupant's availability, travel plus
+  // margin from the previous stop, and the user's breaks.
+  //
+  // Unlike compactDays this may move a lesson LATER. compactDays is a safety
+  // pass over a finished schedule and only ever pulls forward; this is for
+  // edits, where making one lesson longer legitimately pushes the rest of the
+  // day back.
+  //
+  // Returns null if the day cannot be laid out legally at all, so a caller can
+  // reject the edit outright instead of applying half of it.
+  relayoutDay(slots, day, students, settings){
+    const sm = Object.fromEntries(students.map(s=>[s.id,s]));
+    const margin = (settings.travelMargin ?? 2);
+    const dh = settings.dayHours && settings.dayHours[day];
+    if(!dh) return null;
+    const dayStart = this.toMin(dh.start), dayEnd = this.toMin(dh.end)+15;
+    const breaks = (settings.blockedSlots||[]).filter(b=>b.day===day)
+      .map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)}));
+
+    const out = []; let prev = null;
+    for(const sl of slots){
+      const dur = this.toMin(sl.end) - this.toMin(sl.start);
+      const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
+        ? sl.groupMemberIds
+        : [sl.studentId, sl.pairedStudentId].filter(Boolean);
+      let earliest = dayStart, latest = dayEnd;
+      for(const id of ids){
+        const av = sm[id] && sm[id].availability && sm[id].availability[day];
+        if(!av || !av.on) return null;          // this person cannot be here at all
+        earliest = Math.max(earliest, this.toMin(av.start));
+        latest   = Math.min(latest,   this.toMin(av.end)+15);
+      }
+      if(prev){
+        // Same student back to back is one continuous block: no travel, no margin.
+        const need = prev.studentId === sl.studentId ? 0
+          : this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, day) + margin;
+        earliest = Math.max(earliest, this.toMin(prev.end) + need);
+      }
+      for(let guard=0; guard<breaks.length+1; guard++){
+        const hit = breaks.find(b => earliest < b.end && earliest+dur > b.start);
+        if(!hit) break;
+        earliest = hit.end;
+      }
+      if(earliest+dur > latest || earliest+dur > dayEnd) return null;
+      const laid = {...sl, start:this.toTime(earliest), end:this.toTime(earliest+dur)};
+      out.push(laid); prev = laid;
+    }
+    return out;
+  },
+
+  // Driving distance for one day's stops, home out and home back.
+  dayKm(slots, day, settings){
+    const homeAddr = (settings && settings.homeAddress) || '';
+    if(!slots.length) return 0;
+    let km = 0, prevId='home', prevAddr=homeAddr, prevSl=null;
+    for(const s of slots){
+      const sameLocation = prevSl && (prevSl.studentId===s.studentId ||
+        (prevSl.groupCode && prevSl.groupCode===s.groupCode));
+      if(!sameLocation) km += this.travelEstKm(prevId, prevAddr, s.studentId, s.address, day);
+      prevId=s.studentId; prevAddr=s.address; prevSl=s;
+    }
+    return km + this.travelEstKm(prevId, prevAddr, 'home', homeAddr, day);
+  },
+
+  // How much of a day's driving is wasted going back and forth.
+  //
+  // Visit order is fixed by lesson times — a 20:00 lesson cannot be visited
+  // before a 15:00 one — so the optimizer can only choose WHICH lessons share
+  // a day and in what time order. Get that wrong and you drive Rio, Patra,
+  // Rio, Patra: every stop legal, the day absurd.
+  //
+  // Measured as a detour ratio against the shortest tour of the same stops
+  // (exact for small days, nearest-neighbour + 2-opt beyond that). 1.0 means
+  // the time order already is the efficient order; 1.6 means 60% of the
+  // driving is backtracking.
+  dayDetour(slots, day, settings){
+    const stops = [];
+    let prevSl = null;
+    for(const s of slots){
+      const sameLocation = prevSl && (prevSl.studentId===s.studentId ||
+        (prevSl.groupCode && prevSl.groupCode===s.groupCode));
+      if(!sameLocation) stops.push(s);
+      prevSl = s;
+    }
+    if(stops.length < 2) return { km:this.dayKm(slots, day, settings), best:null, ratio:1 };
+    const km = this.dayKm(slots, day, settings);
+
+    const homeAddr = (settings && settings.homeAddress) || '';
+    const leg = (a,b) => this.travelEstKm(
+      a ? a.studentId : 'home', a ? a.address : homeAddr,
+      b ? b.studentId : 'home', b ? b.address : homeAddr, day);
+    const tourKm = (order) => {
+      let t = leg(null, order[0]);
+      for(let i=1;i<order.length;i++) t += leg(order[i-1], order[i]);
+      return t + leg(order[order.length-1], null);
+    };
+
+    // Nearest neighbour, then 2-opt until it stops improving. Not guaranteed
+    // optimal, which is fine: it is a yardstick, and any tour it finds that is
+    // shorter than the scheduled one proves there was slack.
+    const left = stops.slice(); const order = [];
+    let cur = null;
+    while(left.length){
+      let bi = 0, bd = Infinity;
+      left.forEach((s,i)=>{ const d = leg(cur, s); if(d < bd){ bd = d; bi = i; } });
+      cur = left[bi]; order.push(cur); left.splice(bi,1);
+    }
+    for(let pass=0; pass<40; pass++){
+      let improved = false;
+      for(let i=0;i<order.length-1;i++){
+        for(let j=i+1;j<order.length;j++){
+          const trial = order.slice(0,i).concat(order.slice(i,j+1).reverse(), order.slice(j+1));
+          if(tourKm(trial) < tourKm(order) - 1e-9){ order.splice(0, order.length, ...trial); improved = true; }
+        }
+      }
+      if(!improved) break;
+    }
+    const best = tourKm(order);
+    return { km, best, ratio: best > 0 ? km/best : 1 };
+  },
+
+  // Untangle each day: try exchanging the time positions of two lessons and
+  // keep the exchange when the day gets shorter to drive.
+  //
+  // The optimizer minimises kilometres, but visit order is locked to lesson
+  // times, and once availability windows dictate those times the geography can
+  // end up nonsense — Rio, Patra, Rio, Patra, every stop legal. This is the
+  // last chance to notice that and fix it, and it is the same move a user
+  // makes by hand when they tap two lessons to trade places.
+  //
+  // Each candidate is re-timed with relayoutDay and kept only if it is legal
+  // AND shorter, so the pass can only improve the day.
+  reduceZigzag(schedule, students, settings){
+    let swaps = 0, kmSaved = 0;
+    for(const day of (settings.workDays||[])){
+      let slots = (schedule[day]||[]).slice()
+        .sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
+      if(slots.length < 3) continue;   // nothing to untangle with two stops
+      let km = this.dayKm(slots, day, settings);
+
+      for(let pass=0; pass<6; pass++){
+        let improved = false;
+        for(let i=0; i<slots.length-1; i++){
+          for(let j=i+1; j<slots.length; j++){
+            // Never split a student's own back-to-back block by reordering it.
+            if(slots[i].studentId === slots[j].studentId) continue;
+            const trial = slots.slice();
+            [trial[i], trial[j]] = [trial[j], trial[i]];
+            const laid = this.relayoutDay(trial, day, students, settings);
+            if(!laid) continue;
+            const trialKm = this.dayKm(laid, day, settings);
+            if(trialKm < km - 0.05){
+              kmSaved += km - trialKm;
+              slots = laid; km = trialKm; swaps++; improved = true;
+            }
+          }
+        }
+        if(!improved) break;
+      }
+      schedule[day] = slots;
+    }
+    return { swaps, kmSaved };
+  },
+
   compactDays(schedule, students, settings){
     const sm = Object.fromEntries(students.map(s=>[s.id,s]));
     const margin = (settings.travelMargin ?? 2);
@@ -4683,6 +4856,14 @@ const App = {
     // Close the holes the repair passes leave behind. Runs last, after every
     // pass that can insert or remove a lesson, and before verification — a
     // compacted day is what the user actually reads.
+    // Untangle each day before compacting it: the optimizer minimises km but
+    // cannot reorder stops (visit order follows lesson times), so a day can end
+    // up bouncing between two areas. This is the last chance to notice.
+    try{
+      const z = Scheduler.reduceZigzag(state.schedule, state.students, state.settings);
+      if(z.swaps) console.info(`reduceZigzag: ${z.swaps} swaps, ${z.kmSaved.toFixed(1)} km saved`);
+    }catch(e){}
+
     try{
       const packed = Scheduler.compactDays(state.schedule, state.students, state.settings);
       if(packed.moved) console.info(`compactDays: pulled ${packed.moved} lessons earlier, ${packed.savedMin} min of dead time removed`);
@@ -6102,48 +6283,65 @@ const App = {
     const srcSlots = [...(state.schedule[srcDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
     const tgtSlots = [...(state.schedule[targetDay]||[])].sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
     if(srcDay===targetDay && srcIdx===targetIdx) return;
-    const srcSlot = srcSlots[srcIdx];
-    const tgtSlot = tgtSlots[targetIdx];
-    if(!srcSlot || !tgtSlot) return;
-    const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
-    const tgtArrIdx = state.schedule[targetDay].findIndex(s=>s.studentId===tgtSlot.studentId && s.start===tgtSlot.start);
-    if(srcArrIdx<0 || tgtArrIdx<0) return;
-    const srcStudent = state.students.find(s=>s.id===srcSlot.studentId);
-    const tgtStudent = state.students.find(s=>s.id===tgtSlot.studentId);
-    // Each student keeps THEIR OWN lesson duration — swapping only exchanges
-    // the START time. Copying the other slot's end time verbatim (the old
-    // behavior) silently gave a 60-minute student a 90-minute end time (or
-    // cut a 90-minute student's lesson down to 60) whenever durations
-    // differed, since it never recalculated the end from each student's
-    // actual duration.
-    const {start: sS} = state.schedule[srcDay][srcArrIdx];
-    const {start: tS} = state.schedule[targetDay][tgtArrIdx];
-    const srcDur = state.schedule[srcDay][srcArrIdx].duration || (srcStudent && srcStudent.lessonDuration) || 60;
-    const tgtDur = state.schedule[targetDay][tgtArrIdx].duration || (tgtStudent && tgtStudent.lessonDuration) || 60;
-    const newSrcEnd = Scheduler.minToTime(Scheduler.toMin(tS) + srcDur);
-    const newTgtEnd = Scheduler.minToTime(Scheduler.toMin(sS) + tgtDur);
-    // Judge the swap with verifySchedule — the SAME rule set the scheduler
-    // holds itself to — applied to a trial copy, instead of a second, partial
-    // copy of the rules living here.
-    //
-    // The partial copy was wrong, and in the worst possible direction: its
-    // overlap check excluded only the slot being moved, so on a same-day swap
-    // it found the OTHER slot still sitting at the time being moved into and
-    // reported a clash. Two lessons trading places always look like they
-    // collide if you only take one of them off the board. Every same-day swap
-    // was refused, however much room there was.
-    //
-    // It also checked nothing about blocked times or travel, so the swaps it
-    // did allow could produce a schedule the app's own verifier would flag.
-    const trial = JSON.parse(JSON.stringify(state.schedule));
-    trial[srcDay][srcArrIdx].start = tS;
-    trial[srcDay][srcArrIdx].end = newSrcEnd;
-    trial[targetDay][tgtArrIdx].start = sS;
-    trial[targetDay][tgtArrIdx].end = newTgtEnd;
+    const sameDay = String(srcDay) === String(targetDay);
+    // The real objects in state.schedule, not the sorted copies — positions are
+    // matched by identity below.
+    const srcSlot0 = srcSlots[srcIdx];
+    const tgtSlot0 = tgtSlots[targetIdx];
+    if(!srcSlot0 || !tgtSlot0) return;
 
-    // Only problems this swap INTRODUCES may block it. A schedule the user has
-    // already edited into a slightly imperfect state must not freeze every
-    // further edit.
+    // The two lessons trade places in the day's order, and then the whole day
+    // is timed again from scratch.
+    //
+    // The times of course change — that is the point. What does not work is
+    // each lesson simply taking over the other's start time, which is what
+    // this used to do: that only holds when both are the same length. Put a
+    // 90-minute lesson where a 60-minute one was and it runs into the next
+    // lesson, so the swap was refused even though the day had plenty of room
+    // and merely needed the rest of it shifted along. Recomputing the day
+    // handles any mix of lengths, and works across days too.
+    const srcOrder = state.schedule[srcDay].slice()
+      .sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const tgtOrder = sameDay ? srcOrder : state.schedule[targetDay].slice()
+      .sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const srcPos = srcOrder.findIndex(x=>x===srcSlot0);
+    const tgtPos = tgtOrder.findIndex(x=>x===tgtSlot0);
+    if(srcPos<0 || tgtPos<0) return;
+
+    const trial = {};
+    for(const d of Object.keys(state.schedule)) trial[d] = state.schedule[d].slice();
+    if(sameDay){
+      const day = trial[srcDay].slice()
+        .sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+      [day[srcPos], day[tgtPos]] = [day[tgtPos], day[srcPos]];
+      trial[srcDay] = day;
+    } else {
+      const a2 = trial[srcDay].slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+      const b2 = trial[targetDay].slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+      a2[srcPos] = tgtSlot0;
+      b2[tgtPos] = srcSlot0;
+      trial[srcDay] = a2; trial[targetDay] = b2;
+    }
+
+    // Re-lay out every day the swap touched. null means it cannot be done
+    // legally at all — reject rather than apply half of it.
+    const touched = sameDay ? [srcDay] : [srcDay, targetDay];
+    for(const d of touched){
+      const laid = Scheduler.relayoutDay(trial[d], Number(d), state.students, state.settings);
+      if(!laid){
+        Toast.show(tf('toast_swap_blocked',{reason:t('swap_reason_no_room')}),'error',6000);
+        return;
+      }
+      trial[d] = laid;
+    }
+
+    // Only problems this swap INTRODUCES may block it, judged by
+    // verifySchedule — the SAME rule set the scheduler holds itself to,
+    // rather than a second, partial copy of the rules living here. That copy
+    // was wrong in the worst direction: its overlap check took only the slot
+    // being moved off the board, found the other one still sitting at the time
+    // being moved into, and reported a clash. Every same-day swap was refused.
+    // It also checked nothing about blocked times or travel.
     let introduced = [];
     try{
       const before = new Set(Scheduler.verifySchedule(state.schedule, state.students, state.settings));
@@ -6155,14 +6353,12 @@ const App = {
       return;
     }
 
-    state.schedule[srcDay][srcArrIdx].start = tS;
-    state.schedule[srcDay][srcArrIdx].end = newSrcEnd;
-    state.schedule[targetDay][tgtArrIdx].start = sS;
-    state.schedule[targetDay][tgtArrIdx].end = newTgtEnd;
+    for(const d of touched) state.schedule[d] = trial[d];
     Storage.saveSchedule(state.schedule);
     this.renderSchedule();
     this.renderHome();
   },
+
 
   // Shared by both the native-drag day-tab drop handler (desktop mouse) and
   // the tap-to-pick flow (touch) — moves a slot to a different day, finding
@@ -6645,6 +6841,7 @@ const App = {
         </div>
       </div>
       <div class="section-title">${t('route_stops')} · ${DAYS_FULL[state.routeDay]||'—'}</div>
+      ${this._detourNoteHtml(slots)}
       <div style="padding:0 0 8px">
         ${this.buildStopList(stopsToShow, hasReal)}
       </div>
@@ -6685,6 +6882,24 @@ const App = {
     const url = this.buildGoogleStopUrl(stop.studentId, stop.address);
     if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
     window.open(url, '_blank', 'noopener');
+  },
+
+  // Say plainly when a day's driving is longer than the stops require.
+  //
+  // The scheduler already tries to untangle each day, so whatever is left is
+  // forced by when people are actually free — which is worth telling the user,
+  // because they are the only one who can change it (move a lesson, widen a
+  // window).
+  _detourNoteHtml(slots){
+    if(!slots || slots.length < 3) return '';
+    let d;
+    try{ d = Scheduler.dayDetour(slots, state.routeDay, state.settings); }catch(e){ return ''; }
+    if(!d || !d.best || d.ratio < 1.15) return '';
+    const extra = d.km - d.best;
+    if(extra < 1) return '';
+    return `<div style="margin:0 16px 8px;background:rgba(217,119,6,.07);border:1px solid rgba(217,119,6,.25);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--orange,#d97706);line-height:1.45">
+      ${tf('route_detour_note',{km:extra.toFixed(1), pct:Math.round((d.ratio-1)*100)})}
+    </div>`;
   },
 
   buildStopList(stops, hasReal){

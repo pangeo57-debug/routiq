@@ -37,6 +37,7 @@ async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
   await S.guardedPass(r.schedule, cfg, (sch) => S.lnsRepair(sch, students, cfg, budget));
   S.enforceConstraints(r.schedule, students, cfg);
   S.collapseForceMergeFragments(r.schedule, students, cfg);
+  S.reduceZigzag(r.schedule, students, cfg);
   S.compactDays(r.schedule, students, cfg);
   return r.schedule;
 }
@@ -747,7 +748,8 @@ describe('swapping two lessons by hand', () => {
     // only one of the two off the board, so each looked like it collided with
     // the other sitting at the time it was moving into.
     app.App._performSlotSwap(1, 0, 1, 1);
-    assert.equal(order(app), 's2@15:00 s1@17:00', 'the swap must go through');
+    assert.ok(order(app).startsWith('s2@15:00'), `the swap must go through, got ${order(app)}`);
+    assert.ok(order(app).includes('s1@'), 's1 keeps its lesson, at a recomputed time');
   });
 
   test('a swap is judged only on the problems it introduces', () => {
@@ -761,35 +763,51 @@ describe('swapping two lessons by hand', () => {
       'an already-imperfect schedule must not freeze every further edit');
   });
 
-  test('a swap into a reserved break is still refused', () => {
+  test('lessons of different lengths swap, each keeping its own duration', () => {
     const app = loadApp();
-    twoLessons(app, { cfgOv: { blockedSlots: [{ day: 1, start: '17:00', end: '18:00' }] } });
-    const before = order(app);
+    // The point of recomputing the day rather than copying start times: a
+    // 90-minute lesson moved to where a 60-minute one was runs into the next
+    // one, and simply swapping the clock times would either refuse it or cut
+    // somebody's lesson short.
+    const { sts, cfg } = twoLessons(app, { stOv: [{}, { lessonDuration: 90 }] });
+    const s2slot = app.state.schedule[1].find(s => s.studentId === 's2');
+    s2slot.duration = 90; s2slot.end = '18:30';
+
     app.App._performSlotSwap(1, 0, 1, 1);
-    assert.equal(order(app), before, 'the old check ignored blocked times entirely');
+
+    const S = app.Scheduler;
+    const a = app.state.schedule[1].find(s => s.studentId === 's1');
+    const b = app.state.schedule[1].find(s => s.studentId === 's2');
+    assert.equal(S.toMin(a.end) - S.toMin(a.start), 60, 's1 stays a 60-minute lesson');
+    assert.equal(S.toMin(b.end) - S.toMin(b.start), 90, 's2 stays a 90-minute lesson');
+    assert.ok(S.toMin(b.start) < S.toMin(a.start), 's2 now comes first');
+    assertClean(auditSchedule(S, app.state.schedule, sts, cfg));
   });
 
-  test('a swap outside a student availability is still refused', () => {
+  test('a swap near a reserved break lands after it, not inside it', () => {
     const app = loadApp();
-    twoLessons(app, { stOv: [{ window: { start: '15:00', end: '16:30' } }, {}] });
-    const before = order(app);
+    const { sts, cfg } = twoLessons(app,
+      { cfgOv: { blockedSlots: [{ day: 1, start: '17:00', end: '18:00' }] } });
     app.App._performSlotSwap(1, 0, 1, 1);
-    assert.equal(order(app), before, 's1 cannot take a 17:00 lesson');
+    // Recomputing the day means the break is worked around rather than the
+    // swap being refused — but nothing may end up inside it.
+    for (const sl of app.state.schedule[1]) {
+      assert.ok(!app.Scheduler.isBlocked(
+        app.Scheduler.toMin(sl.start), app.Scheduler.toMin(sl.end), 1, cfg),
+        `${sl.studentId} ended up inside the break at ${sl.start}`);
+    }
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
   });
 
-  test('a swap that leaves no time to drive is still refused', () => {
+  test('a swap nobody has room for is refused', () => {
     const app = loadApp();
-    // A third lesson right after the gap: moving the far student into 17:00
-    // leaves no room to reach it.
-    twoLessons(app);
-    app.setState({ students: [...app.state.students,
-      student('s3', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 })] });
-    app.state.coords.s3 = { lat: 38.34, lon: 21.90 };   // far away
-    app.state.schedule[1].push({ studentId: 's3', studentName: 's3', address: 'addr-s3',
-      start: '16:02', end: '17:02', duration: 60 });
+    // s1 is free only until 16:30, so it cannot take the later position no
+    // matter how the day is re-timed.
+    const { sts, cfg } = twoLessons(app, { stOv: [{ window: { start: '15:00', end: '16:30' } }, {}] });
     const before = order(app);
-    app.App._performSlotSwap(1, 0, 1, 2);
-    assert.equal(order(app), before, 'travel time was never checked by the old code');
+    app.App._performSlotSwap(1, 0, 1, 1);
+    assert.equal(order(app), before, 'nothing may move when the swap cannot be made legal');
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
   });
 
   test('the swap leaves the schedule valid, checked independently', () => {
@@ -884,5 +902,78 @@ describe('editing the schedule by hand', () => {
     const back = app.Scheduler.toMin(app.state.schedule[1].find(s => s.studentId === 's3').start);
     assert.ok(back < pushed, `s3 should move back earlier, ${pushed} -> ${back}`);
     assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+});
+
+describe('untangling a day that bounces between areas', () => {
+  // Two clusters ~10km apart. Availability windows dictate the time order, and
+  // time order dictates the driving order, so a day can legally end up going
+  // Rio, Patra, Rio, Patra.
+  function twoClusters(app, order) {
+    const sts = order.map((cluster, i) => student('s' + i, {
+      days: [1], lessonsPerWeek: 1, lessonDuration: 60,
+      window: { start: '15:00', end: '21:00' },
+    }));
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '21:00' } } });
+    const coords = { home: { lat: 38.246, lon: 21.734 } };
+    sts.forEach((s, i) => {
+      coords[s.id] = order[i] === 'A'
+        ? { lat: 38.246 + i / 2000, lon: 21.734 }
+        : { lat: 38.336 + i / 2000, lon: 21.790 };
+    });
+    app.setState({ students: sts, settings: cfg, coords });
+    app.state.schedule = { 1: sts.map((s, i) => ({
+      studentId: s.id, studentName: s.id, address: 'addr-' + s.id,
+      start: `${15 + i}:00`, end: `${16 + i}:00`, duration: 60,
+    })) };
+    return { sts, cfg };
+  }
+
+  test('a Rio-Patra-Rio-Patra day is untangled', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoClusters(app, ['A', 'B', 'A', 'B']);
+    const S = app.Scheduler;
+    const before = S.dayKm(app.state.schedule[1], 1, cfg);
+
+    const res = S.reduceZigzag(app.state.schedule, sts, cfg);
+
+    const after = S.dayKm(app.state.schedule[1], 1, cfg);
+    assert.ok(res.swaps > 0, 'it should find something to fix');
+    assert.ok(after < before - 1, `expected a real saving, ${before.toFixed(1)} -> ${after.toFixed(1)}`);
+    // The two areas should now be visited in two runs, not four.
+    const seq = app.state.schedule[1].slice()
+      .sort((a, b) => S.toMin(a.start) - S.toMin(b.start))
+      .map(s => app.state.coords[s.studentId].lat > 38.3 ? 'B' : 'A').join('');
+    assert.ok(/^A+B+$|^B+A+$/.test(seq), `expected the areas grouped, got ${seq}`);
+    assertClean(auditSchedule(S, app.state.schedule, sts, cfg));
+  });
+
+  test('an already-sensible day is left alone', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoClusters(app, ['A', 'A', 'B', 'B']);
+    const S = app.Scheduler;
+    const before = JSON.stringify(app.state.schedule[1]);
+    const res = S.reduceZigzag(app.state.schedule, sts, cfg);
+    assert.equal(res.swaps, 0, 'nothing to gain, so nothing should move');
+    assert.equal(JSON.stringify(app.state.schedule[1]), before);
+  });
+
+  test('untangling never breaks a constraint', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoClusters(app, ['A', 'B', 'A', 'B']);
+    // The middle student is only free late, so the obvious untangling is illegal.
+    sts[1].availability[1] = { on: true, start: '18:00', end: '21:00' };
+    app.Scheduler.reduceZigzag(app.state.schedule, sts, cfg);
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+  });
+
+  test('dayDetour scores a straight run at 1.0 and a zig-zag above it', () => {
+    const app = loadApp();
+    const { cfg } = twoClusters(app, ['A', 'A', 'B', 'B']);
+    const straight = app.Scheduler.dayDetour(app.state.schedule[1], 1, cfg);
+    const { cfg: cfg2 } = twoClusters(app, ['A', 'B', 'A', 'B']);
+    const zigzag = app.Scheduler.dayDetour(app.state.schedule[1], 1, cfg2);
+    assert.ok(straight.ratio < 1.05, `a sensible day should score ~1.0, got ${straight.ratio}`);
+    assert.ok(zigzag.ratio > 1.3, `a bouncing day should score well above 1, got ${zigzag.ratio}`);
   });
 });
