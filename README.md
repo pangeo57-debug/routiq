@@ -70,7 +70,7 @@ PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙ�
 npm test
 ```
 
-110 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
+113 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
 
 Επειδή η εφαρμογή είναι ένα αρχείο HTML, τα τεστ φορτώνουν το πραγματικό
 `<script>` σε Node `vm` sandbox με stubbed browser API (`test/harness.js`).

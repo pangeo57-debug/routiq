@@ -795,6 +795,7 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    toast_scheduler_failed:'Ο υπολογισμός απέτυχε — {reason}. Το προηγούμενο πρόγραμμα παρέμεινε.',
     gap_because_availability:'↳ ο/η {name} δεν είναι διαθέσιμος/η πριν τις {from}', gap_because_break:'↳ το διάλειμμά σου τελειώνει στις {end}',
     toast_storage_full:'⚠ Η αποθήκευση απέτυχε — ο χώρος της συσκευής γέμισε. Κάνε εξαγωγή αντιγράφου και σβήσε παλιά δεδομένα.',
     route_detour_note:'🔄 Αυτή η μέρα έχει {km}χλμ πηγαινέλα ({pct}% παραπάνω). Οι ώρες που είναι ελεύθεροι οι μαθητές το επιβάλλουν — άλλαξε ένα μάθημα μέρα ή διεύρυνε ένα παράθυρο για να μειωθεί.',
@@ -984,6 +985,7 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    toast_scheduler_failed:'The calculation failed — {reason}. Your previous schedule was kept.',
     gap_because_availability:'↳ {name} is not free before {from}', gap_because_break:'↳ your break ends at {end}',
     toast_storage_full:'⚠ Saving failed — this device is out of storage. Export a backup and clear old data.',
     route_detour_note:'🔄 This day backtracks {km}km ({pct}% further than the stops need). The times people are free force it — move a lesson to another day or widen a window to cut it.',
@@ -1173,6 +1175,7 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    toast_scheduler_failed:'Le calcul a échoué — {reason}. Votre programme précédent a été conservé.',
     gap_because_availability:'↳ {name} n\u2019est pas disponible avant {from}', gap_because_break:'↳ votre pause se termine à {end}',
     toast_storage_full:'⚠ Échec de l\u2019enregistrement — stockage plein. Exportez une sauvegarde et supprimez les anciennes données.',
     route_detour_note:"🔄 Cette journée fait {km}km de va-et-vient ({pct}% de plus). Les disponibilités l'imposent — déplacez un cours ou élargissez une plage pour la réduire.",
@@ -1362,6 +1365,7 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    toast_scheduler_failed:'Berechnung fehlgeschlagen — {reason}. Der bisherige Plan bleibt.',
     gap_because_availability:'↳ {name} ist vor {from} nicht verfügbar', gap_because_break:'↳ Ihre Pause endet um {end}',
     toast_storage_full:'⚠ Speichern fehlgeschlagen — Speicher voll. Exportieren Sie eine Sicherung und löschen Sie alte Daten.',
     route_detour_note:'🔄 Dieser Tag fährt {km}km hin und zurück ({pct}% mehr). Die Verfügbarkeiten erzwingen das — verschieben Sie eine Stunde oder erweitern Sie ein Zeitfenster.',
@@ -1595,12 +1599,17 @@ const Scheduler = {
     return (atMin >= this.PEAK_FROM && atMin < this.PEAK_TO) ? peak : off;
   },
 
+  // These two deliberately say `Scheduler.` rather than `this.`: they are the
+  // most likely methods to be passed around as a plain function (geoOptimize
+  // already takes a travelMinFn parameter), and losing `this` would turn them
+  // from a useful estimate into a thrown TypeError deep inside a search.
+  //
   // Estimated travel minutes between two slots/addresses using geocoords.
   // `atMin` is when the journey STARTS (minutes past midnight); omit it and the
   // peak matrix is used, as before.
   travelEstMin(fromId, fromAddr, toId, toAddr, day, atMin){
     if(typeof state!=='undefined'){
-      const mat = this.matrixFor(day, atMin);
+      const mat = Scheduler.matrixFor(day, atMin);
       if(mat){
         const ia = mat.coordIds.indexOf(fromId);
         const ib = mat.coordIds.indexOf(toId);
@@ -1609,9 +1618,9 @@ const Scheduler = {
       }
     }
     const coords = (typeof state !== 'undefined' && state.coords) || {};
-    const cA = this.safeCoord(coords, fromId, fromAddr);
-    const cB = this.safeCoord(coords, toId, toAddr);
-    const km = this.haversineKm(cA, cB) * 1.4;
+    const cA = Scheduler.safeCoord(coords, fromId, fromAddr);
+    const cB = Scheduler.safeCoord(coords, toId, toAddr);
+    const km = Scheduler.haversineKm(cA, cB) * 1.4;
     const spd = (typeof state!=='undefined'&&state.settings&&state.settings.avgCitySpeedKmh)||25;
     return Math.max(1, Math.round(km / spd * 60));
   },
@@ -1646,7 +1655,7 @@ const Scheduler = {
   // the whole optimization pass is chasing a metric that doesn't match the roads.
   travelEstKm(fromId, fromAddr, toId, toAddr, day, atMin){
     if(typeof state!=='undefined'){
-      const mat = this.matrixFor(day, atMin);
+      const mat = Scheduler.matrixFor(day, atMin);
       if(mat && mat.distances){
         const ia = mat.coordIds.indexOf(fromId);
         const ib = mat.coordIds.indexOf(toId);
@@ -1655,9 +1664,9 @@ const Scheduler = {
       }
     }
     const coords = (typeof state !== 'undefined' && state.coords) || {};
-    const cA = this.safeCoord(coords, fromId, fromAddr);
-    const cB = this.safeCoord(coords, toId, toAddr);
-    return this.haversineKm(cA, cB) * 1.4;
+    const cA = Scheduler.safeCoord(coords, fromId, fromAddr);
+    const cB = Scheduler.safeCoord(coords, toId, toAddr);
+    return Scheduler.haversineKm(cA, cB) * 1.4;
   },
 
   // Geographic centroid of a day's lessons
@@ -4645,6 +4654,10 @@ const App = {
     // Whether that snapshot may act as a quality floor for this run. Decided
     // once, up front, before anything has been mutated.
     const prevUsable = this._scheduleStillValid(scheduleBackup);
+    // Reset per run: it is only set inside the success path, so a failed run
+    // used to leave the previous run's value behind and the toast lied.
+    state._keptPreviousSchedule = false;
+    state._schedulerError = null;
     const cancelledCleanup = ()=>{
       // Superseded rather than genuinely cancelled — the newer run owns the
       // schedule now, so restoring this run's pre-start snapshot would undo
@@ -4792,7 +4805,15 @@ const App = {
       state.schedulerResult = result;
       state.routeResults = {};
       r = result;
-    }catch(e){ console.error('Scheduler error',e); }
+    }catch(e){
+      // A throw here used to leave the run silently doing nothing: state.schedule
+      // was never assigned, every later phase operated on the old one, and the
+      // summary toast was skipped by `if(!r) return`. From the outside that is
+      // indistinguishable from "it stopped finding a schedule", with no clue
+      // why. Say so, and say what broke.
+      console.error('Scheduler error', e);
+      state._schedulerError = (e && e.message) || String(e);
+    }
 
     if(state._schedulingCancelled) return cancelledCleanup();
 
@@ -4967,7 +4988,11 @@ const App = {
     else if(state.currentScreen==='home') this.renderHome();
     // Always refresh home stats (even if not currently visible)
     if(state.currentScreen!=='home') this.renderHome();
-    if(!r) return;
+    if(!r){
+      Toast.show(tf('toast_scheduler_failed',{reason: state._schedulerError || '—'}),'error',9000);
+      state._schedulerError = null;
+      return;
+    }
     const total = state.students.reduce((a,s)=>a+s.lessonsPerWeek,0);
     const placed = total - r.unplaced.reduce((a,u)=>a+(u.needed-u.placed),0);
     const att = r._attempts || 1;

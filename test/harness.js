@@ -134,6 +134,9 @@ function loadApp(opts = {}) {
   const ex = ctx.__exports;
 
   // Silence UI side effects that tests don't care about but code paths call.
+  // opts.realRender keeps them, so a test can catch errors that only happen
+  // while actually drawing a screen.
+  if(!opts.realRender){
   ex.App.renderHome = () => {};
   ex.App.renderStudents = () => {};
   ex.App.renderSchedule = () => {};
@@ -143,6 +146,7 @@ function loadApp(opts = {}) {
   ex.App.nav = () => {};
   ex.App.initStudentsMap = () => {};
   ex.App.initRouteMap = () => {};
+  }
 
   return {
     ...ex,

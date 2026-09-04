@@ -11,7 +11,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { loadApp, student, settings, slot } = require('./harness');
+const { loadApp, student, settings, slot, cityCoords } = require('./harness');
 
 const PAYLOAD = '<img src=x onerror="alert(1)">';
 
@@ -338,5 +338,62 @@ describe('toast messages', () => {
     const asText = made.map(e => e.textContent).join('');
     assert.ok(!asHtml.includes('onerror'), `payload reached innerHTML: ${asHtml}`);
     assert.ok(asText.includes('onerror'), 'and it should still be shown, as plain text');
+  });
+});
+
+describe('when the scheduler itself fails', () => {
+  test('a failed run says so instead of looking like nothing happened', async () => {
+    const app = loadApp();
+    const sts = [student('s1', { lessonsPerWeek: 1 })];
+    app.setState({ students: sts, settings: settings(), coords: {}, schedule: {},
+      scheduleAttempts: [], routeResults: {} });
+
+    // A throw used to leave state.schedule untouched, every later phase working
+    // on the old one, and the summary skipped by `if(!r) return` — from outside,
+    // indistinguishable from "it stopped finding a schedule", with no clue why.
+    app.Scheduler.runMultiAttempt = async () => { throw new Error('boom'); };
+
+    const toasts = [];
+    app.ctx.document.getElementById = () => ({ appendChild() {}, style: {}, classList:
+      { add(){}, remove(){}, toggle(){} }, textContent: '', innerHTML: '', disabled: false });
+    app.ctx.document.createElement = () => ({ className: '', style: {}, children: [],
+      set textContent(v) { toasts.push(v); }, get textContent() { return ''; },
+      set innerHTML(v) {}, get innerHTML() { return ''; },
+      appendChild(c) { this.children.push(c); }, remove() {} });
+
+    await app.App.runAndNotify();
+
+    assert.ok(toasts.some(t => t && t.includes('boom')),
+      `the failure must be reported, and name what broke. Got: ${JSON.stringify(toasts)}`);
+  });
+
+  test('a stale "kept previous" flag cannot make the next run lie', async () => {
+    const app = loadApp();
+    app.setState({ students: [student('s1', { lessonsPerWeek: 1 })], settings: settings(),
+      coords: {}, schedule: {}, scheduleAttempts: [], routeResults: {},
+      _keptPreviousSchedule: true });          // left over from an earlier run
+    app.Scheduler.runMultiAttempt = async () => { throw new Error('boom'); };
+    app.ctx.document.getElementById = () => ({ appendChild() {}, style: {}, classList:
+      { add(){}, remove(){}, toggle(){} }, textContent: '', innerHTML: '', disabled: false });
+    app.ctx.document.createElement = () => ({ className: '', style: {}, children: [],
+      textContent: '', innerHTML: '', appendChild() {}, remove() {} });
+
+    await app.App.runAndNotify();
+
+    assert.equal(app.state._keptPreviousSchedule, false,
+      'the flag must be reset per run, or the next toast reports the wrong thing');
+  });
+
+  test('travel estimates survive being passed around as plain functions', () => {
+    const app = loadApp();
+    const sts = [student('a'), student('b')];
+    app.setState({ students: sts, settings: settings(), coords: cityCoords(sts) });
+    // geoOptimize already takes a travelMinFn parameter, so these are the most
+    // likely methods to lose their receiver. Losing it turned them from an
+    // estimate into a TypeError deep inside a search.
+    const min = app.Scheduler.travelEstMin;
+    const km = app.Scheduler.travelEstKm;
+    assert.ok(min('a', 'addr-a', 'b', 'addr-b', 1, 900) > 0);
+    assert.ok(km('a', 'addr-a', 'b', 'addr-b', 1, 900) > 0);
   });
 });
