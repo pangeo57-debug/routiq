@@ -37,7 +37,7 @@ async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
   await S.guardedPass(r.schedule, cfg, (sch) => S.lnsRepair(sch, students, cfg, budget));
   S.enforceConstraints(r.schedule, students, cfg);
   S.collapseForceMergeFragments(r.schedule, students, cfg);
-  S.reduceZigzag(r.schedule, students, cfg);
+  S.tidyDays(r.schedule, students, cfg);
   S.compactDays(r.schedule, students, cfg);
   return r.schedule;
 }
@@ -922,10 +922,14 @@ describe('untangling a day that bounces between areas', () => {
         : { lat: 38.336 + i / 2000, lon: 21.790 };
     });
     app.setState({ students: sts, settings: cfg, coords });
-    app.state.schedule = { 1: sts.map((s, i) => ({
+    // Lay the day out legally first. Stops 10km apart cannot be back to back
+    // on the hour, and a starting schedule with impossible travel makes the
+    // whole comparison meaningless.
+    const raw = sts.map((s, i) => ({
       studentId: s.id, studentName: s.id, address: 'addr-' + s.id,
       start: `${15 + i}:00`, end: `${16 + i}:00`, duration: 60,
-    })) };
+    }));
+    app.state.schedule = { 1: app.Scheduler.relayoutDay(raw, 1, sts, cfg) || raw };
     return { sts, cfg };
   }
 
@@ -935,10 +939,10 @@ describe('untangling a day that bounces between areas', () => {
     const S = app.Scheduler;
     const before = S.dayKm(app.state.schedule[1], 1, cfg);
 
-    const res = S.reduceZigzag(app.state.schedule, sts, cfg);
+    const res = S.tidyDays(app.state.schedule, sts, cfg);
 
     const after = S.dayKm(app.state.schedule[1], 1, cfg);
-    assert.ok(res.swaps > 0, 'it should find something to fix');
+    assert.ok(res.moves > 0, 'it should find something to fix');
     assert.ok(after < before - 1, `expected a real saving, ${before.toFixed(1)} -> ${after.toFixed(1)}`);
     // The two areas should now be visited in two runs, not four.
     const seq = app.state.schedule[1].slice()
@@ -953,8 +957,8 @@ describe('untangling a day that bounces between areas', () => {
     const { sts, cfg } = twoClusters(app, ['A', 'A', 'B', 'B']);
     const S = app.Scheduler;
     const before = JSON.stringify(app.state.schedule[1]);
-    const res = S.reduceZigzag(app.state.schedule, sts, cfg);
-    assert.equal(res.swaps, 0, 'nothing to gain, so nothing should move');
+    const res = S.tidyDays(app.state.schedule, sts, cfg);
+    assert.equal(res.moves, 0, 'nothing to gain, so nothing should move');
     assert.equal(JSON.stringify(app.state.schedule[1]), before);
   });
 
@@ -963,7 +967,7 @@ describe('untangling a day that bounces between areas', () => {
     const { sts, cfg } = twoClusters(app, ['A', 'B', 'A', 'B']);
     // The middle student is only free late, so the obvious untangling is illegal.
     sts[1].availability[1] = { on: true, start: '18:00', end: '21:00' };
-    app.Scheduler.reduceZigzag(app.state.schedule, sts, cfg);
+    app.Scheduler.tidyDays(app.state.schedule, sts, cfg);
     assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
   });
 
@@ -975,5 +979,80 @@ describe('untangling a day that bounces between areas', () => {
     const zigzag = app.Scheduler.dayDetour(app.state.schedule[1], 1, cfg2);
     assert.ok(straight.ratio < 1.05, `a sensible day should score ~1.0, got ${straight.ratio}`);
     assert.ok(zigzag.ratio > 1.3, `a bouncing day should score well above 1, got ${zigzag.ratio}`);
+  });
+});
+
+describe('dead time in the middle of a day', () => {
+  // The complaint: "it still leaves huge gaps sometimes." compactDays pulls
+  // lessons earlier but never reorders, so a hole stays open whenever the NEXT
+  // student is not free earlier — even when someone later in the day is free
+  // all afternoon and could simply move up.
+  function holeInTheAfternoon(app) {
+    const mk = (id, s, e) => student(id,
+      { days: [1], lessonsPerWeek: 1, lessonDuration: 60, window: { start: s, end: e } });
+    const sts = [mk('A', '15:00', '16:00'), mk('B', '20:00', '22:00'), mk('C', '15:00', '22:00')];
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ students: sts, settings: cfg, coords: { home: { lat: 38.240, lon: 21.730 },
+      A: { lat: 38.246, lon: 21.734 }, B: { lat: 38.252, lon: 21.741 }, C: { lat: 38.249, lon: 21.737 } } });
+    app.state.schedule = { 1: [
+      { studentId: 'A', studentName: 'A', address: 'addr-A', start: '15:00', end: '16:00', duration: 60 },
+      { studentId: 'B', studentName: 'B', address: 'addr-B', start: '20:00', end: '21:00', duration: 60 },
+      { studentId: 'C', studentName: 'C', address: 'addr-C', start: '21:05', end: '22:05', duration: 60 },
+    ]};
+    return { sts, cfg };
+  }
+
+  test('a flexible lesson is moved up to fill a four-hour hole', () => {
+    const app = loadApp();
+    const { sts, cfg } = holeInTheAfternoon(app);
+    const S = app.Scheduler;
+
+    S.compactDays(app.state.schedule, sts, cfg);
+    const beforeIdle = S.dayIdle(app.state.schedule[1], 1, cfg);
+    assert.ok(beforeIdle > 200, `the hole should be there to start with, got ${beforeIdle}`);
+
+    S.tidyDays(app.state.schedule, sts, cfg);
+
+    const afterIdle = S.dayIdle(app.state.schedule[1], 1, cfg);
+    assert.ok(afterIdle < beforeIdle - 45,
+      `expected the hole to shrink, ${beforeIdle} -> ${afterIdle}`);
+    // C is free all afternoon and should now come second, not last.
+    const seq = app.state.schedule[1].slice()
+      .sort((a, b) => S.toMin(a.start) - S.toMin(b.start)).map(s => s.studentId).join('');
+    assert.equal(seq, 'ACB');
+    assertClean(auditSchedule(S, app.state.schedule, sts, cfg));
+  });
+
+  test('waiting that nobody can avoid is left alone, not faked away', () => {
+    const app = loadApp();
+    // Only two students, and B genuinely cannot come before 20:00. There is no
+    // arrangement without a wait, and the pass must not invent one.
+    const mk = (id, s, e) => student(id,
+      { days: [1], lessonsPerWeek: 1, lessonDuration: 60, window: { start: s, end: e } });
+    const sts = [mk('A', '15:00', '16:00'), mk('B', '20:00', '22:00')];
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ students: sts, settings: cfg, coords: { home: { lat: 38.240, lon: 21.730 },
+      A: { lat: 38.246, lon: 21.734 }, B: { lat: 38.252, lon: 21.741 } } });
+    app.state.schedule = { 1: [
+      { studentId: 'A', studentName: 'A', address: 'addr-A', start: '15:00', end: '16:00', duration: 60 },
+      { studentId: 'B', studentName: 'B', address: 'addr-B', start: '20:00', end: '21:00', duration: 60 },
+    ]};
+    app.Scheduler.tidyDays(app.state.schedule, sts, cfg);
+    assertClean(auditSchedule(app.Scheduler, app.state.schedule, sts, cfg));
+    assert.equal(app.state.schedule[1].find(s => s.studentId === 'B').start, '20:00',
+      'B cannot be moved earlier and must not be');
+  });
+
+  test('an hour of waiting outweighs a couple of kilometres', () => {
+    const app = loadApp();
+    const { cfg } = holeInTheAfternoon(app);
+    const S = app.Scheduler;
+    const slots = app.state.schedule[1];
+    // Same stops, so the same driving — the cost must still separate them.
+    assert.ok(S.dayCost(slots, 1, cfg) > S.dayKm(slots, 1, cfg),
+      'waiting has to cost something, or a four-hour hole looks free');
+    const oneHourOfWaiting = 60 * S.IDLE_KM_PER_MIN;
+    assert.ok(oneHourOfWaiting > 2 && oneHourOfWaiting < 10,
+      `an hour of waiting should be worth a few km, got ${oneHourOfWaiting}`);
   });
 });

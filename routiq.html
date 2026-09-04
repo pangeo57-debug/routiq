@@ -3106,47 +3106,80 @@ const Scheduler = {
     return { km, best, ratio: best > 0 ? km/best : 1 };
   },
 
-  // Untangle each day: try exchanging the time positions of two lessons and
-  // keep the exchange when the day gets shorter to drive.
+  // Dead time in one day: minutes spent neither teaching nor driving.
+  dayIdle(slots, day, settings){
+    const margin = (settings.travelMargin ?? 2);
+    let idle = 0;
+    for(let i=1;i<slots.length;i++){
+      if(slots[i].studentId === slots[i-1].studentId) continue;  // one continuous block
+      const drive = this.travelEstMin(slots[i-1].studentId, slots[i-1].address,
+                                      slots[i].studentId, slots[i].address, day);
+      idle += Math.max(0, this.toMin(slots[i].start) - this.toMin(slots[i-1].end) - drive - margin);
+    }
+    return idle;
+  },
+
+  // What a day costs its owner: kilometres driven, plus an hour of sitting
+  // around waiting counted as roughly five kilometres of driving. Waiting is
+  // not free, and treating it as free is how a schedule ends up with a
+  // four-hour hole in the middle of an afternoon.
+  IDLE_KM_PER_MIN: 0.083,
+  dayCost(slots, day, settings){
+    return this.dayKm(slots, day, settings)
+         + this.dayIdle(slots, day, settings) * this.IDLE_KM_PER_MIN;
+  },
+
+  // Tidy each day: reorder its lessons to cut driving and dead time.
   //
-  // The optimizer minimises kilometres, but visit order is locked to lesson
-  // times, and once availability windows dictate those times the geography can
-  // end up nonsense — Rio, Patra, Rio, Patra, every stop legal. This is the
-  // last chance to notice that and fix it, and it is the same move a user
-  // makes by hand when they tap two lessons to trade places.
+  // Two things the earlier passes cannot do. compactDays pulls lessons earlier
+  // but never reorders, so a hole stays open whenever the NEXT student is not
+  // free earlier — even when someone later in the day is free the whole
+  // afternoon and could simply move up. And the optimizer minimises kilometres
+  // only, so it happily leaves a four-hour wait if the driving is short, and
+  // can leave a day bouncing Rio, Patra, Rio, Patra because visit order is
+  // locked to lesson times.
   //
-  // Each candidate is re-timed with relayoutDay and kept only if it is legal
-  // AND shorter, so the pass can only improve the day.
-  reduceZigzag(schedule, students, settings){
-    let swaps = 0, kmSaved = 0;
+  // The move is an exchange of two lessons' positions — the same move a user
+  // makes by hand when they tap two lessons to trade places. Every candidate is
+  // re-timed with relayoutDay and kept only if it is legal AND cheaper, so the
+  // pass can only improve a day.
+  //
+  // Relocation moves (lift one lesson out and reinsert it elsewhere) were
+  // measured too: worth about 1% over 11 days, and no test could isolate a case
+  // where exchanges could not reach the same arrangement. Not kept — doubling
+  // the candidates for a gain nothing can demonstrate is how untestable code
+  // accumulates.
+  tidyDays(schedule, students, settings){
+    let moves = 0, kmSaved = 0, idleSaved = 0;
     for(const day of (settings.workDays||[])){
       let slots = (schedule[day]||[]).slice()
         .sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-      if(slots.length < 3) continue;   // nothing to untangle with two stops
-      let km = this.dayKm(slots, day, settings);
+      if(slots.length < 3) continue;
+      let cost = this.dayCost(slots, day, settings);
+      const km0 = this.dayKm(slots, day, settings);
+      const idle0 = this.dayIdle(slots, day, settings);
 
-      for(let pass=0; pass<6; pass++){
+      for(let pass=0; pass<8; pass++){
         let improved = false;
-        for(let i=0; i<slots.length-1; i++){
-          for(let j=i+1; j<slots.length; j++){
-            // Never split a student's own back-to-back block by reordering it.
+        for(let i=0;i<slots.length-1;i++){
+          for(let j=i+1;j<slots.length;j++){
+            // Never reorder a student's own back-to-back block apart.
             if(slots[i].studentId === slots[j].studentId) continue;
             const trial = slots.slice();
             [trial[i], trial[j]] = [trial[j], trial[i]];
             const laid = this.relayoutDay(trial, day, students, settings);
             if(!laid) continue;
-            const trialKm = this.dayKm(laid, day, settings);
-            if(trialKm < km - 0.05){
-              kmSaved += km - trialKm;
-              slots = laid; km = trialKm; swaps++; improved = true;
-            }
+            const c = this.dayCost(laid, day, settings);
+            if(c < cost - 0.05){ slots = laid; cost = c; moves++; improved = true; }
           }
         }
         if(!improved) break;
       }
       schedule[day] = slots;
+      kmSaved += km0 - this.dayKm(slots, day, settings);
+      idleSaved += idle0 - this.dayIdle(slots, day, settings);
     }
-    return { swaps, kmSaved };
+    return { moves, kmSaved, idleSaved };
   },
 
   compactDays(schedule, students, settings){
@@ -4856,12 +4889,14 @@ const App = {
     // Close the holes the repair passes leave behind. Runs last, after every
     // pass that can insert or remove a lesson, and before verification — a
     // compacted day is what the user actually reads.
-    // Untangle each day before compacting it: the optimizer minimises km but
-    // cannot reorder stops (visit order follows lesson times), so a day can end
-    // up bouncing between two areas. This is the last chance to notice.
+    // Tidy each day before compacting it: reorder to cut both driving and dead
+    // time. The optimizer minimises km only and cannot reorder stops (visit
+    // order follows lesson times), and compaction never reorders — so this is
+    // the only pass that can close a hole by moving a later, more flexible
+    // lesson up into it.
     try{
-      const z = Scheduler.reduceZigzag(state.schedule, state.students, state.settings);
-      if(z.swaps) console.info(`reduceZigzag: ${z.swaps} swaps, ${z.kmSaved.toFixed(1)} km saved`);
+      const z = Scheduler.tidyDays(state.schedule, state.students, state.settings);
+      if(z.moves) console.info(`tidyDays: ${z.moves} moves, ${z.kmSaved.toFixed(1)} km and ${Math.round(z.idleSaved)} min of waiting saved`);
     }catch(e){}
 
     try{
