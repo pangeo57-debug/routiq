@@ -1056,3 +1056,81 @@ describe('dead time in the middle of a day', () => {
       `an hour of waiting should be worth a few km, got ${oneHourOfWaiting}`);
   });
 });
+
+describe('traffic by time of day, not just by day', () => {
+  // The app fetches BOTH a peak and an off-peak matrix from HERE on every run
+  // and used off-peak only on Saturdays, so a 21:00 Tuesday lesson was charged
+  // rush-hour traffic. Wrong with data already in hand.
+  //
+  // Synthetic matrices here: peak legs take 60 minutes, off-peak 10. Real
+  // traffic differences are nothing like that large — the exaggeration just
+  // makes which matrix was used unmistakable.
+  function withMatrices(app) {
+    const ids = ['home', 's1', 's2'];
+    const mat = (secs) => ({
+      coordIds: ids,
+      durations: ids.map(() => ids.map(() => secs)),
+      distances: ids.map(() => ids.map(() => secs * 10)),
+    });
+    app.setState({
+      travelMatrixPeak: mat(3600),      // 60 min
+      travelMatrixOffPeak: mat(600),    // 10 min
+      settings: settings(), coords: {},
+    });
+  }
+  const drive = (app, day, atMin) =>
+    app.Scheduler.travelEstMin('s1', 'a1', 's2', 'a2', day, atMin);
+
+  test('a rush-hour journey uses the peak matrix', () => {
+    const app = loadApp(); withMatrices(app);
+    assert.equal(drive(app, 2, 17 * 60), 60, 'Tuesday 17:00 is rush hour');
+  });
+
+  test('an evening journey on a weekday no longer pays rush-hour traffic', () => {
+    const app = loadApp(); withMatrices(app);
+    assert.equal(drive(app, 2, 21 * 60), 10,
+      'a 21:00 Tuesday lesson was charged peak traffic before this');
+  });
+
+  test('an early-afternoon journey does not pay rush-hour traffic either', () => {
+    const app = loadApp(); withMatrices(app);
+    assert.equal(drive(app, 2, 15 * 60), 10);
+  });
+
+  test('Saturday stays off-peak all day', () => {
+    const app = loadApp(); withMatrices(app);
+    assert.equal(drive(app, 6, 17 * 60), 10, 'Saturday afternoon is not a commute');
+  });
+
+  test('a caller with no time still gets the old behaviour', () => {
+    const app = loadApp(); withMatrices(app);
+    // Guessing a time for a caller that does not know one would be worse than
+    // the conservative answer.
+    assert.equal(drive(app, 2, undefined), 60);
+  });
+
+  test('with only one matrix available nothing changes', () => {
+    const app = loadApp();
+    const ids = ['home', 's1', 's2'];
+    app.setState({
+      travelMatrixPeak: { coordIds: ids,
+        durations: ids.map(() => ids.map(() => 1800)), distances: null },
+      travelMatrixOffPeak: null, settings: settings(), coords: {},
+    });
+    assert.equal(drive(app, 2, 21 * 60), 30, 'OSRM has no traffic data at all');
+  });
+
+  test('the day cost reflects when each leg is actually driven', () => {
+    const app = loadApp(); withMatrices(app);
+    const S = app.Scheduler, cfg = app.state.settings;
+    const mk = (start) => [
+      { studentId: 's1', address: 'a1', start, end: `${Number(start.slice(0,2))+1}:00`, duration: 60 },
+      { studentId: 's2', address: 'a2', start: `${Number(start.slice(0,2))+2}:00`,
+        end: `${Number(start.slice(0,2))+3}:00`, duration: 60 },
+    ];
+    const rushHour = S.dayKm(mk('17:00'), 2, cfg);
+    const evening  = S.dayKm(mk('20:00'), 2, cfg);
+    assert.ok(evening < rushHour,
+      `a later day should cost less to drive, got ${evening} vs ${rushHour}`);
+  });
+});

@@ -40,7 +40,7 @@ All data (students, schedule, settings) is stored **locally on the user's device
 |---|---|---|
 | [Nominatim](https://nominatim.openstreetmap.org) (OpenStreetMap) | Address geocoding (default) | Free |
 | [OSRM](https://router.project-osrm.org) | Real road distances/durations | Free |
-| [HERE Technologies](https://developer.here.com) (optional) | Better search accuracy + live traffic — requires a personal API key set by the user in Settings | Free tier is enough for individual use |
+| [HERE Technologies](https://developer.here.com) (optional) | Better search accuracy + live traffic, applied per lesson time (rush hour 16:00-20:00 vs clear roads) — requires a personal API key set by the user in Settings | Free tier is enough for individual use |
 | Leaflet.js | Map rendering | Free, open source |
 | jsPDF + html2canvas | PDF export | Free, open source |
 
@@ -70,7 +70,7 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 npm test
 ```
 
-98 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+105 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run

@@ -1566,13 +1566,37 @@ const Scheduler = {
     return this.validCoord(c) ? c : this.coordsHash(addr||'');
   },
 
+  // Rush hour, in local terms: the afternoon-into-evening congestion a private
+  // tutor actually drives through. Outside it, roads are clear even midweek.
+  PEAK_FROM: 16*60,
+  PEAK_TO:   20*60,
+
+  // Which of the two traffic matrices applies to a journey on `day` starting at
+  // `atMin` minutes past midnight.
+  //
+  // The app fetches BOTH a peak and an off-peak matrix from HERE on every run —
+  // it pays for both — and then used off-peak only on Saturdays. So a 21:00
+  // Tuesday lesson was charged rush-hour traffic, and a 15:00 one too. That is
+  // wrong with data already in hand, whatever the size of the real difference.
+  //
+  // With no time given, the old day-only behaviour stands: a caller that does
+  // not know when the journey happens should not have a time guessed for it.
+  matrixFor(day, atMin){
+    if(typeof state==='undefined') return null;
+    const peak = state.travelMatrixPeak || state.travelMatrix;
+    const off  = state.travelMatrixOffPeak;
+    if(!off) return peak;
+    if(day===6) return off;                                    // Saturday: quiet all day
+    if(atMin==null) return peak;                               // caller has no time
+    return (atMin >= this.PEAK_FROM && atMin < this.PEAK_TO) ? peak : off;
+  },
+
   // Estimated travel minutes between two slots/addresses using geocoords.
-  // day: 1-5 = weekday (peak matrix), 6 = Saturday (off-peak matrix), undefined = peak
-  travelEstMin(fromId, fromAddr, toId, toAddr, day){
+  // `atMin` is when the journey STARTS (minutes past midnight); omit it and the
+  // peak matrix is used, as before.
+  travelEstMin(fromId, fromAddr, toId, toAddr, day, atMin){
     if(typeof state!=='undefined'){
-      // Pick matrix based on day: Saturday uses off-peak, weekdays use peak
-      const mat = (day===6 && state.travelMatrixOffPeak) ? state.travelMatrixOffPeak
-                : (state.travelMatrixPeak || state.travelMatrix);
+      const mat = this.matrixFor(day, atMin);
       if(mat){
         const ia = mat.coordIds.indexOf(fromId);
         const ib = mat.coordIds.indexOf(toId);
@@ -1616,10 +1640,9 @@ const Scheduler = {
   // This is what geoOptimize/saOptimize should use for their km objective and
   // for nearest-neighbor ordering, instead of raw Euclidean distance — otherwise
   // the whole optimization pass is chasing a metric that doesn't match the roads.
-  travelEstKm(fromId, fromAddr, toId, toAddr, day){
+  travelEstKm(fromId, fromAddr, toId, toAddr, day, atMin){
     if(typeof state!=='undefined'){
-      const mat = (day===6 && state.travelMatrixOffPeak) ? state.travelMatrixOffPeak
-                : (state.travelMatrixPeak || state.travelMatrix);
+      const mat = this.matrixFor(day, atMin);
       if(mat && mat.distances){
         const ia = mat.coordIds.indexOf(fromId);
         const ib = mat.coordIds.indexOf(toId);
@@ -2911,7 +2934,8 @@ const Scheduler = {
       if(prev){
         // Same student back to back is one continuous block: no travel, no margin.
         const need = prev.studentId === sl.studentId ? 0
-          : this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, day) + margin;
+          : this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, day,
+                              this.toMin(prev.end)) + margin;
         earliest = Math.max(earliest, this.toMin(prev.end) + need);
       }
       for(let guard=0; guard<breaks.length+1; guard++){
@@ -2931,13 +2955,17 @@ const Scheduler = {
     const homeAddr = (settings && settings.homeAddress) || '';
     if(!slots.length) return 0;
     let km = 0, prevId='home', prevAddr=homeAddr, prevSl=null;
+    // The first leg leaves home in time for the first lesson; every later leg
+    // leaves when the previous one ends. That departure time decides whether
+    // the journey is charged rush-hour traffic or clear roads.
+    let leaveAt = this.toMin(slots[0].start);
     for(const s of slots){
       const sameLocation = prevSl && (prevSl.studentId===s.studentId ||
         (prevSl.groupCode && prevSl.groupCode===s.groupCode));
-      if(!sameLocation) km += this.travelEstKm(prevId, prevAddr, s.studentId, s.address, day);
-      prevId=s.studentId; prevAddr=s.address; prevSl=s;
+      if(!sameLocation) km += this.travelEstKm(prevId, prevAddr, s.studentId, s.address, day, leaveAt);
+      prevId=s.studentId; prevAddr=s.address; prevSl=s; leaveAt=this.toMin(s.end);
     }
-    return km + this.travelEstKm(prevId, prevAddr, 'home', homeAddr, day);
+    return km + this.travelEstKm(prevId, prevAddr, 'home', homeAddr, day, leaveAt);
   },
 
   // How much of a day's driving is wasted going back and forth.
@@ -3015,8 +3043,11 @@ const Scheduler = {
     let idle = 0;
     for(let i=1;i<slots.length;i++){
       if(slots[i].studentId === slots[i-1].studentId) continue;  // one continuous block
+      // The drive starts when the previous lesson ends — which decides whether
+      // it is a rush-hour journey or a clear-road one.
       const drive = this.travelEstMin(slots[i-1].studentId, slots[i-1].address,
-                                      slots[i].studentId, slots[i].address, day);
+                                      slots[i].studentId, slots[i].address, day,
+                                      this.toMin(slots[i-1].end));
       idle += Math.max(0, this.toMin(slots[i].start) - this.toMin(slots[i-1].end) - drive - margin);
     }
     return idle;
@@ -3124,7 +3155,8 @@ const Scheduler = {
           // travel, no margin. Anything else needs the real drive plus margin.
           const need = prev.studentId === sl.studentId
             ? 0
-            : this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, d) + margin;
+            : this.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, d,
+                                this.toMin(prev.end)) + margin;
           earliest = Math.max(earliest, this.toMin(prev.end) + need);
         }
 

@@ -40,7 +40,7 @@ PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙ�
 |---|---|---|
 | [Nominatim](https://nominatim.openstreetmap.org) (OpenStreetMap) | Γεωκωδικοποίηση διευθύνσεων (προεπιλογή) | Δωρεάν |
 | [OSRM](https://router.project-osrm.org) | Πραγματικές αποστάσεις/χρόνοι δρόμου | Δωρεάν |
-| [HERE Technologies](https://developer.here.com) (προαιρετικό) | Καλύτερη ακρίβεια αναζήτησης + live traffic — χρειάζεται προσωπικό API key από τον χρήστη στις Ρυθμίσεις | Δωρεάν tier αρκετό για ατομική χρήση |
+| [HERE Technologies](https://developer.here.com) (προαιρετικό) | Καλύτερη ακρίβεια αναζήτησης + live traffic, ανά ώρα μαθήματος (αιχμή 16:00-20:00 έναντι ελεύθερων δρόμων) — χρειάζεται προσωπικό API key από τον χρήστη στις Ρυθμίσεις | Δωρεάν tier αρκετό για ατομική χρήση |
 | Leaflet.js | Εμφάνιση χάρτη | Δωρεάν, open source |
 | jsPDF + html2canvas | Εξαγωγή προγράμματος σε PDF | Δωρεάν, open source |
 
@@ -70,7 +70,7 @@ PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙ�
 npm test
 ```
 
-98 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
+105 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
 
 Επειδή η εφαρμογή είναι ένα αρχείο HTML, τα τεστ φορτώνουν το πραγματικό
 `<script>` σε Node `vm` sandbox με stubbed browser API (`test/harness.js`).
