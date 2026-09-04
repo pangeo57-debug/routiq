@@ -1056,3 +1056,99 @@ describe('dead time in the middle of a day', () => {
       `an hour of waiting should be worth a few km, got ${oneHourOfWaiting}`);
   });
 });
+
+describe('the order students are tried in', () => {
+  // The feed order decides who gets the good slots, so it decides the shape of
+  // the whole solution. The first attempts use orderings chosen on a principle;
+  // the rest stay random so the search still explores.
+  function mixed(app) {
+    const sts = [
+      student('flexible', { days: [1, 2, 3, 4, 5], lessonsPerWeek: 1 }),
+      student('tight', { days: [1], window: { start: '15:00', end: '16:00' }, lessonsPerWeek: 1 }),
+      student('busy', { days: [1, 2, 3, 4, 5], lessonsPerWeek: 3 }),
+    ];
+    const cfg = settings();
+    app.setState({ students: sts, settings: cfg, coords: cityCoords(sts) });
+    return { sts, cfg };
+  }
+
+  test('the first attempt puts the least flexible student first', () => {
+    const app = loadApp();
+    const { sts, cfg } = mixed(app);
+    const order = app.Scheduler.attemptOrder(0, sts, cfg, app.state.coords);
+    assert.equal(order[0].id, 'tight',
+      'someone free one hour a week must be placed before the flexible ones eat the space');
+  });
+
+  test('the second attempt puts the student needing most lessons first', () => {
+    const app = loadApp();
+    const { sts, cfg } = mixed(app);
+    assert.equal(app.Scheduler.attemptOrder(1, sts, cfg, app.state.coords)[0].id, 'busy');
+  });
+
+  test('the geographic attempt starts nearest home', () => {
+    const app = loadApp();
+    const sts = [1, 2, 3].map(i => student('s' + i, { lessonsPerWeek: 1 }));
+    const cfg = settings();
+    const coords = { home: { lat: 38.240, lon: 21.730 },
+      s1: { lat: 38.340, lon: 21.830 }, s2: { lat: 38.241, lon: 21.731 }, s3: { lat: 38.290, lon: 21.780 } };
+    app.setState({ students: sts, settings: cfg, coords });
+    const order = app.Scheduler.attemptOrder(2, sts, cfg, coords);
+    // Array.from: values crossing the vm boundary carry the sandbox's own
+    // Array prototype, so deepStrictEqual fails on identity alone.
+    assert.deepStrictEqual(Array.from(order.map(s => s.id)), ['s2', 's3', 's1']);
+  });
+
+  test('the principled orderings are all different from each other', () => {
+    const app = loadApp();
+    const { sts, cfg } = mixed(app);
+    const seen = new Set();
+    for (let i = 0; i < 4; i++) {
+      seen.add(app.Scheduler.attemptOrder(i, sts, cfg, app.state.coords).map(s => s.id).join(','));
+    }
+    assert.ok(seen.size >= 3, `attempts should explore different shapes, got ${seen.size} distinct`);
+  });
+
+  test('every ordering contains every student exactly once', () => {
+    const app = loadApp();
+    const { sts, cfg } = mixed(app);
+    // Losing or duplicating a student here would silently drop them from the
+    // whole schedule, or double-book them.
+    for (let i = 0; i < 7; i++) {
+      const order = app.Scheduler.attemptOrder(i, sts, cfg, app.state.coords);
+      assert.deepStrictEqual(Array.from(order.map(s => s.id)).sort(), ['busy', 'flexible', 'tight'],
+        `attempt ${i} changed the set of students`);
+    }
+  });
+
+  test('runMultiAttempt actually uses these orderings', async () => {
+    // Testing attemptOrder in isolation proves nothing if the search never
+    // calls it — reverting the wiring to a plain shuffle left every other test
+    // in this block green.
+    const app = loadApp();
+    const sts = Array.from({ length: 6 }, (_, i) => student('s' + i, { lessonsPerWeek: 1 }));
+    const cfg = settings();
+    const coords = cityCoords(sts);
+    app.setState({ students: sts, settings: cfg, coords,
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+
+    const asked = [];
+    const real = app.Scheduler.attemptOrder.bind(app.Scheduler);
+    app.Scheduler.attemptOrder = (i, students, settings2, coords2) => {
+      asked.push(i);
+      return real(i, students, settings2, coords2);
+    };
+    await app.Scheduler.runMultiAttempt(sts, cfg, coords, 3, false);
+
+    assert.deepStrictEqual(Array.from(asked), [0, 1, 2],
+      'each attempt must ask for its own ordering, in order');
+  });
+
+  test('a missing coordinate does not break the geographic ordering', () => {
+    const app = loadApp();
+    const { sts, cfg } = mixed(app);
+    app.setState({ coords: {} });          // nothing geocoded yet
+    const order = app.Scheduler.attemptOrder(2, sts, cfg, {});
+    assert.equal(order.length, 3);
+  });
+});
