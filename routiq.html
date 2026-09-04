@@ -651,7 +651,23 @@ function normalizeSearchText(str){
 const Storage = {
   KEYS: { settings:'rp_settings', students:'rp_students', schedule:'rp_schedule', coords:'rp_coords' },
   get(k){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):null }catch(e){return null} },
-  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)) }catch(e){} },
+  // A failed write used to be swallowed silently, which is the worst possible
+  // outcome for an app whose data lives ONLY on this device: the user is told
+  // the student is saved, closes the app, and it is gone. localStorage fills up
+  // (a few MB), and Safari in private mode rejects writes outright.
+  set(k,v){
+    try{ localStorage.setItem(k,JSON.stringify(v)); return true; }
+    catch(e){
+      console.error('localStorage write failed', k, e);
+      // Guard against a save-loop: one warning, not one per keystroke.
+      if(!this._warnedFull){
+        this._warnedFull = true;
+        try{ Toast.show(t('toast_storage_full'), 'error', 9000); }catch(_){}
+      }
+      return false;
+    }
+  },
+  _warnedFull:false,
   loadSettings(){ return this.get(this.KEYS.settings) || defaultSettings() },
   saveSettings(s){ this.set(this.KEYS.settings,s) },
   loadStudents(){ return this.get(this.KEYS.students) || [] },
@@ -779,6 +795,7 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    toast_storage_full:'⚠ Η αποθήκευση απέτυχε — ο χώρος της συσκευής γέμισε. Κάνε εξαγωγή αντιγράφου και σβήσε παλιά δεδομένα.',
     route_detour_note:'🔄 Αυτή η μέρα έχει {km}χλμ πηγαινέλα ({pct}% παραπάνω). Οι ώρες που είναι ελεύθεροι οι μαθητές το επιβάλλουν — άλλαξε ένα μάθημα μέρα ή διεύρυνε ένα παράθυρο για να μειωθεί.',
     swap_reason_no_room:'Δεν υπάρχει χώρος στη μέρα',
     unplaced_solution_combo:'Λύση Α: Συνδυαστικό μπλοκ {block}', unplaced_combo_detail:'{needed} × {dur}λ → 1 × {total}λ σε μία μέρα',
@@ -966,6 +983,7 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    toast_storage_full:'⚠ Saving failed — this device is out of storage. Export a backup and clear old data.',
     route_detour_note:'🔄 This day backtracks {km}km ({pct}% further than the stops need). The times people are free force it — move a lesson to another day or widen a window to cut it.',
     swap_reason_no_room:"there isn't room in the day",
     unplaced_solution_combo:'Solution A: Combined block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min in one day',
@@ -1153,6 +1171,7 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    toast_storage_full:'⚠ Échec de l\u2019enregistrement — stockage plein. Exportez une sauvegarde et supprimez les anciennes données.',
     route_detour_note:"🔄 Cette journée fait {km}km de va-et-vient ({pct}% de plus). Les disponibilités l'imposent — déplacez un cours ou élargissez une plage pour la réduire.",
     swap_reason_no_room:'pas de place dans la journée',
     unplaced_solution_combo:'Solution A : Bloc combiné {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min en un jour',
@@ -1340,6 +1359,7 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    toast_storage_full:'⚠ Speichern fehlgeschlagen — Speicher voll. Exportieren Sie eine Sicherung und löschen Sie alte Daten.',
     route_detour_note:'🔄 Dieser Tag fährt {km}km hin und zurück ({pct}% mehr). Die Verfügbarkeiten erzwingen das — verschieben Sie eine Stunde oder erweitern Sie ein Zeitfenster.',
     swap_reason_no_room:'kein Platz an diesem Tag',
     unplaced_solution_combo:'Lösung A: Kombinierter Block {block}', unplaced_combo_detail:'{needed} × {dur}min → 1 × {total}min an einem Tag',
@@ -2529,37 +2549,8 @@ const Scheduler = {
   },
 
 
-  // Remaining minutes available on a day for new lessons
-  dayFreeMin(day, schedule, settings){
-    const dayH = settings.dayHours[day];
-    if(!dayH) return 0;
-    const total = this.toMin(dayH.end) - this.toMin(dayH.start);
-    const used = (schedule[day]||[]).reduce((a,s)=>a+s.duration,0);
-    const buf  = (schedule[day]||[]).length * (settings.travelMargin ?? 3);
-    return Math.max(0, total - used - buf);
-  },
 
 
-  // True flexibility: count valid 5-min start positions across all unused available days
-  flexScore(student, schedule, settings){
-    const placedDays = this.placedOnDays(student.id, schedule);
-    let total = 0;
-    for(const day of settings.workDays){
-      const av = student.availability[day];
-      if(!av || !av.on || placedDays.includes(day)) continue;
-      const dayH = settings.dayHours[day];
-      if(!dayH) continue;
-      const buf = settings.travelMargin ?? 3;
-      const winStart = Math.max(this.toMin(dayH.start), this.toMin(av.start));
-      const winEnd   = Math.min(this.toMin(dayH.end),   this.toMin(av.end));
-      const dur = student.lessonDuration;
-      const existing = schedule[day] || [];
-      for(let t=winStart; t+dur<=winEnd; t+=5){
-        if(!this.isBlocked(t,t+dur,day,settings) && !this.overlaps(t,t+dur,existing,buf,student.id)) total++;
-      }
-    }
-    return total || 999999; // 0 slots = unplaceable, sort last
-  },
 
   addLesson(schedule, student, day, slot){
     schedule[day].push({
@@ -2571,59 +2562,6 @@ const Scheduler = {
     schedule[day].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
   },
 
-  // Displacement: remove a blocking lesson, place `student`, re-place the displaced one elsewhere
-  tryDisplace(student, allStudents, schedule, settings){
-    for(const day of settings.workDays){
-      const av = student.availability[day];
-      if(!av || !av.on) continue;
-      if(this.placedOnDays(student.id, schedule).includes(day)) continue;
-
-      for(const blocking of [...(schedule[day]||[])]){
-        if(blocking.merged||blocking.isGroup) continue; // don't displace merged/group blocks
-
-        // Try placing student without the blocking lesson
-        const tempDay = (schedule[day]||[]).filter(s => s !== blocking);
-        const slot = this.findSlot(student, day, tempDay, settings);
-        if(!slot) continue;
-
-        // Can the displaced student go somewhere else?
-        const displaced = allStudents.find(s => s.id === blocking.studentId);
-        if(!displaced) continue;
-
-        // Try every other available day for the displaced student
-        const displacedPlacedDays = this.placedOnDays(displaced.id, schedule).filter(d => d !== day);
-        let altDay = null, altSlot = null;
-
-        for(const altD of settings.workDays){
-          if(altD === day) continue;
-          if(displacedPlacedDays.includes(altD)) continue;
-          const av2 = displaced.availability[altD];
-          if(!av2 || !av2.on) continue;
-          const s2 = this.findSlot(displaced, altD, schedule[altD]||[], settings);
-          if(s2){ altDay = altD; altSlot = s2; break; }
-        }
-
-        if(altSlot){
-          // Execute displacement
-          schedule[day] = tempDay;
-          this.addLesson(schedule, student, day, slot);
-          this.addLesson(schedule, displaced, altDay, altSlot);
-          return true;
-        }
-
-        // Try same day in a different time (after student is placed)
-        const withStudent = [...tempDay, {studentId:student.id, start:slot.start, end:slot.end, duration:student.lessonDuration}];
-        const sameSlot = this.findSlot(displaced, day, withStudent, settings);
-        if(sameSlot){
-          schedule[day] = tempDay;
-          this.addLesson(schedule, student, day, slot);
-          this.addLesson(schedule, displaced, day, sameSlot);
-          return true;
-        }
-      }
-    }
-    return false;
-  },
 
   // Find slot with explicit duration override
   findSlotDur(student, day, existing, settings, dur){
@@ -2652,45 +2590,6 @@ const Scheduler = {
     return null;
   },
 
-  // Swap optimization: for each pair of slots on different days, try swapping if it improves geo spread
-  swapOptimize(schedule, settings, coords){
-    const days = Object.keys(schedule).map(Number);
-    for(let di=0;di<days.length;di++){
-      for(let dj=di+1;dj<days.length;dj++){
-        const dayA=days[di], dayB=days[dj];
-        for(let si=0;si<schedule[dayA].length;si++){
-          for(let sj=0;sj<schedule[dayB].length;sj++){
-            const slotA=schedule[dayA][si], slotB=schedule[dayB][sj];
-            if(slotA.studentId===slotB.studentId) continue;
-            if(slotA.merged||slotB.merged||slotA.isGroup||slotB.isGroup) continue;
-            // Check if swap is constraint-valid
-            const studentA = {id:slotA.studentId,availability:{},lessonDuration:slotA.duration};
-            const studentB = {id:slotB.studentId,availability:{},lessonDuration:slotB.duration};
-            // Simple availability check
-            const avA = state?.students?.find(s=>s.id===slotA.studentId)?.availability;
-            const avB = state?.students?.find(s=>s.id===slotB.studentId)?.availability;
-            if(!avA||!avB) continue;
-            if(!(avA[dayB]&&avA[dayB].on)) continue;
-            if(!(avB[dayA]&&avB[dayA].on)) continue;
-            // Calc current vs swapped geo spread
-            const cA = this.safeCoord(coords, slotA.studentId, slotA.address);
-            const cB = this.safeCoord(coords, slotB.studentId, slotB.address);
-            const centA = this.dayCentroid(schedule[dayA].filter((_,i)=>i!==si), coords)||cA;
-            const centB = this.dayCentroid(schedule[dayB].filter((_,i)=>i!==sj), coords)||cB;
-            const before = this.dist(cA,centA) + this.dist(cB,centB);
-            const after  = this.dist(cB,centA) + this.dist(cA,centB);
-            if(after < before - 0.003){
-              // Do swap — just swap studentId/name/subject/address/color
-              [schedule[dayA][si], schedule[dayB][sj]] = [
-                {...schedule[dayB][sj], start:schedule[dayA][si].start, end:schedule[dayA][si].end},
-                {...schedule[dayA][si], start:schedule[dayB][sj].start, end:schedule[dayB][sj].end}
-              ];
-            }
-          }
-        }
-      }
-    }
-  },
 
   // Compute minimum window extension to fit this student
   computeSuggestion(u, schedule, settings){
@@ -2729,14 +2628,6 @@ const Scheduler = {
     u.suggestion = bestTeacher || bestStudent;
   },
 
-  totalWindow(student, settings){
-    let total = 0;
-    settings.workDays.forEach(d => {
-      const av = student.availability[d];
-      if(av && av.on) total += this.windowMinutes(av);
-    });
-    return total || 9999;
-  },
 
   windowMinutes(av){
     if(!av) return 0;
@@ -3060,7 +2951,19 @@ const Scheduler = {
   // (exact for small days, nearest-neighbour + 2-opt beyond that). 1.0 means
   // the time order already is the efficient order; 1.6 means 60% of the
   // driving is backtracking.
+  // Cached: this runs on every route render, including each day-tab switch, and
+  // the 2-opt below is O(n^3). Measured at 20ms for 14 stops, which is a
+  // visible stall on a phone when it is recomputed for a day that has not
+  // changed.
+  _detourCache:{},
   dayDetour(slots, day, settings){
+    const key = day+'|'+slots.map(s=>s.studentId+s.start).join(',');
+    if(this._detourCache.key === key) return this._detourCache.val;
+    const val = this._dayDetour(slots, day, settings);
+    this._detourCache = { key, val };
+    return val;
+  },
+  _dayDetour(slots, day, settings){
     const stops = [];
     let prevSl = null;
     for(const s of slots){
@@ -7822,7 +7725,16 @@ const Toast = {
     };
     const t = document.createElement('div');
     t.className = `toast ${type}`;
-    t.innerHTML = `${icons[type]||''}${msg}`;
+    // The icon is our own markup and goes in as html; the MESSAGE never does.
+    // Toast messages carry student names, addresses and verifier output — all
+    // typed by the user — through 47 call sites, and writing them as innerHTML
+    // made every one of them stored XSS. Escaping here fixes all of them at
+    // once and cannot be forgotten at a new call site.
+    const icon = document.createElement('span');
+    icon.innerHTML = icons[type] || '';
+    const body = document.createElement('span');
+    body.textContent = msg == null ? '' : String(msg);
+    t.appendChild(icon); t.appendChild(body);
     document.getElementById('toast-container').appendChild(t);
     setTimeout(()=>{
       t.style.animation='toastOut .25s ease forwards';

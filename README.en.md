@@ -70,7 +70,7 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 npm test
 ```
 
-95 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+98 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run

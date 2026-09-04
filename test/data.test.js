@@ -184,3 +184,30 @@ describe('availability exceptions round trip', () => {
     assert.equal(dropped.length, 0);
   });
 });
+
+describe('storage failures', () => {
+  test('a failed save is reported, not swallowed', () => {
+    const app = loadApp();
+    // localStorage fills up (a few MB) and Safari in private mode rejects
+    // writes outright. Swallowing that is the worst outcome for an app whose
+    // data lives only on this device: the user is told the student is saved,
+    // closes the app, and it is gone.
+    app.ctx.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+    const warned = [];
+    app.ctx.document.getElementById = () => ({ appendChild(){}, });
+    app.ctx.document.createElement = () => ({ className:'', style:{}, children:[],
+      set textContent(v){ warned.push(v); }, get textContent(){ return ''; },
+      set innerHTML(v){}, get innerHTML(){ return ''; },
+      appendChild(c){ this.children.push(c); }, remove(){} });
+
+    const ok = app.Storage.set('rp_students', [{ id: 's1' }]);
+
+    assert.equal(ok, false, 'the caller must be able to tell the write failed');
+    assert.ok(warned.some(w => w && w.length), 'and the user must be told');
+  });
+
+  test('a successful save reports success', () => {
+    const app = loadApp();
+    assert.equal(app.Storage.set('rp_students', [{ id: 's1' }]), true);
+  });
+});

@@ -311,3 +311,32 @@ describe('opening a stop in Google Maps', () => {
       'the address survives intact as data');
   });
 });
+
+describe('toast messages', () => {
+  test('a student name cannot execute in a toast', () => {
+    const app = loadApp();
+    // Toasts carry student names, addresses and verifier output — all typed by
+    // the user — through dozens of call sites, and the toast body used to be
+    // written as innerHTML. One escaping mistake in any of those call sites was
+    // stored XSS; escaping in Toast.show cannot be forgotten.
+    let bodyHtml = null, bodyText = null;
+    const made = [];
+    app.ctx.document.createElement = () => {
+      const el = { className: '', style: {}, _html: '', _text: '', children: [],
+        set innerHTML(v) { this._html = v; }, get innerHTML() { return this._html; },
+        set textContent(v) { this._text = v; }, get textContent() { return this._text; },
+        appendChild(c) { this.children.push(c); }, remove() {} };
+      made.push(el);
+      return el;
+    };
+    app.ctx.document.getElementById = () => ({ appendChild() {} });
+
+    app.Toast.show(PAYLOAD, 'info');
+
+    // The message must appear as text, never as markup.
+    const asHtml = made.map(e => e.innerHTML).join('');
+    const asText = made.map(e => e.textContent).join('');
+    assert.ok(!asHtml.includes('onerror'), `payload reached innerHTML: ${asHtml}`);
+    assert.ok(asText.includes('onerror'), 'and it should still be shown, as plain text');
+  });
+});

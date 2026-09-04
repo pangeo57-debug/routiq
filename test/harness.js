@@ -110,7 +110,7 @@ function loadApp(opts = {}) {
     '\n;this.__exports = {Scheduler, App, Router, Storage, state, defaultSettings,' +
     ' I18N, PROFESSION_VALUES, SUBJECTS, COLORS, DAYS, DAYS_FULL, esc, t, tf, curLang,' +
     ' normalizeSearchText, getProfessions, getLabels, subjectLabel, getHereKey,' +
-    ' schedProgress, _schedFrame};';
+    ' schedProgress, _schedFrame, Toast};';
   vm.runInContext(src, ctx, { filename: 'routiq.html' });
 
   const ex = ctx.__exports;
