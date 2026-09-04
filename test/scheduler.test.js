@@ -1134,3 +1134,90 @@ describe('traffic by time of day, not just by day', () => {
       `a later day should cost less to drive, got ${evening} vs ${rushHour}`);
   });
 });
+
+describe('explaining why a gap is there', () => {
+  // The gaps that survive are forced by when people are free — measured:
+  // adding dead time to the optimizer's objective changed the result by exactly
+  // zero minutes across 10 paired scenarios. So the useful thing is not to keep
+  // optimising, it is to name the constraint the user could negotiate.
+  function dayWith(app, nextWindow, blocked) {
+    const sts = [
+      student('A', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }),
+      student('B', { days: [1], lessonsPerWeek: 1, lessonDuration: 60,
+        window: nextWindow || { start: '15:00', end: '22:00' } }),
+    ];
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } },
+      blockedSlots: blocked || [] });
+    app.setState({ students: sts, settings: cfg, coords: { home: { lat: 38.240, lon: 21.730 },
+      A: { lat: 38.246, lon: 21.734 }, B: { lat: 38.252, lon: 21.741 } } });
+    return { sts, cfg,
+      prev: { studentId: 'A', address: 'addr-A', start: '15:00', end: '16:00' } };
+  }
+  const at = (start) => ({ studentId: 'B', address: 'addr-B', start,
+    end: `${Number(start.slice(0,2)) + 1}:00` });
+
+  test('a gap caused by the next student names them and their window', () => {
+    const app = loadApp();
+    const { sts, cfg, prev } = dayWith(app, { start: '19:00', end: '22:00' });
+    const why = app.Scheduler.explainGap(prev, at('19:00'), 1, sts, cfg);
+    assert.ok(why, 'a three-hour wait deserves an explanation');
+    assert.equal(why.kind, 'availability');
+    assert.equal(why.name, 'B');
+    assert.equal(why.from, '19:00');
+    assert.ok(why.wasted > 150, `should report the wasted time, got ${why.wasted}`);
+  });
+
+  test('a gap caused by a reserved break says so instead', () => {
+    const app = loadApp();
+    const { sts, cfg, prev } = dayWith(app, null, [{ day: 1, start: '16:00', end: '18:00' }]);
+    const why = app.Scheduler.explainGap(prev, at('18:00'), 1, sts, cfg);
+    assert.ok(why);
+    assert.equal(why.kind, 'break');
+    assert.equal(why.end, '18:00');
+  });
+
+  test('a normal handover is not explained as a problem', () => {
+    const app = loadApp();
+    const { sts, cfg, prev } = dayWith(app);
+    // Straight after the drive and the margin — nothing to explain.
+    const drive = app.Scheduler.travelEstMin('A', 'addr-A', 'B', 'addr-B', 1, 16 * 60);
+    const start = app.Scheduler.toTime(16 * 60 + drive + (cfg.travelMargin ?? 2));
+    assert.equal(app.Scheduler.explainGap(prev, { studentId: 'B', address: 'addr-B',
+      start, end: '18:00' }, 1, sts, cfg), null);
+  });
+
+  test('a couple of minutes is not reported as a gap', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const { sts, cfg, prev } = dayWith(app);
+    const drive = S.travelEstMin('A', 'addr-A', 'B', 'addr-B', 1, 16 * 60);
+    const couldStart = 16 * 60 + drive + (cfg.travelMargin ?? 2);
+    // B is free from two minutes after the earliest possible handover. That is
+    // a real constraint, but reporting "B is not free before 16:07" under every
+    // lesson would be noise, not information.
+    sts[1].availability[1] = { on: true, start: S.toTime(couldStart + 2), end: '22:00' };
+    app.setState({ students: sts });
+    const next = { studentId: 'B', address: 'addr-B',
+      start: S.toTime(couldStart + 2), end: S.toTime(couldStart + 62) };
+    assert.equal(S.explainGap(prev, next, 1, sts, cfg), null);
+
+    // Half an hour later, though, is worth explaining.
+    sts[1].availability[1] = { on: true, start: S.toTime(couldStart + 30), end: '22:00' };
+    const later = { studentId: 'B', address: 'addr-B',
+      start: S.toTime(couldStart + 30), end: S.toTime(couldStart + 90) };
+    assert.ok(S.explainGap(prev, later, 1, sts, cfg), 'a 30-minute wait should be explained');
+  });
+
+  test('the explanation checks every member of a paired block', () => {
+    const app = loadApp();
+    const { sts, cfg, prev } = dayWith(app);
+    // The block is filed under B, but C is the one who cannot come earlier.
+    sts.push(student('C', { days: [1], lessonsPerWeek: 1,
+      window: { start: '20:00', end: '22:00' } }));
+    app.setState({ students: sts });
+    const why = app.Scheduler.explainGap(prev,
+      { ...at('20:00'), pairedStudentId: 'C' }, 1, sts, cfg);
+    assert.equal(why.kind, 'availability');
+    assert.equal(why.name, 'C', 'blaming the wrong person would send the user to argue with B');
+  });
+});

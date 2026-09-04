@@ -19,7 +19,11 @@ const vm = require('vm');
 const fs = require('fs');
 const path = require('path');
 
-const APP_FILE = path.join(__dirname, '..', 'routiq.html');
+// Overridable so an experiment can load two builds side by side and compare
+// them on identical inputs.
+const APP_FILE = process.env.ROUTIQ_APP_FILE
+  ? path.resolve(process.env.ROUTIQ_APP_FILE)
+  : path.join(__dirname, '..', 'routiq.html');
 
 function extractScript() {
   const html = fs.readFileSync(APP_FILE, 'utf8');
@@ -56,6 +60,15 @@ function stubEl() {
  */
 function loadApp(opts = {}) {
   const storage = Object.create(null);
+
+  // A seeded Math.random makes a run reproducible, so two builds can be
+  // compared on the same starting schedule instead of on different draws.
+  // Without this, runMultiAttempt's shuffles dominate any measurement.
+  let rngState = opts.seed == null ? null : (opts.seed >>> 0) || 1;
+  const seededRandom = () => {
+    rngState = (rngState * 1664525 + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
 
   const ctx = {
     console: opts.quiet === false ? console : { log(){}, warn(){}, error(){}, info(){} },
@@ -100,6 +113,11 @@ function loadApp(opts = {}) {
     Blob: function Blob(parts) { this.parts = parts; },
     L: undefined, // Leaflet absent — map init paths no-op
   };
+  // After the defaults above, or the plain `Math` would overwrite the override.
+  if(opts.seed != null){
+    ctx.Math = Object.create(Math, {
+      random: { value: seededRandom, writable: true, configurable: true } });
+  }
   ctx.globalThis = ctx;
   ctx.self = ctx;
 
