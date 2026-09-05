@@ -211,3 +211,123 @@ describe('storage failures', () => {
     assert.equal(app.Storage.set('rp_students', [{ id: 's1' }]), true);
   });
 });
+
+describe('changing your working hours reaches the students', () => {
+  // Availability is DERIVED from a student's exceptions and the hours in force
+  // when they were saved. Nothing recomputed it when those hours later changed,
+  // so extending a day gained nothing and adding a working day gained nothing
+  // at all — the scheduler saw no availability for it and treated the whole day
+  // as unusable.
+  function withStudents(app, hours, workDays) {
+    const cfg = settings({ workDays, dayHours: hours });
+    const sts = [
+      // No exceptions: free whenever the teacher works.
+      Object.assign(student('free', { days: workDays }), { availabilityExceptions: [] }),
+      // Busy Monday afternoon.
+      Object.assign(student('busy', { days: workDays }),
+        { availabilityExceptions: [{ day: 1, start: '15:00', end: '17:00' }] }),
+    ];
+    app.setState({ settings: cfg, students: sts, coords: {}, schedule: {} });
+    sts.forEach(st => { st.availability = app.App.computeAvailabilityFromExceptions(st.availabilityExceptions); });
+    app.Storage.saveSettings(cfg);
+    return { sts, cfg };
+  }
+
+  /** Drive App.saveSettings with the settings form stubbed. */
+  function saveSettingsWith(app, dayHours) {
+    const vals = { 'set-name': '', 'set-home': app.state.settings.homeAddress,
+      'set-mode': 'car', 'set-fuel': '7', 'set-margin': '2', 'set-speed': '25',
+      'set-here-key': '', 'set-lunch': '0' };
+    for (const d of Object.keys(dayHours)) {
+      vals['dh-start-' + d] = dayHours[d].start;
+      vals['dh-end-' + d] = dayHours[d].end;
+    }
+    app.ctx.document.getElementById = (id) => (id in vals)
+      ? { value: vals[id], style: {}, classList: { add(){}, remove(){} } }
+      : { style: {}, dataset: {}, value: '', textContent: '', innerHTML: '', disabled: false,
+          classList: { add(){}, remove(){}, contains: () => false, toggle(){} },
+          addEventListener(){}, appendChild(){}, remove(){},
+          querySelectorAll: () => [], querySelector: () => null };
+    return app.App.saveSettings();
+  }
+
+  test('extending the day opens the new hours to students', async () => {
+    const app = loadApp();
+    const { sts } = withStudents(app, { 1: { start: '15:00', end: '22:00' },
+                                        2: { start: '15:00', end: '22:00' } }, [1, 2]);
+    assert.equal(sts[0].availability[2].start, '15:00');
+
+    app.state.settings.dayHours = { 1: { start: '08:00', end: '22:00' },
+                                    2: { start: '08:00', end: '22:00' } };
+    await saveSettingsWith(app, app.state.settings.dayHours);
+
+    assert.equal(sts[0].availability[2].start, '08:00',
+      'a student with no exceptions must become free in the newly opened hours');
+    // And the scheduler can actually use them.
+    const slot = app.Scheduler.findSlotFixed(sts[0], 2, [], app.state.settings, 60);
+    assert.ok(slot && app.Scheduler.toMin(slot.start) < app.Scheduler.toMin('15:00'),
+      `expected a morning slot, got ${slot && slot.start}`);
+  });
+
+  test('a student exception still holds after the hours change', async () => {
+    const app = loadApp();
+    const { sts } = withStudents(app, { 1: { start: '15:00', end: '22:00' } }, [1]);
+    app.state.settings.dayHours = { 1: { start: '08:00', end: '22:00' } };
+    await saveSettingsWith(app, app.state.settings.dayHours);
+
+    // "busy" is unavailable Monday 15:00-17:00. Whatever window they end up
+    // with, it must not cover that.
+    const av = sts[1].availability[1];
+    const S = app.Scheduler;
+    assert.ok(S.toMin(av.end) <= S.toMin('15:00') || S.toMin(av.start) >= S.toMin('17:00'),
+      `their stated exception was lost: ${JSON.stringify(av)}`);
+  });
+
+  test('a newly added working day is asked about, not assumed', async () => {
+    const app = loadApp();
+    const { sts } = withStudents(app, { 1: { start: '15:00', end: '22:00' } }, [1]);
+    assert.ok(!sts[0].availability[6], 'nothing recorded for Saturday yet');
+
+    let asked = null;
+    app.App.confirm = (title, text, cb) => { asked = { title, text, cb }; };
+    app.state.settings.workDays = [1, 6];
+    app.state.settings.dayHours = { 1: { start: '15:00', end: '22:00' },
+                                    6: { start: '10:00', end: '18:00' } };
+    await saveSettingsWith(app, app.state.settings.dayHours);
+
+    assert.ok(asked, 'declaring everyone free on a brand new day must be asked, not assumed');
+    assert.ok(!sts[0].availability[6], 'and nothing may change before the user answers');
+
+    asked.cb();
+    assert.ok(sts[0].availability[6] && sts[0].availability[6].on,
+      'once accepted, students become available on the new day');
+    const slot = app.Scheduler.findSlotFixed(sts[0], 6, [], app.state.settings, 60);
+    assert.ok(slot, 'and the scheduler can finally use it');
+  });
+
+  test('days that did not change are left exactly as they were', async () => {
+    const app = loadApp();
+    const { sts } = withStudents(app, { 1: { start: '15:00', end: '22:00' },
+                                        2: { start: '15:00', end: '22:00' } }, [1, 2]);
+    // Hand-tuned window on Tuesday that no exception explains.
+    sts[0].availability[2] = { on: true, start: '18:00', end: '20:00' };
+    app.state.settings.dayHours[1] = { start: '08:00', end: '22:00' };   // only Monday changes
+    await saveSettingsWith(app, app.state.settings.dayHours);
+
+    assert.deepStrictEqual(Object.assign({}, sts[0].availability[2]),
+      { on: true, start: '18:00', end: '20:00' },
+      'an untouched day must keep the window it had');
+  });
+
+  test('a student saved by an older build is left alone', async () => {
+    const app = loadApp();
+    const { sts } = withStudents(app, { 1: { start: '15:00', end: '22:00' } }, [1]);
+    delete sts[0].availabilityExceptions;              // legacy record
+    const before = JSON.stringify(sts[0].availability);
+    app.state.settings.dayHours[1] = { start: '08:00', end: '22:00' };
+    await saveSettingsWith(app, app.state.settings.dayHours);
+
+    assert.equal(JSON.stringify(sts[0].availability), before,
+      'without an exceptions list there is nothing to recompute from — do not guess');
+  });
+});

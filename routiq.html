@@ -795,6 +795,7 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    toast_availability_updated:'Ενημερώθηκε η διαθεσιμότητα {n} μαθητών με βάση το νέο ωράριο', confirm_new_workday_title:'Πρόσθεσες {days}', confirm_new_workday_text:'Κανένας μαθητής δεν έχει δηλώσει διαθεσιμότητα για {days}. Να θεωρηθούν ελεύθεροι όλες τις ώρες εκείνης της μέρας ({n} μαθητές); Μπορείς να το αλλάξεις ανά μαθητή μετά.',
     toast_scheduler_failed:'Ο υπολογισμός απέτυχε — {reason}. Το προηγούμενο πρόγραμμα παρέμεινε.',
     gap_because_availability:'↳ ο/η {name} δεν είναι διαθέσιμος/η πριν τις {from}', gap_because_break:'↳ το διάλειμμά σου τελειώνει στις {end}',
     toast_storage_full:'⚠ Η αποθήκευση απέτυχε — ο χώρος της συσκευής γέμισε. Κάνε εξαγωγή αντιγράφου και σβήσε παλιά δεδομένα.',
@@ -985,6 +986,7 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    toast_availability_updated:'Updated availability for {n} students to match the new hours', confirm_new_workday_title:'You added {days}', confirm_new_workday_text:'No student has said anything about {days}. Treat all {n} of them as free that whole day? You can change it per student afterwards.',
     toast_scheduler_failed:'The calculation failed — {reason}. Your previous schedule was kept.',
     gap_because_availability:'↳ {name} is not free before {from}', gap_because_break:'↳ your break ends at {end}',
     toast_storage_full:'⚠ Saving failed — this device is out of storage. Export a backup and clear old data.',
@@ -1175,6 +1177,7 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    toast_availability_updated:'Disponibilité mise à jour pour {n} élèves selon les nouveaux horaires', confirm_new_workday_title:'Vous avez ajouté {days}', confirm_new_workday_text:'Aucun élève ne s\u2019est prononcé sur {days}. Les considérer tous ({n}) comme libres toute la journée ? Modifiable ensuite par élève.',
     toast_scheduler_failed:'Le calcul a échoué — {reason}. Votre programme précédent a été conservé.',
     gap_because_availability:'↳ {name} n\u2019est pas disponible avant {from}', gap_because_break:'↳ votre pause se termine à {end}',
     toast_storage_full:'⚠ Échec de l\u2019enregistrement — stockage plein. Exportez une sauvegarde et supprimez les anciennes données.',
@@ -1365,6 +1368,7 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    toast_availability_updated:'Verfügbarkeit von {n} Schülern an die neuen Zeiten angepasst', confirm_new_workday_title:'{days} hinzugefügt', confirm_new_workday_text:'Kein Schüler hat sich zu {days} geäußert. Alle {n} als ganztägig frei behandeln? Pro Schüler später änderbar.',
     toast_scheduler_failed:'Berechnung fehlgeschlagen — {reason}. Der bisherige Plan bleibt.',
     gap_because_availability:'↳ {name} ist vor {from} nicht verfügbar', gap_because_break:'↳ Ihre Pause endet um {end}',
     toast_storage_full:'⚠ Speichern fehlgeschlagen — Speicher voll. Exportieren Sie eine Sicherung und löschen Sie alte Daten.',
@@ -6021,6 +6025,38 @@ const App = {
     return availability;
   },
 
+  // Student availability is DERIVED: computed once from their exceptions and
+  // the working hours in force at the moment they were saved. Nothing ever
+  // recomputed it when those hours later changed, so extending a day gained
+  // nothing (everyone stayed pinned to the old window) and adding a working day
+  // gained nothing at all — nobody had any availability recorded for it, so the
+  // scheduler treated the whole new day as unusable.
+  //
+  // `days` limits the work to the days that actually changed, so every other
+  // day keeps exactly the window it had. Students saved by an older build with
+  // no exceptions list are left alone rather than guessed at.
+  reapplyWorkingHours(days){
+    if(!days || !days.length) return { students:0, days:[] };
+    let changed = 0;
+    for(const st of state.students){
+      if(!Array.isArray(st.availabilityExceptions)) continue;
+      const fresh = this.computeAvailabilityFromExceptions(st.availabilityExceptions);
+      let touched = false;
+      for(const d of days){
+        const before = JSON.stringify((st.availability && st.availability[d]) || null);
+        const after  = JSON.stringify(fresh[d] || { on:false });
+        if(before !== after){
+          st.availability = st.availability || {};
+          st.availability[d] = fresh[d] || { on:false };
+          touched = true;
+        }
+      }
+      if(touched) changed++;
+    }
+    if(changed) Storage.saveStudents(state.students);
+    return { students: changed, days };
+  },
+
   // Migration helper: students saved under the old "manual per-day" picker
   // (now removed in favor of exceptions-only) still have their real
   // constraints sitting in st.availability — this converts that into the
@@ -7438,6 +7474,11 @@ const App = {
     }
     const s = state.settings;
     const prevHome = s.homeAddress;
+    // toggleWorkDay mutates state.settings.workDays as soon as it is tapped, so
+    // the previous working days only survive in what was last persisted.
+    const persisted = Storage.loadSettings() || {};
+    const prevDays  = Array.isArray(persisted.workDays) ? persisted.workDays.slice() : [];
+    const prevHours = persisted.dayHours || {};
     s.teacherName = document.getElementById('set-name')?.value?.trim()||'';
     s.homeAddress = document.getElementById('set-home')?.value?.trim()||'';
     s.travelMode  = document.getElementById('set-mode')?.value||'car';
@@ -7471,6 +7512,38 @@ const App = {
     });
 
     Storage.saveSettings(s);
+
+    // Push the new hours through to everyone's availability.
+    //
+    // Days whose hours merely changed are recomputed straight away: the
+    // student's exceptions are the truth, the window is only derived from them.
+    // A day that has just been ADDED is different — nobody has ever said
+    // anything about it, and quietly declaring every student free on a new
+    // Saturday is exactly the kind of silent decision this app should not make.
+    // So that one is asked.
+    const sameHours = (a,b) => !!a === !!b && (!a || (a.start===b.start && a.end===b.end));
+    const changedDays = s.workDays.filter(d => prevDays.includes(d) && !sameHours(prevHours[d], s.dayHours[d]));
+    const addedDays   = s.workDays.filter(d => !prevDays.includes(d));
+    try{
+      const res = this.reapplyWorkingHours(changedDays);
+      if(res.students) Toast.show(tf('toast_availability_updated',{n:res.students}),'info',6000);
+    }catch(e){ console.error('reapplyWorkingHours failed', e); }
+    if(addedDays.length && state.students.length){
+      const names = addedDays.map(d=>DAYS_FULL[d]).join(', ');
+      this.confirm(
+        tf('confirm_new_workday_title',{days:names}),
+        tf('confirm_new_workday_text',{n:state.students.length, days:names}),
+        ()=>{
+          try{
+            const r2 = this.reapplyWorkingHours(addedDays);
+            Toast.show(tf('toast_availability_updated',{n:r2.students}),'info',6000);
+            state._scheduleStale = true;
+            if(state.currentScreen==='home') this.renderHome();
+          }catch(e){ console.error('reapplyWorkingHours failed', e); }
+        },
+        t('btn_apply'), false);
+    }
+
     // Mark stale — don't auto-recalculate on an ordinary settings save. The
     // user regenerates explicitly via "Ανανέωση" whenever they're ready.
     // Exception: a calculation we just interrupted above DOES restart
