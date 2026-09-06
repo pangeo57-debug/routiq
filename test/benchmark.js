@@ -3,195 +3,222 @@
  * Quality benchmark — `npm run bench`.
  *
  * The test suite says whether the scheduler is CORRECT. This says how GOOD it
- * is, on data nobody here designed, and against an optimum it proves rather
- * than assumes. Run it before and after a change to the scheduler: the numbers
- * are what tell you whether the change was an improvement or noise.
+ * is. Run it before and after a change: these numbers are what tell you whether
+ * the change was an improvement or noise. Four separate ideas were discarded
+ * this way after measuring as noise, and one real bug was found by it.
  *
- * Two sources of instances:
+ * Two halves:
  *
- *  - Solomon's 1987 VRPTW benchmarks (see test/data/README.md). Independently
- *    authored, deliberately hard time windows, three different geographies.
- *    Their published best-known solutions are NOT comparable — those use 10 to
- *    19 vehicles and RoutePal has at most six days — so each instance is cut
- *    down to what six days can hold.
- *  - Our own scenarios, which mirror how the app is actually used.
+ *  1. Solomon's 1987 VRPTW instances, scored against their published
+ *     best-known solutions. An absolute, external yardstick — but read the
+ *     caveat printed with the results: we are not solving quite the same
+ *     problem, and the numbers must not be quoted as if we were.
  *
- * The headline number is the DETOUR: total driving divided by the shortest
- * possible tour of exactly the same stops, computed exactly (Held-Karp) for
- * days up to 12 stops. 1.00 means the visit order could not be bettered.
- * It is a fair measure because it holds the day assignment fixed and asks only
- * whether the ordering was right.
+ *  2. Our own scenarios, scored against an optimum this file computes exactly
+ *     (Held-Karp). Closer to how the app is really used, and the only half
+ *     where the day assignment is held fixed so ordering alone is judged.
+ *
+ * `npm run bench -- --against <git-ref>` runs both builds on identical inputs
+ * and prints the difference. Without that, comparing two versions means eyeing
+ * two separate runs, and this project has been fooled by that more than once.
  */
 
+const { execSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { loadApp, student, settings } = require('./harness');
+
+const fixtures = require('./harness');
+const { loadApp, student, settings } = fixtures;
+const { auditSchedule } = require('./invariants');
+const Solomon = require('./solomon');
+
+const SEED = 12345;          // every run is reproducible
+const INSTANCES = ['C101', 'R101', 'RC101'];
 
 // ---------------------------------------------------------------------------
 
-function parseSolomon(file) {
-  const lines = fs.readFileSync(path.join(__dirname, 'data', file), 'utf8').split('\n');
-  const rows = [];
-  for (const line of lines) {
-    const p = line.trim().split(/\s+/).map(Number);
-    if (p.length === 7 && p.every(n => !Number.isNaN(n))) {
-      rows.push({ id: p[0], x: p[1], y: p[2], demand: p[3], ready: p[4], due: p[5], service: p[6] });
-    }
-  }
-  return { depot: rows[0], customers: rows.slice(1) };
+async function runPipeline(app, sts, cfg, coords, budgets) {
+  const S = app.Scheduler;
+  const t0 = Date.now();
+  const r = await S.runMultiAttempt(sts, cfg, coords, budgets.attempts, false);
+  await S.alnsOptimize(r.schedule, sts, cfg, coords, budgets.alns);
+  S.saRepair(r.schedule, sts, cfg, r);
+  await S.guardedPass(r.schedule, cfg, (sch) => S.lnsRepair(sch, sts, cfg, budgets.lns));
+  S.enforceConstraints(r.schedule, sts, cfg);
+  S.collapseForceMergeFragments(r.schedule, sts, cfg);
+  S.tidyDays(r.schedule, sts, cfg);
+  S.compactDays(r.schedule, sts, cfg);
+  return { schedule: r.schedule, ms: Date.now() - t0 };
 }
 
-/**
- * Solomon coordinates are a plane in arbitrary units; RoutePal works in
- * lat/lon. One unit becomes one kilometre at Patras' latitude, so distances
- * keep the instance's proportions and travel times stay realistic.
- */
-const KM_PER_DEG_LAT = 111.32;
-const toLatLon = (p) => ({
-  lat: 38.246 + p.y / KM_PER_DEG_LAT,
-  lon: 21.734 + p.x / (KM_PER_DEG_LAT * Math.cos(38.246 * Math.PI / 180)),
-});
-
-/** Exact shortest tour home -> stops -> home. Held-Karp; exact, not a heuristic. */
-function optimalTour(points, home, dist) {
+/** Exact shortest tour depot -> stops -> depot. Held-Karp, not a heuristic. */
+function optimalTour(points, home, d) {
   const n = points.length;
   if (n === 0) return 0;
-  if (n === 1) return dist(home, points[0]) * 2;
-  if (n > 12) return null;                       // 2^12 * 12^2 is the practical limit
+  if (n === 1) return d(home, points[0]) * 2;
+  if (n > 12) return null;
   const size = 1 << n;
   const dp = Array.from({ length: size }, () => new Float64Array(n).fill(Infinity));
-  for (let i = 0; i < n; i++) dp[1 << i][i] = dist(home, points[i]);
-  for (let mask = 1; mask < size; mask++) {
+  for (let i = 0; i < n; i++) dp[1 << i][i] = d(home, points[i]);
+  for (let mask = 1; mask < size; mask++)
     for (let last = 0; last < n; last++) {
       if (!(mask & (1 << last)) || dp[mask][last] === Infinity) continue;
       for (let next = 0; next < n; next++) {
         if (mask & (1 << next)) continue;
-        const m2 = mask | (1 << next);
-        const cand = dp[mask][last] + dist(points[last], points[next]);
+        const m2 = mask | (1 << next), cand = dp[mask][last] + d(points[last], points[next]);
         if (cand < dp[m2][next]) dp[m2][next] = cand;
       }
     }
-  }
   let best = Infinity;
-  for (let last = 0; last < n; last++) best = Math.min(best, dp[size - 1][last] + dist(points[last], home));
+  for (let last = 0; last < n; last++) best = Math.min(best, dp[size - 1][last] + d(points[last], home));
   return best;
 }
 
 // ---------------------------------------------------------------------------
 
-async function runInstance(name, sts, cfg, coords) {
-  const app = loadApp({ seed: 12345 });          // reproducible: same numbers every run
-  const S = app.Scheduler, A = app.App;
-  app.setState({ students: sts, settings: cfg, coords,
-    travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+async function solomonRun(name, maxRoutes) {
+  const inst = Solomon.parseInstance(name);
+  const best = Solomon.parseSolution(name);
 
-  const t0 = Date.now();
-  const r = await S.runMultiAttempt(sts, cfg, coords, 3, false);
-  await S.alnsOptimize(r.schedule, sts, cfg, coords, 4000);
-  S.saRepair(r.schedule, sts, cfg, r);
-  await S.guardedPass(r.schedule, cfg, (sch) => S.lnsRepair(sch, sts, cfg, 2000));
-  S.enforceConstraints(r.schedule, sts, cfg);
-  S.collapseForceMergeFragments(r.schedule, sts, cfg);
-  S.tidyDays(r.schedule, sts, cfg);
-  S.compactDays(r.schedule, sts, cfg);
-  const ms = Date.now() - t0;
-
-  const { auditSchedule } = require('./invariants');
-  const violations = auditSchedule(S, r.schedule, sts, cfg).length;
-
-  const dist = (a, b) => S.haversineKm(a, b) * 1.4;
-  let km = 0, optKm = 0, exactDays = 0, idle = 0, stops = 0;
-  for (const d of cfg.workDays) {
-    const sl = (r.schedule[d] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
-    if (!sl.length) continue;
-    km += S.dayKm(sl, d, cfg);
-    idle += S.dayIdle(sl, d, cfg);
-    stops += sl.length;
-    const pts = sl.map(s => coords[s.studentId]).filter(Boolean);
-    const opt = optimalTour(pts, coords.home, dist);
-    if (opt != null) { optKm += opt; exactDays++; }
+  // Self-check the wiring before trusting any number from it: re-scoring the
+  // published solution must reproduce the published cost exactly.
+  let check = 0;
+  for (const route of best.routes) {
+    let prev = 1;
+    for (const c of route) { check += Solomon.dist(inst, prev, c + 1); prev = c + 1; }
+    check += Solomon.dist(inst, prev, 1);
   }
-  const want = sts.reduce((a, s) => a + s.lessonsPerWeek, 0);
-  return { name, placed: A._countPlaced(r.schedule), want, km, optKm, exactDays,
-           idle, stops, violations, ms };
+  if (Math.abs(check - best.cost) > 0.05) {
+    throw new Error(`${name}: re-scored the published solution as ${check.toFixed(1)}, ` +
+      `file says ${best.cost} — the distance convention is wrong, every number below would be meaningless`);
+  }
+
+  const { sts, cfg, coords, days, matrix } = Solomon.toRoutePal(inst, fixtures, maxRoutes);
+  const app = loadApp({ seed: SEED });
+  app.setState({ students: sts, settings: cfg, coords,
+    travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
+
+  const { schedule, ms } = await runPipeline(app, sts, cfg, coords,
+    { attempts: 2, alns: 20000, lns: 8000 });
+
+  const scored = Solomon.scheduleCost(inst, schedule, days);
+  return { name, served: app.Scheduler.countTotal(schedule), total: inst.n - 1,
+    ...scored, bestCost: best.cost, bestRoutes: best.routes.length,
+    violations: auditSchedule(app.Scheduler, schedule, sts, cfg).length, ms };
 }
 
-function solomonCase(file, nCustomers, days) {
-  const { depot, customers } = parseSolomon(file);
-  const picked = customers.slice(0, nCustomers);
-  const workDays = Array.from({ length: days }, (_, i) => i + 1);
-  // Solomon windows are in minutes from 0; compress them into a working day so
-  // the shape of the constraints survives but the clock stays a real one.
-  const span = Math.max(...customers.map(c => c.due)) || 1;
-  const toClock = (v) => 8 * 60 + Math.round((v / span) * 12 * 60);   // 08:00-20:00
-  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+async function ownRun() {
+  const sts = Array.from({ length: 22 }, (_, i) => student('s' + i, {
+    lessonsPerWeek: (i % 3) + 1, lessonDuration: [60, 90, 120][i % 3],
+    days: [1, 2, 3, 4, 5].filter(d => (i + d) % 4 !== 0),
+    window: { start: `${15 + (i % 4)}:00`, end: '22:00' },
+  }));
+  const cfg = settings({ workDays: [1, 2, 3, 4, 5] });
+  const coords = { home: { lat: 38.246, lon: 21.734 } };
+  sts.forEach((s, i) => { coords[s.id] = (i % 6 === 0)
+    ? { lat: 38.246 + 0.09 + ((i * 13) % 20) / 1000, lon: 21.734 + 0.10 + ((i * 7) % 20) / 1000 }
+    : { lat: 38.246 + ((i * 13) % 30) / 2000, lon: 21.734 + ((i * 7) % 30) / 2000 }; });
 
-  const dayHours = {};
-  for (const d of workDays) dayHours[d] = { start: '08:00', end: '20:00' };
-  const cfg = settings({ workDays, dayHours, travelMargin: 2,
-    homeAddress: 'depot', avgCitySpeedKmh: 40 });
+  const app = loadApp({ seed: SEED });
+  app.setState({ students: sts, settings: cfg, coords,
+    travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+  const { schedule, ms } = await runPipeline(app, sts, cfg, coords,
+    { attempts: 3, alns: 15000, lns: 6000 });
 
-  const coords = { home: toLatLon(depot) };
-  const sts = picked.map((c) => {
-    const dur = 60;
-    const start = Math.min(toClock(c.ready), 19 * 60);
-    const end = Math.max(Math.min(toClock(c.due) + dur, 20 * 60), start + dur);
-    const st = student('c' + c.id, { days: workDays, lessonsPerWeek: 1, lessonDuration: dur,
-      window: { start: hhmm(start), end: hhmm(end) } });
-    coords[st.id] = toLatLon(c);
-    return st;
-  });
-  return { sts, cfg, coords };
+  const S = app.Scheduler;
+  const d = (a, b) => S.haversineKm(a, b) * 1.4;
+  let km = 0, opt = 0, idle = 0, exact = 0;
+  for (const day of cfg.workDays) {
+    const sl = (schedule[day] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+    if (!sl.length) continue;
+    km += S.dayKm(sl, day, cfg);
+    idle += S.dayIdle(sl, day, cfg);
+    const o = optimalTour(sl.map(s => coords[s.studentId]).filter(Boolean), coords.home, d);
+    if (o != null) { opt += o; exact++; }
+  }
+  return { served: S.countTotal(schedule), want: sts.reduce((a, s) => a + s.lessonsPerWeek, 0),
+    km, opt, idle, exact, violations: auditSchedule(S, schedule, sts, cfg).length, ms };
+}
+
+async function collect() {
+  const solomon = [];
+  for (const name of INSTANCES) solomon.push(await solomonRun(name, 25));
+  return { solomon, own: await ownRun() };
 }
 
 // ---------------------------------------------------------------------------
 
+function report(res) {
+  console.log('\nAgainst published best-known solutions (Solomon 1987)\n');
+  console.log('  instance   served      routes        distance      vs best   bad');
+  console.log('  ' + '-'.repeat(70));
+  for (const r of res.solomon) {
+    console.log('  ' + r.name.padEnd(10) +
+      `${r.served}/${r.total}`.padEnd(11) +
+      `${r.routes} vs ${r.bestRoutes}`.padEnd(13) +
+      `${r.cost.toFixed(1)} vs ${r.bestCost}`.padEnd(15) +
+      `+${(((r.cost / r.bestCost) - 1) * 100).toFixed(0)}%`.padStart(7) +
+      `${r.violations}`.padStart(6));
+  }
+  const over = res.solomon.reduce((a, r) => a + r.overCapacity, 0);
+  console.log('  ' + '-'.repeat(70));
+  console.log('\n  Read this honestly. Solomon\'s objective is to minimise the number of');
+  console.log('  vehicles first and distance second, and to respect a load capacity.');
+  console.log('  RoutePal minimises neither vehicle count nor load — it has no concept');
+  console.log('  of either — so it spreads work over more routes and the distance gap');
+  console.log('  above is partly a different objective, not only worse routing.');
+  console.log(`  Routes that would exceed the capacity we ignore: ${over}.`);
+
+  const o = res.own;
+  console.log('\nOur own scenario (day assignment held fixed, ordering judged alone)\n');
+  console.log(`  lessons placed        ${o.served}/${o.want}`);
+  console.log(`  driving               ${o.km.toFixed(1)} km`);
+  console.log(`  detour vs exact       x${(o.km / o.opt).toFixed(3)}   (1.000 = the visit order could not be bettered)`);
+  console.log(`  waiting               ${o.idle} min`);
+  console.log(`  violations            ${o.violations}`);
+  console.log(`  days measured exactly ${o.exact}\n`);
+
+  const bad = res.solomon.reduce((a, r) => a + r.violations, 0) + o.violations;
+  if (bad) console.log(`  CONSTRAINT VIOLATIONS: ${bad} — this must be zero\n`);
+  return bad;
+}
+
+function compare(a, b) {
+  console.log('\nThis build vs the reference, identical inputs and seed\n');
+  console.log('  instance    distance                    served');
+  console.log('  ' + '-'.repeat(58));
+  a.solomon.forEach((x, i) => {
+    const y = b.solomon[i];
+    const d = ((x.cost / y.cost) - 1) * 100;
+    console.log('  ' + x.name.padEnd(11) +
+      `${y.cost.toFixed(1)} -> ${x.cost.toFixed(1)}`.padEnd(22) +
+      `${d <= 0 ? '' : '+'}${d.toFixed(1)}%`.padEnd(9) +
+      `${y.served} -> ${x.served}`);
+  });
+  console.log('  ' + '-'.repeat(58));
+  console.log(`  ours        ${b.own.km.toFixed(1)} -> ${a.own.km.toFixed(1)} km` +
+    `        ${b.own.served} -> ${a.own.served} lessons\n`);
+}
+
 (async () => {
-  const cases = [];
+  const idx = process.argv.indexOf('--against');
+  const asJson = process.argv.includes('--json');
+  const res = await collect();
 
-  for (const [file, n, days] of [['C101.txt', 30, 5], ['R101.txt', 30, 5], ['RC101.txt', 30, 5]]) {
-    const { sts, cfg, coords } = solomonCase(file, n, days);
-    cases.push([`solomon ${file.replace('.txt', '')} (${n} stops, ${days} days)`, sts, cfg, coords]);
-  }
+  // In --json mode this process is a sub-run feeding the comparison above it:
+  // anything but JSON on stdout and the parent cannot read the result.
+  if (asJson) { process.stdout.write(JSON.stringify(res)); return; }
+  const bad = report(res);
 
-  // Our own shape: a real tutor's week.
-  {
-    const sts = Array.from({ length: 22 }, (_, i) => student('s' + i, {
-      lessonsPerWeek: (i % 3) + 1, lessonDuration: [60, 90, 120][i % 3],
-      days: [1, 2, 3, 4, 5].filter(d => (i + d) % 4 !== 0),
-      window: { start: `${15 + (i % 4)}:00`, end: '22:00' },
-    }));
-    const cfg = settings({ workDays: [1, 2, 3, 4, 5] });
-    const coords = { home: { lat: 38.246, lon: 21.734 } };
-    sts.forEach((s, i) => { coords[s.id] = (i % 6 === 0)
-      ? { lat: 38.246 + 0.09 + ((i * 13) % 20) / 1000, lon: 21.734 + 0.10 + ((i * 7) % 20) / 1000 }
-      : { lat: 38.246 + ((i * 13) % 30) / 2000, lon: 21.734 + ((i * 7) % 30) / 2000 }; });
-    cases.push(['ours: tutor week, a few outliers', sts, cfg, coords]);
+  if (idx > -1 && process.argv[idx + 1]) {
+    const ref = process.argv[idx + 1];
+    const tmp = path.join(os.tmpdir(), `routiq-${ref.replace(/[^\w]/g, '_')}.html`);
+    fs.writeFileSync(tmp, execSync(`git show ${ref}:routiq.html`, { maxBuffer: 64 * 1024 * 1024 }));
+    console.log(`Re-running against ${ref} …\n`);
+    const out = execSync(`ROUTIQ_APP_FILE=${tmp} node ${__filename} --json`,
+      { maxBuffer: 16 * 1024 * 1024 }).toString();
+    compare(res, JSON.parse(out));
   }
-
-  console.log('RoutePal quality benchmark\n');
-  console.log('  instance                              served    km   detour   idle  bad   time');
-  console.log('  ' + '-'.repeat(76));
-  const all = [];
-  for (const [name, sts, cfg, coords] of cases) {
-    const r = await runInstance(name, sts, cfg, coords);
-    all.push(r);
-    const detour = r.optKm > 0 ? (r.km / r.optKm) : null;
-    console.log('  ' + name.padEnd(38) +
-      `${r.placed}/${r.want}`.padStart(6) +
-      `${r.km.toFixed(0)}`.padStart(6) +
-      (detour ? `x${detour.toFixed(3)}` : '   —').padStart(9) +
-      `${r.idle}m`.padStart(7) +
-      `${r.violations}`.padStart(5) +
-      `${(r.ms / 1000).toFixed(0)}s`.padStart(7));
-  }
-  const totKm = all.reduce((a, r) => a + r.km, 0);
-  const totOpt = all.reduce((a, r) => a + r.optKm, 0);
-  const bad = all.reduce((a, r) => a + r.violations, 0);
-  console.log('  ' + '-'.repeat(76));
-  console.log(`\n  overall detour vs exact optimum: x${(totKm / totOpt).toFixed(3)}` +
-    `   (1.000 = the visit order could not be bettered)`);
-  console.log(`  constraint violations: ${bad}` + (bad ? '   <-- THIS MUST BE ZERO' : ''));
-  console.log(`  days measured exactly: ${all.reduce((a, r) => a + r.exactDays, 0)}\n`);
   process.exit(bad ? 1 : 0);
 })();

@@ -1,22 +1,23 @@
 # Benchmark instances
 
-`C101.txt`, `R101.txt`, `RC101.txt` are Solomon's 1987 VRPTW benchmark
-instances (100 customers), the standard test set for vehicle routing with time
-windows. They are used here as **independently authored hard data** — geometry
-and time windows designed by someone with no knowledge of this scheduler —
-rather than as a scored benchmark.
+`*.vrp` are Solomon's 1987 VRPTW benchmark instances (100 customers), the
+standard test set for vehicle routing with time windows. `*.sol` are the
+best-known solutions for them.
 
-A scored comparison against published best-known solutions is not possible:
-those solutions use 10 (C101), 19 (R101) and 14 (RC101) vehicles, while
-RoutePal has at most six days. `test/benchmark.js` instead subsets each
-instance to what six days can hold and measures the gap to an **exact** optimum
-that it computes itself per day.
+Both come from https://github.com/PyVRP/Instances so the instance and its
+best-known solution use the same distance convention. That convention was
+**derived, not assumed**: recomputing the C101 solution's routes gives 828.94
+with exact Euclidean distances, 829.00 rounded to integers, and **827.30 with
+each edge truncated to one decimal** — which is the figure in the file. So the
+benchmark truncates too, and its comparison is like for like.
 
-The three clusters differ deliberately:
-  C  — customers in tight geographic clusters
-  R  — uniformly random positions
-  RC — a mix of both
+  instance   best known
+  C101       10 routes, 827.3
+  R101       20 routes, 1637.7
+  RC101      15 routes, 1619.8
 
-Source: Solomon, M. M. (1987), "Algorithms for the Vehicle Routing and
-Scheduling Problems with Time Window Constraints", Operations Research 35(2).
-Files retrieved from https://github.com/iRB-Lab/py-ga-VRPTW
+The three classes differ deliberately: C is tightly clustered customers with
+narrow time windows, R is uniformly random, RC a mix.
+
+Solomon, M. M. (1987), "Algorithms for the Vehicle Routing and Scheduling
+Problems with Time Window Constraints", Operations Research 35(2).

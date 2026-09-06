@@ -68,7 +68,8 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 
 ```bash
 npm test     # correctness — 122 tests
-npm run bench   # quality — how good the schedules are, on independent data
+npm run bench                    # quality, against published best-known solutions
+npm run bench -- --against HEAD~1  # this build vs another, identical inputs
 ```
 
 122 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
@@ -83,7 +84,7 @@ against the **actual code**, not a copy.
 | `test/data.test.js` | Data loss: pairing, deletion, export/import, legacy saved data |
 | `test/rendering.test.js` | XSS escaping, address search, network resilience |
 | `test/i18n.test.js` | Translation completeness across all 4 languages |
-| `test/benchmark.js` | Quality, not correctness: Solomon's 1987 VRPTW instances plus our own, scored against an exact optimum computed per day (Held-Karp) |
+| `test/benchmark.js` | Quality, not correctness: Solomon's 1987 VRPTW instances scored against their published best-known solutions, plus our own scored against an exact optimum (Held-Karp) |
 
 `test/invariants.js` holds an **independent** rule checker — deliberately
 separate from the app's own `verifySchedule()`, so it can catch the case where
