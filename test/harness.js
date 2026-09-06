@@ -124,11 +124,17 @@ function loadApp(opts = {}) {
   vm.createContext(ctx);
   // Top-level `const` declarations in a vm script are NOT reachable as context
   // properties, so anything a test needs must be named explicitly here.
+  // Each name is guarded: an older build loaded via ROUTIQ_APP_FILE (to compare
+  // two versions on identical inputs) will not have every symbol this list
+  // grew, and a bare reference would throw before a single measurement ran.
+  const EXPORTS = ['Scheduler','App','Router','Storage','state','defaultSettings',
+    'I18N','PROFESSION_VALUES','SUBJECTS','COLORS','DAYS','DAYS_FULL','esc','t','tf',
+    'curLang','normalizeSearchText','getProfessions','getLabels','subjectLabel',
+    'getHereKey','schedProgress','_schedFrame','Toast'];
   const src = extractScript() +
-    '\n;this.__exports = {Scheduler, App, Router, Storage, state, defaultSettings,' +
-    ' I18N, PROFESSION_VALUES, SUBJECTS, COLORS, DAYS, DAYS_FULL, esc, t, tf, curLang,' +
-    ' normalizeSearchText, getProfessions, getLabels, subjectLabel, getHereKey,' +
-    ' schedProgress, _schedFrame, Toast};';
+    '\n;this.__exports = {' +
+    EXPORTS.map(n => `${n}: (typeof ${n} === 'undefined' ? undefined : ${n})`).join(',') +
+    '};';
   vm.runInContext(src, ctx, { filename: 'routiq.html' });
 
   const ex = ctx.__exports;
