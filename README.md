@@ -67,10 +67,11 @@ PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙ�
 ### Testing
 
 ```bash
-npm test
+npm test        # ορθότητα — 122 τεστ
+npm run bench   # ποιότητα — πόσο καλά είναι τα προγράμματα, σε ανεξάρτητα δεδομένα
 ```
 
-118 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
+122 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
 
 Επειδή η εφαρμογή είναι ένα αρχείο HTML, τα τεστ φορτώνουν το πραγματικό
 `<script>` σε Node `vm` sandbox με stubbed browser API (`test/harness.js`).
@@ -82,6 +83,7 @@ npm test
 | `test/data.test.js` | Απώλεια δεδομένων: ζευγάρωμα, διαγραφή, export/import, παλιά αποθηκευμένα δεδομένα |
 | `test/rendering.test.js` | XSS escaping, αναζήτηση διεύθυνσης, ανθεκτικότητα δικτύου |
 | `test/i18n.test.js` | Πληρότητα μεταφράσεων και στις 4 γλώσσες |
+| `test/benchmark.js` | Ποιότητα, όχι ορθότητα: instances Solomon 1987 μαζί με δικά μας, βαθμολογημένα απέναντι σε **ακριβές** βέλτιστο ανά μέρα (Held-Karp) |
 
 `test/invariants.js` περιέχει έναν **ανεξάρτητο** ελεγκτή κανόνων — σκόπιμα
 ξεχωριστό από το `verifySchedule()` της εφαρμογής, ώστε να πιάνει και την

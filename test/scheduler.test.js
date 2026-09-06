@@ -1221,3 +1221,86 @@ describe('explaining why a gap is there', () => {
     assert.equal(why.name, 'C', 'blaming the wrong person would send the user to argue with B');
   });
 });
+
+describe('travel time from the lesson before', () => {
+  // Found by the benchmark, not by this suite: our own fixtures never had
+  // travel times large enough relative to the gaps between lessons, so an
+  // unreachable placement always happened to look reachable.
+  function twoFarApart(app, blockedSlots) {
+    const sts = [
+      student('near', { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }),
+      student('far',  { days: [1], lessonsPerWeek: 1, lessonDuration: 60 }),
+    ];
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '20:00' } },
+      blockedSlots: blockedSlots || [], avgCitySpeedKmh: 40 });
+    app.setState({ students: sts, settings: cfg, coords: {
+      home: { lat: 38.246, lon: 21.734 },
+      near: { lat: 38.250, lon: 21.740 },
+      far:  { lat: 38.700, lon: 22.200 },   // ~an hour away
+    }});
+    return { sts, cfg };
+  }
+
+  test('a slot is not offered when there is no time to drive to it', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoFarApart(app);
+    const S = app.Scheduler;
+    const existing = [{ studentId: 'near', studentName: 'near', address: 'addr-near',
+      start: '08:00', end: '09:00', duration: 60 }];
+
+    const slot = S.findSlotFixed(sts[1], 1, existing, cfg, 60);
+
+    assert.ok(slot, 'the day is long enough, a slot should exist');
+    const drive = S.travelEstMin('near', 'addr-near', 'far', 'addr-far', 1);
+    assert.ok(drive > 30, `the fixture must actually be far away, got ${drive} min`);
+    assert.ok(S.toMin(slot.start) >= S.toMin('09:00') + drive,
+      `offered ${slot.start} after a lesson ending 09:00 with a ${drive} min drive`);
+  });
+
+  test('a candidate taken from the end of a break still respects the drive', () => {
+    const app = loadApp();
+    // The break's end is a candidate start time in its own right. That is the
+    // path that used to skip the check on what comes before it entirely.
+    const { sts, cfg } = twoFarApart(app, [{ day: 1, start: '09:00', end: '10:00' }]);
+    const S = app.Scheduler;
+    const existing = [{ studentId: 'near', studentName: 'near', address: 'addr-near',
+      start: '08:00', end: '09:00', duration: 60 }];
+
+    const slot = S.findSlotFixed(sts[1], 1, existing, cfg, 60);
+
+    const drive = S.travelEstMin('near', 'addr-near', 'far', 'addr-far', 1);
+    assert.ok(S.toMin(slot.start) >= S.toMin('09:00') + drive,
+      `offered ${slot.start}: the break ends at 10:00 but the drive takes ${drive} min`);
+  });
+
+  test('a candidate at the start of the window respects the drive too', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoFarApart(app);
+    const S = app.Scheduler;
+    // 'far' is only free from 09:05 — the window start is the natural candidate,
+    // and it is five minutes after a lesson an hour's drive away.
+    sts[1].availability[1] = { on: true, start: '09:05', end: '20:00' };
+    const existing = [{ studentId: 'near', studentName: 'near', address: 'addr-near',
+      start: '08:00', end: '09:00', duration: 60 }];
+
+    const slot = S.findSlotFixed(sts[1], 1, existing, cfg, 60);
+
+    const drive = S.travelEstMin('near', 'addr-near', 'far', 'addr-far', 1);
+    assert.ok(!slot || S.toMin(slot.start) >= S.toMin('09:00') + drive,
+      `offered ${slot && slot.start}, which is unreachable`);
+  });
+
+  test('a lesson far in the past does not push the next one later', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoFarApart(app);
+    const S = app.Scheduler;
+    // The fix must not over-correct: a morning lesson has no bearing on an
+    // evening one beyond the drive itself.
+    const existing = [{ studentId: 'near', studentName: 'near', address: 'addr-near',
+      start: '08:00', end: '09:00', duration: 60 }];
+    sts[1].availability[1] = { on: true, start: '18:00', end: '20:00' };
+    const slot = S.findSlotFixed(sts[1], 1, existing, cfg, 60);
+    assert.ok(slot, 'an evening slot must still be offered');
+    assert.equal(slot.start, '18:00', 'and at the earliest the student is free');
+  });
+});

@@ -8,7 +8,8 @@
     "test:scheduler": "node --test test/scheduler.test.js",
     "test:data": "node --test test/data.test.js",
     "test:rendering": "node --test test/rendering.test.js",
-    "test:i18n": "node --test test/i18n.test.js"
+    "test:i18n": "node --test test/i18n.test.js",
+    "bench": "node test/benchmark.js"
   },
   "engines": {
     "node": ">=18"

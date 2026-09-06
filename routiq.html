@@ -2261,19 +2261,31 @@ const Scheduler = {
 
     for(let t of candidates){
       t=Math.max(t,winStart);
-      // Push t forward past any preceding slots it conflicts with
+      // Push t forward until every PRECEDING lesson leaves enough time to get
+      // here.
+      //
+      // This used to skip any slot ending at or before t as "no conflict",
+      // which is precisely the case where travel matters: a lesson finishing at
+      // 12:58 does not conflict with one starting at 13:00, it makes it
+      // impossible when the drive is 49 minutes. Travel from behind was only
+      // ever enforced for candidate times DERIVED from that slot; a candidate
+      // coming from the start of the window or the end of a break was accepted
+      // with nothing checked behind it, because the verification below only
+      // looks forward. The result was a schedule sending you somewhere you
+      // could not physically reach — and enforceConstraints then removed the
+      // lesson and re-placed it, via this same function, into another
+      // impossible slot, over and over.
       let changed=true;
       while(changed){
         changed=false;
         for(const e of sorted){
           const es=this.toMin(e.start),ee=this.toMin(e.end);
-          if(ee<=t) continue; // slot ends before our start — no conflict
-          if(es>=t+dur) break; // slot starts after our end — done checking prev
+          if(es>=t+dur) break; // starts after we finish — the forward check owns it
           if(e.studentId===student.id){
-            t=ee; changed=true; break;
+            if(ee>t){ t=ee; changed=true; break; }
           } else {
-            const buf=this.travelEstMin(e.studentId,e.address,student.id,student.address,day)+margin;
-            if(t<ee+buf){t=ee+buf; changed=true; break;}
+            const buf=this.travelEstMin(e.studentId,e.address,student.id,student.address,day,ee)+margin;
+            if(t<ee+buf){ t=ee+buf; changed=true; break; }
           }
         }
       }
@@ -2818,6 +2830,16 @@ const Scheduler = {
   // Skips merged/group blocks (splitting them safely needs the merge/group
   // logic itself, not a generic single-slot re-placement) — those remain
   // covered by verifySchedule()'s reporting only.
+  // Deliberately ONE pass.
+  //
+  // While chasing impossible-travel violations on Solomon's benchmark
+  // instances, running this to a fixpoint looked like the fix — one pass went
+  // from 12 violations to 2. It was treating a symptom: findSlotFixed was
+  // handing back unreachable slots, so this removed lessons and re-placed them
+  // into equally impossible positions, forever (measured: "repaired 48,
+  // dropped 0", violations unchanged). With that fixed, a second pass finds
+  // nothing, and looping would only serve to hide the next producer of bad
+  // placements instead of letting it surface.
   enforceConstraints(schedule, students, settings){
     const sm = Object.fromEntries(students.map(s=>[s.id,s]));
     let repaired = 0, dropped = 0;
