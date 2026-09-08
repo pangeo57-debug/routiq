@@ -794,6 +794,7 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    pairs_find_btn:'Βρες ποιοι μπορούν να έρθουν μαζί', pair_days_count:'{n} κοινές μέρες', toast_no_pairs:'Δεν βρέθηκαν {clients} που να μπορούν να μοιραστούν ώρα — χρειάζονται ίδια διάρκεια, ίδιο αντικείμενο, κοντινές διευθύνσεις και κοινές ελεύθερες ώρες', confirm_pairs_title:'Βρέθηκαν {n} πιθανά ζευγάρια', confirm_pairs_text:'Θα μοιράζονται μία ώρα ο καθένας. Οι περιορισμοί τους μένουν ως έχουν — το μάθημα μπαίνει μόνο όπου είναι ελεύθεροι και οι δύο.\\n\\n{list}\\n\\nΝα δημιουργηθούν και να ξαναϋπολογιστεί το πρόγραμμα;', toast_pairs_created:'Δημιουργήθηκαν {n} ζευγάρια — υπολογίζω ξανά',
     settings_add_interval:'Πρόσθεσε διάστημα (σπαστό ωράριο)', hours_gap_reason:'Εκτός ωραρίου',
     toast_availability_updated:'Ενημερώθηκε η διαθεσιμότητα {n} μαθητών με βάση το νέο ωράριο', confirm_new_workday_title:'Πρόσθεσες {days}', confirm_new_workday_text:'Κανένας μαθητής δεν έχει δηλώσει διαθεσιμότητα για {days}. Να θεωρηθούν ελεύθεροι όλες τις ώρες εκείνης της μέρας ({n} μαθητές); Μπορείς να το αλλάξεις ανά μαθητή μετά.',
     toast_scheduler_failed:'Ο υπολογισμός απέτυχε — {reason}. Το προηγούμενο πρόγραμμα παρέμεινε.',
@@ -985,6 +986,7 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    pairs_find_btn:'Find who could come together', pair_days_count:'{n} days in common', toast_no_pairs:'No {clients} can share a session — they need the same length, the same subject, addresses close together and free time in common', confirm_pairs_title:'{n} possible pairs found', confirm_pairs_text:"They would share one session each. Nobody's constraints change — the lesson only goes where BOTH are free.\\n\\n{list}\\n\\nCreate them and recalculate?", toast_pairs_created:'{n} pairs created — recalculating',
     settings_add_interval:'Add an interval (split shift)', hours_gap_reason:'Outside working hours',
     toast_availability_updated:'Updated availability for {n} students to match the new hours', confirm_new_workday_title:'You added {days}', confirm_new_workday_text:'No student has said anything about {days}. Treat all {n} of them as free that whole day? You can change it per student afterwards.',
     toast_scheduler_failed:'The calculation failed — {reason}. Your previous schedule was kept.',
@@ -1176,6 +1178,7 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    pairs_find_btn:'Trouver qui peut venir ensemble', pair_days_count:'{n} jours en commun', toast_no_pairs:'Aucun {clients} ne peut partager une séance — il faut même durée, même matière, adresses proches et disponibilités communes', confirm_pairs_title:'{n} paires possibles', confirm_pairs_text:'Ils partageraient une séance. Aucune contrainte ne change — le cours ne va que là où les DEUX sont libres.\\n\\n{list}\\n\\nLes créer et recalculer ?', toast_pairs_created:'{n} paires créées — recalcul en cours',
     settings_add_interval:'Ajouter une plage (horaire coupé)', hours_gap_reason:'Hors horaires',
     toast_availability_updated:'Disponibilité mise à jour pour {n} élèves selon les nouveaux horaires', confirm_new_workday_title:'Vous avez ajouté {days}', confirm_new_workday_text:'Aucun élève ne s\u2019est prononcé sur {days}. Les considérer tous ({n}) comme libres toute la journée ? Modifiable ensuite par élève.',
     toast_scheduler_failed:'Le calcul a échoué — {reason}. Votre programme précédent a été conservé.',
@@ -1367,6 +1370,7 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    pairs_find_btn:'Finden, wer zusammenkommen kann', pair_days_count:'{n} gemeinsame Tage', toast_no_pairs:'Keine {clients} können sich eine Stunde teilen — nötig sind gleiche Dauer, gleiches Fach, nahe Adressen und gemeinsame freie Zeit', confirm_pairs_title:'{n} mögliche Paare gefunden', confirm_pairs_text:'Sie würden sich je eine Stunde teilen. Keine Vorgabe ändert sich — die Stunde kommt nur dorthin, wo BEIDE frei sind.\\n\\n{list}\\n\\nAnlegen und neu berechnen?', toast_pairs_created:'{n} Paare erstellt — Neuberechnung läuft',
     settings_add_interval:'Zeitraum hinzufügen (geteilte Schicht)', hours_gap_reason:'Außerhalb der Arbeitszeit',
     toast_availability_updated:'Verfügbarkeit von {n} Schülern an die neuen Zeiten angepasst', confirm_new_workday_title:'{days} hinzugefügt', confirm_new_workday_text:'Kein Schüler hat sich zu {days} geäußert. Alle {n} als ganztägig frei behandeln? Pro Schüler später änderbar.',
     toast_scheduler_failed:'Berechnung fehlgeschlagen — {reason}. Der bisherige Plan bleibt.',
@@ -1964,17 +1968,15 @@ const Scheduler = {
       const usedDays = [];
       for(const day of settings.workDays){
         if(placedSessions>=neededSessions) break;
-        let start=-Infinity, end=Infinity, allOn=true;
-        for(const m of members){
-          const av=m.availability[day];
-          if(!av||!av.on){ allOn=false; break; }
-          start=Math.max(start,this.toMin(av.start));
-          end=Math.min(end,this.toMin(av.end));
-        }
-        if(!allOn) continue;
-        if(end-start<dur) continue;
-        // Make a virtual student representing the intersection
-        const virtual={...a, availability:{[day]:{on:true,start:this.minToTime(start),end:this.minToTime(end)}}};
+        // Every stretch all members share. Intersecting only the outer bounds
+        // used to invent time nobody actually had: two people each free
+        // 15:00-17:00 and 18:30-22:00 would appear jointly free 15:00-22:00,
+        // including the hour and a half neither of them can do.
+        const shared = this.commonWindows(members, day, settings).filter(w=>w[1]-w[0] >= dur);
+        if(!shared.length) continue;
+        const virtual={...a, availability:{[day]:{on:true,
+          start:this.minToTime(shared[0][0]), end:this.minToTime(shared[shared.length-1][1]),
+          windows: shared.map(w=>[w[0],w[1]])}}};
         const slot=this.findSlotFixed(virtual,day,schedule[day]||[],settings,dur);
         if(slot){
           schedule[day].push({
@@ -2386,22 +2388,32 @@ const Scheduler = {
       let t=this.toMin(dayH.start), prev=HOME; const newSlots=[];
       let first=true;
       for(const slot of order){
-        const student=students.find(s=>s.id===slot.studentId);
-        if(!student) return null;
+        // EVERYONE in the slot, not just the id it is filed under. A pair or a
+        // group is stored under one member, and re-timing it against that
+        // member's hours alone put shared sessions in slots the partner could
+        // not attend — B free from 17:00 was being booked at 16:05, and no
+        // later pass caught it because enforceConstraints skips group slots.
+        const ids = (slot.groupMemberIds && slot.groupMemberIds.length)
+          ? slot.groupMemberIds
+          : [slot.studentId, slot.pairedStudentId].filter(Boolean);
+        const occupants = ids.map(id=>students.find(s=>s.id===id)).filter(Boolean);
+        if(occupants.length !== ids.length) return null;
+        const student=occupants[0];
         const av=student.availability&&student.availability[day];
         if(!av||!av.on) return null;
         const c=getC(slot);
         const margin=(settings&&(settings.travelMargin??3))||3;
+        const wins0=this.commonWindows(occupants, day, settings);
+        if(!wins0.length) return null;
         // The very first lesson of the day always starts exactly at the window open —
         // travel from home is the tutor's problem to leave early for, not a scheduling delay.
-        const wins0=this.availWindows(students.find(x=>x.id===c.studentId)||{availability:{[day]:av}}, day);
         t = first ? t : t+trvMin(prev,c)+margin;
-        const fit0=this.earliestFit(wins0.length?wins0:[[this.toMin(av.start),this.toMin(av.end)]], t, c.duration||0, 0);
+        const fit0=this.earliestFit(wins0, t, c.duration||0, 0);
         if(fit0===null) return null;
         t = fit0;
         if(!first) t=Math.ceil(t/5)*5;
         first=false;
-        const winEnd=Math.min(this.toMin(dayH.end),this.toMin(av.end));
+        const winEnd=Math.min(this.toMin(dayH.end), wins0[wins0.length-1][1]);
         // Skip past any blocked time this lesson would land on. This pass
         // re-lays out a whole day from scratch, and without this it would
         // relocate lessons into breaks the user explicitly reserved — the
@@ -2836,6 +2848,72 @@ const Scheduler = {
       const b = (studentId && e.studentId === studentId) ? 0 : buf;
       return startMin < ee+b && endMin+b > es;
     });
+  },
+
+  // Which two clients could share one slot?
+  //
+  // This is the one lever that actually creates capacity. Everything else the
+  // optimizer does moves work around a fixed amount of time; putting two people
+  // in one session buys an hour back. Measurements kept saying the schedule is
+  // capacity-bound rather than search-bound, and this is the answer to that.
+  //
+  // A pair is only proposed when it is genuinely workable — never merely
+  // convenient for the algorithm:
+  //   · neither is already paired or in a group
+  //   · same lesson length (they sit in one slot together)
+  //   · same subject, so the session makes sense to teach
+  //   · enough shared free time, on enough days, to cover the sessions
+  //   · close to each other, since one of them has to travel
+  //
+  // Ranked by how much it helps: whoever is currently going unplaced first,
+  // then whoever is nearest.
+  suggestPairs(students, settings, coords, unplacedIds){
+    const unplaced = new Set(unplacedIds||[]);
+    const eligible = students.filter(s => !s.pairedWith && !(s.type==='group' && s.group));
+    const out = [];
+
+    for(let i=0;i<eligible.length;i++){
+      for(let j=i+1;j<eligible.length;j++){
+        const a=eligible[i], b=eligible[j];
+        if(a.lessonDuration !== b.lessonDuration) continue;
+        if((a.subject||'') !== (b.subject||'')) continue;
+
+        const dur = a.lessonDuration;
+        const need = Math.min(a.lessonsPerWeek||1, b.lessonsPerWeek||1);
+        const days = [];
+        for(const d of (settings.workDays||[])){
+          const shared = this.commonWindows([a,b], d, settings).filter(w=>w[1]-w[0] >= dur);
+          if(shared.length) days.push({day:d, minutes: shared.reduce((n,w)=>n+(w[1]-w[0]),0)});
+        }
+        if(days.length < need) continue;      // cannot cover the sessions they need
+
+        const ca = this.safeCoord(coords, a.id, a.address);
+        const cb = this.safeCoord(coords, b.id, b.address);
+        const km = (ca && cb) ? this.haversineKm(ca, cb) : null;
+        // Someone has to get to the other. Beyond a few kilometres a shared
+        // session stops being a favour to either of them.
+        if(km != null && km > 3) continue;
+
+        out.push({
+          a, b, dur, sessions: need,
+          days: days.map(x=>x.day),
+          sharedMinutes: days.reduce((n,x)=>n+x.minutes,0),
+          km,
+          helps: (unplaced.has(a.id)?1:0) + (unplaced.has(b.id)?1:0),
+        });
+      }
+    }
+
+    // Each client appears in at most one proposal, so accepting the list
+    // wholesale cannot ask someone to be in two pairs.
+    out.sort((x,y)=> y.helps-x.helps || (x.km??99)-(y.km??99) || y.sharedMinutes-x.sharedMinutes);
+    const taken = new Set(), picked = [];
+    for(const p of out){
+      if(taken.has(p.a.id) || taken.has(p.b.id)) continue;
+      taken.add(p.a.id); taken.add(p.b.id);
+      picked.push(p);
+    }
+    return picked;
   },
 
   diagnoseUnplaced(student, schedule, settings){
@@ -6931,6 +7009,8 @@ const App = {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           <span style="font-weight:700;font-size:14px;color:#dc2626">${unplaced.length} ${t('schedule_unplaced_students')}</span>
         </div>
+        <button class="btn btn-secondary" style="width:100%;font-size:13px;margin-bottom:12px"
+          onclick="App.findPairSuggestions()">👥 ${esc(t('pairs_find_btn'))}</button>
         ${unplaced.map(u=>{
           const missing = u.needed - u.placed;
           // forceMergeAndReschedule combines ALL weekly lessons into one block, not just the missing ones

@@ -1449,3 +1449,138 @@ describe('a teacher working a split shift', () => {
     assert.ok((sched[1] || []).length > 0, 'and the day must still be used');
   });
 });
+
+describe('suggesting two clients who could share a session', () => {
+  // The one lever that actually creates capacity. Everything else moves work
+  // around a fixed amount of time; two people in one session buys an hour back.
+  function pool(app, extra) {
+    const cfg = settings({ workDays: [1, 2, 3] });
+    const mk = (id, subject, dur, win) => {
+      const st = student(id, { days: [1, 2, 3], lessonsPerWeek: 1, lessonDuration: dur, window: win });
+      st.subject = subject;
+      return st;
+    };
+    const sts = [
+      mk('A', 'Μαθηματικά', 60, { start: '15:00', end: '19:00' }),
+      mk('B', 'Μαθηματικά', 60, { start: '17:00', end: '22:00' }),   // overlaps A
+      mk('C', 'Φυσική', 60, { start: '15:00', end: '22:00' }),        // different subject
+      mk('D', 'Μαθηματικά', 90, { start: '15:00', end: '22:00' }),    // different length
+      mk('E', 'Μαθηματικά', 60, { start: '15:00', end: '22:00' }),    // far away
+      mk('F', 'Μαθηματικά', 60, { start: '08:00', end: '09:00' }),    // no overlap with anyone
+      // K matches E on everything except where they live. Without K, nothing
+      // in this pool could pair with E at all and the distance rule would go
+      // untested — which is exactly what the first version of these tests did.
+      mk('K', 'Μαθηματικά', 60, { start: '15:00', end: '22:00' }),
+    ].concat(extra || []);
+    const coords = { home: { lat: 38.240, lon: 21.730 },
+      A: { lat: 38.245, lon: 21.735 }, B: { lat: 38.246, lon: 21.736 },
+      C: { lat: 38.247, lon: 21.737 }, D: { lat: 38.248, lon: 21.738 },
+      E: { lat: 38.900, lon: 22.500 }, F: { lat: 38.245, lon: 21.735 },
+      K: { lat: 38.244, lon: 21.734 } };
+    app.setState({ students: sts, settings: cfg, coords });
+    return { sts, cfg, coords };
+  }
+
+  test('proposes the pair that can actually work', () => {
+    const app = loadApp();
+    const { sts, cfg, coords } = pool(app);
+    const pairs = app.Scheduler.suggestPairs(sts, cfg, coords, []);
+    assert.ok(pairs.some(p => [p.a.id, p.b.id].sort().join() === 'A,B'),
+      'A and B overlap, match and live next door');
+    assert.deepStrictEqual(Array.from(pairs[0].days), [1, 2, 3]);
+  });
+
+  test('never proposes a pair that would not make sense', () => {
+    const app = loadApp();
+    const { sts, cfg, coords } = pool(app);
+    const involved = new Set(app.Scheduler.suggestPairs(sts, cfg, coords, []).flatMap(p => [p.a.id, p.b.id]));
+    assert.ok(!involved.has('C'), 'different subject');
+    assert.ok(!involved.has('D'), 'different lesson length');
+    assert.ok(!involved.has('E'),
+      'E and K match on subject, length and hours; only the 70km between them rules it out');
+    assert.ok(!involved.has('F'), 'no free time in common');
+  });
+
+  test('an already-paired client is left alone', () => {
+    const app = loadApp();
+    const { sts, cfg, coords } = pool(app);
+    sts.find(s => s.id === 'A').pairedWith = 'C';
+    const involved = new Set(app.Scheduler.suggestPairs(sts, cfg, coords, []).flatMap(p => [p.a.id, p.b.id]));
+    assert.ok(!involved.has('A'), 'someone already paired must not be proposed again');
+  });
+
+  test('nobody is proposed twice, so the whole list can be accepted at once', () => {
+    const app = loadApp();
+    const extra = ['G', 'H', 'I'].map(id => {
+      const st = student(id, { days: [1, 2, 3], lessonsPerWeek: 1, lessonDuration: 60 });
+      st.subject = 'Μαθηματικά';
+      return st;
+    });
+    const { sts, cfg, coords } = pool(app, extra);
+    extra.forEach((s, i) => { coords[s.id] = { lat: 38.245 + i / 5000, lon: 21.735 }; });
+    const pairs = app.Scheduler.suggestPairs(sts, cfg, coords, []);
+    const ids = pairs.flatMap(p => [p.a.id, p.b.id]);
+    assert.equal(new Set(ids).size, ids.length, 'a client appears in at most one proposal');
+  });
+
+  test('clients who cannot be placed are proposed first', () => {
+    const app = loadApp();
+    const extra = ['G', 'H'].map(id => {
+      const st = student(id, { days: [1, 2, 3], lessonsPerWeek: 1, lessonDuration: 60 });
+      st.subject = 'Μαθηματικά';
+      return st;
+    });
+    const { sts, cfg, coords } = pool(app, extra);
+    extra.forEach((s, i) => { coords[s.id] = { lat: 38.2451 + i / 8000, lon: 21.7351 }; });
+    const pairs = app.Scheduler.suggestPairs(sts, cfg, coords, ['G', 'H']);
+    assert.ok(pairs.length >= 1);
+    assert.equal(pairs[0].helps, 2, 'the pair that rescues two unplaced clients should lead');
+  });
+
+  test('a created pair is scheduled only where BOTH are free', async () => {
+    const app = loadApp({ seed: 11 });
+    const { sts, cfg, coords } = pool(app);
+    // A is free 15:00-19:00, B from 17:00. Their shared time is 17:00-19:00 and
+    // the session must land inside it — pairing must not widen either window.
+    sts.find(s => s.id === 'A').pairedWith = 'B';
+    sts.find(s => s.id === 'B').pairedWith = 'A';
+    const sched = await runPipeline(app, sts, cfg, coords);
+
+    assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
+    const S = app.Scheduler;
+    const shared = cfg.workDays.flatMap(d => (sched[d] || []))
+      .filter(sl => sl.isGroup || sl.pairedStudentId);
+    assert.ok(shared.length > 0, 'the pair should get a session');
+    for (const sl of shared) {
+      assert.ok(S.toMin(sl.start) >= S.toMin('17:00') && S.toMin(sl.end) <= S.toMin('19:00') + 15,
+        `shared session at ${sl.start}-${sl.end} falls outside the hours both are free`);
+    }
+  });
+
+  test('pairing frees up enough room to place more clients', async () => {
+    const app = loadApp({ seed: 4 });
+    // One short day, six clients wanting an hour each: only some fit.
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '18:00' } } });
+    const sts = Array.from({ length: 6 }, (_, i) => {
+      const st = student('p' + i, { days: [1], lessonsPerWeek: 1, lessonDuration: 60,
+        window: { start: '15:00', end: '18:00' } });
+      st.subject = 'Μαθηματικά';
+      return st;
+    });
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2450 + i / 20000, lon: 21.7350 }; });
+    app.setState({ students: sts, settings: cfg, coords });
+    const before = app.Scheduler.countTotal(await runPipeline(app, sts, cfg, coords));
+
+    const pairs = app.Scheduler.suggestPairs(sts, cfg, coords, []);
+    assert.ok(pairs.length > 0, 'clients this similar and this close should pair');
+    for (const p of pairs) {
+      sts.find(s => s.id === p.a.id).pairedWith = p.b.id;
+      sts.find(s => s.id === p.b.id).pairedWith = p.a.id;
+    }
+    const after = app.Scheduler.countTotal(await runPipeline(app, sts, cfg, coords));
+
+    assert.ok(after > before,
+      `pairing should fit more people into the same three hours, got ${before} -> ${after}`);
+  });
+});
