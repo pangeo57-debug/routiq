@@ -780,7 +780,6 @@ const I18N = {
     toast_enter_fullname:'Εισάγετε ονοματεπώνυμο', toast_enter_address:'Εισάγετε διεύθυνση',
     saving_ellipsis:'Αποθήκευση...', toast_select_day:'Επιλέξτε τουλάχιστον μία ημέρα',
     toast_avail_exception_invalid:'Μη έγκυρη εξαίρεση — ελέγξτε ημέρα/ώρες',
-    toast_avail_windows_dropped:'Το πρόγραμμα δέχεται ένα διάστημα ανά ημέρα — δεν θα χρησιμοποιηθούν: {windows}',
     toast_client_updated:'ενημερώθηκε', toast_client_added:'προστέθηκε', toast_client_deleted:'διαγράφηκε',
     confirm_delete_client_title:'Διαγραφή {client}', confirm_delete_client_text:'Είστε σίγουροι ότι θέλετε να διαγράψετε τον/την {name}; Όλα τα δεδομένα θα χαθούν.',
     toast_geocoded_count:'Τοποθεσίες', schedule_export_pdf_title:'Εξαγωγή ως PDF',
@@ -795,6 +794,7 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    settings_add_interval:'Πρόσθεσε διάστημα (σπαστό ωράριο)', hours_gap_reason:'Εκτός ωραρίου',
     toast_availability_updated:'Ενημερώθηκε η διαθεσιμότητα {n} μαθητών με βάση το νέο ωράριο', confirm_new_workday_title:'Πρόσθεσες {days}', confirm_new_workday_text:'Κανένας μαθητής δεν έχει δηλώσει διαθεσιμότητα για {days}. Να θεωρηθούν ελεύθεροι όλες τις ώρες εκείνης της μέρας ({n} μαθητές); Μπορείς να το αλλάξεις ανά μαθητή μετά.',
     toast_scheduler_failed:'Ο υπολογισμός απέτυχε — {reason}. Το προηγούμενο πρόγραμμα παρέμεινε.',
     gap_because_availability:'↳ ο/η {name} δεν είναι διαθέσιμος/η πριν τις {from}', gap_because_break:'↳ το διάλειμμά σου τελειώνει στις {end}',
@@ -971,7 +971,6 @@ const I18N = {
     toast_enter_fullname:'Enter full name', toast_enter_address:'Enter address',
     saving_ellipsis:'Saving...', toast_select_day:'Select at least one day',
     toast_avail_exception_invalid:'Invalid exception — check the day/times',
-    toast_avail_windows_dropped:'The schedule takes one window per day — these will not be used: {windows}',
     toast_client_updated:'updated', toast_client_added:'added', toast_client_deleted:'deleted',
     confirm_delete_client_title:'Delete {client}', confirm_delete_client_text:'Are you sure you want to delete {name}? All data will be lost.',
     toast_geocoded_count:'Locations', schedule_export_pdf_title:'Export as PDF',
@@ -986,6 +985,7 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    settings_add_interval:'Add an interval (split shift)', hours_gap_reason:'Outside working hours',
     toast_availability_updated:'Updated availability for {n} students to match the new hours', confirm_new_workday_title:'You added {days}', confirm_new_workday_text:'No student has said anything about {days}. Treat all {n} of them as free that whole day? You can change it per student afterwards.',
     toast_scheduler_failed:'The calculation failed — {reason}. Your previous schedule was kept.',
     gap_because_availability:'↳ {name} is not free before {from}', gap_because_break:'↳ your break ends at {end}',
@@ -1162,7 +1162,6 @@ const I18N = {
     toast_enter_fullname:'Entrez le nom complet', toast_enter_address:"Entrez l'adresse",
     saving_ellipsis:'Enregistrement...', toast_select_day:'Sélectionnez au moins un jour',
     toast_avail_exception_invalid:'Exception invalide — vérifiez le jour/les horaires',
-    toast_avail_windows_dropped:'Le planning accepte une plage par jour — non utilisées : {windows}',
     toast_client_updated:'mis à jour', toast_client_added:'ajouté', toast_client_deleted:'supprimé',
     confirm_delete_client_title:'Supprimer {client}', confirm_delete_client_text:'Voulez-vous vraiment supprimer {name} ? Toutes les données seront perdues.',
     toast_geocoded_count:'Lieux', schedule_export_pdf_title:'Exporter en PDF',
@@ -1177,6 +1176,7 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    settings_add_interval:'Ajouter une plage (horaire coupé)', hours_gap_reason:'Hors horaires',
     toast_availability_updated:'Disponibilité mise à jour pour {n} élèves selon les nouveaux horaires', confirm_new_workday_title:'Vous avez ajouté {days}', confirm_new_workday_text:'Aucun élève ne s\u2019est prononcé sur {days}. Les considérer tous ({n}) comme libres toute la journée ? Modifiable ensuite par élève.',
     toast_scheduler_failed:'Le calcul a échoué — {reason}. Votre programme précédent a été conservé.',
     gap_because_availability:'↳ {name} n\u2019est pas disponible avant {from}', gap_because_break:'↳ votre pause se termine à {end}',
@@ -1353,7 +1353,6 @@ const I18N = {
     toast_enter_fullname:'Vollständigen Namen eingeben', toast_enter_address:'Adresse eingeben',
     saving_ellipsis:'Speichern...', toast_select_day:'Wählen Sie mindestens einen Tag',
     toast_avail_exception_invalid:'Ungültige Ausnahme — Tag/Zeiten prüfen',
-    toast_avail_windows_dropped:'Der Plan nimmt ein Zeitfenster pro Tag — nicht genutzt: {windows}',
     toast_client_updated:'aktualisiert', toast_client_added:'hinzugefügt', toast_client_deleted:'gelöscht',
     confirm_delete_client_title:'{client} löschen', confirm_delete_client_text:'Möchten Sie {name} wirklich löschen? Alle Daten gehen verloren.',
     toast_geocoded_count:'Standorte', schedule_export_pdf_title:'Als PDF exportieren',
@@ -1368,6 +1367,7 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    settings_add_interval:'Zeitraum hinzufügen (geteilte Schicht)', hours_gap_reason:'Außerhalb der Arbeitszeit',
     toast_availability_updated:'Verfügbarkeit von {n} Schülern an die neuen Zeiten angepasst', confirm_new_workday_title:'{days} hinzugefügt', confirm_new_workday_text:'Kein Schüler hat sich zu {days} geäußert. Alle {n} als ganztägig frei behandeln? Pro Schüler später änderbar.',
     toast_scheduler_failed:'Berechnung fehlgeschlagen — {reason}. Der bisherige Plan bleibt.',
     gap_because_availability:'↳ {name} ist vor {from} nicht verfügbar', gap_because_break:'↳ Ihre Pause endet um {end}',
@@ -2231,14 +2231,19 @@ const Scheduler = {
     const margin = (settings.travelMargin ?? 2);
     const dayH=settings.dayHours[day]; if(!dayH) return null;
     const av=student.availability[day]; if(!av||!av.on) return null;
-    const winStart=Math.max(this.toMin(dayH.start),this.toMin(av.start));
-    const winEnd  =Math.min(this.toMin(dayH.end),  this.toMin(av.end));
-    if(winEnd-winStart<dur) return null;
-    const winEndFlex=winEnd+15;
+    // Every stretch this student is free in, clipped to the teacher's hours.
+    // A student busy for an hour in the middle of the day leaves TWO usable
+    // stretches and both are offered; this used to see only the larger.
+    const allWins=this.commonWindows([student], day, settings);
+    const wins=allWins.filter((w,i)=>w[1]+this.windowFlex(allWins,i)-w[0]>=dur);
+    if(!wins.length) return null;
+    const winStart=wins[0][0];
+    const winEndFlex=allWins[allWins.length-1][1]+this.END_FLEX;
     const sorted=[...existing].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
 
-    // Build candidate start times: winStart + right after each slot's travel gap
-    const candidates=[winStart];
+    // Build candidate start times: the opening of every stretch, and right
+    // after each slot's travel gap.
+    const candidates=wins.map(w=>w[0]);
     for(const e of sorted){
       const ee=this.toMin(e.end);
       if(e.studentId===student.id){
@@ -2290,6 +2295,8 @@ const Scheduler = {
         }
       }
       if(t+dur>winEndFlex) continue;
+      // …and inside one stretch, not merely between the first and the last.
+      if(!allWins.some((w,i)=>t>=w[0] && t+dur<=w[1]+this.windowFlex(allWins,i))) continue;
       if(this.isBlocked(t,t+dur,day,settings)) continue;
       // Verify no next slot is too close
       let ok=true;
@@ -2359,7 +2366,11 @@ const Scheduler = {
         const margin=(settings&&(settings.travelMargin??3))||3;
         // The very first lesson of the day always starts exactly at the window open —
         // travel from home is the tutor's problem to leave early for, not a scheduling delay.
-        t = first ? Math.max(t, this.toMin(av.start)) : Math.max(t+trvMin(prev,c)+margin, this.toMin(av.start));
+        const wins0=this.availWindows(students.find(x=>x.id===c.studentId)||{availability:{[day]:av}}, day);
+        t = first ? t : t+trvMin(prev,c)+margin;
+        const fit0=this.earliestFit(wins0.length?wins0:[[this.toMin(av.start),this.toMin(av.end)]], t, c.duration||0, 0);
+        if(fit0===null) return null;
+        t = fit0;
         if(!first) t=Math.ceil(t/5)*5;
         first=false;
         const winEnd=Math.min(this.toMin(dayH.end),this.toMin(av.end));
@@ -2707,6 +2718,81 @@ const Scheduler = {
     return this.findSlotDur(student, day, existing, settings, student.lessonDuration);
   },
 
+  // ---- AVAILABILITY WINDOWS -------------------------------------------
+  //
+  // A student can be free in SEVERAL stretches of one day: busy 17:00-18:00
+  // leaves both 15:00-17:00 and 18:00-22:00 usable, and the teacher may want
+  // either. The stored shape keeps both readings:
+  //
+  //   av.windows  every free stretch, [[startMin,endMin], ...]
+  //   av.start/end  the LARGEST of them
+  //
+  // start/end keeping their old meaning is deliberate. Any code that has not
+  // been converted to windows still reads a real, legal window — it simply
+  // uses less of the day than it could. A migration that widened start/end to
+  // span the gaps would instead make every unconverted call site schedule
+  // lessons in the hours the student is busy.
+  availWindows(student, day){
+    const av = student && student.availability && student.availability[day];
+    if(!av || !av.on) return [];
+    if(Array.isArray(av.windows) && av.windows.length) return av.windows.map(w=>w.slice());
+    return [[this.toMin(av.start), this.toMin(av.end)]];
+  },
+
+  // The scheduler has always tolerated a lesson running up to 15 minutes past
+  // the end of a window. That tolerance belongs to the END OF THE DAY, where a
+  // few minutes over is a judgement call. It must never apply to a stretch that
+  // ends because the student SAID they are busy — running three minutes into
+  // the hour someone told you they cannot do is not a rounding error.
+  //
+  // So only the last stretch of the day is given any slack.
+  END_FLEX: 15,
+  windowFlex(windows, i, flex){
+    if(flex != null) return flex;
+    return i === windows.length - 1 ? this.END_FLEX : 0;
+  },
+
+  // Does a lesson from s to e fit inside ONE free stretch?
+  fitsAvailability(student, day, s, e, flex){
+    const wins = this.availWindows(student, day);
+    for(let i=0;i<wins.length;i++){
+      const [ws,we] = wins[i];
+      if(s>=ws && e<=we+this.windowFlex(wins,i,flex)) return true;
+    }
+    return false;
+  },
+
+  // The earliest moment at or after `t` when a lesson of `dur` fits in one of
+  // the stretches — or null when the day has no room left after `t`.
+  earliestFit(windows, t, dur, flex){
+    let best = null;
+    for(let i=0;i<windows.length;i++){
+      const [ws,we] = windows[i];
+      const cand = Math.max(t, ws);
+      if(cand+dur <= we+this.windowFlex(windows,i,flex) && (best===null || cand<best)) best = cand;
+    }
+    return best;
+  },
+
+  // Every stretch shared by ALL the people in a slot, intersected with the
+  // teacher's own hours for that day.
+  commonWindows(students, day, settings){
+    const dh = settings.dayHours && settings.dayHours[day];
+    let acc = dh ? [[this.toMin(dh.start), this.toMin(dh.end)]] : [[0,1440]];
+    for(const st of students){
+      const mine = this.availWindows(st, day);
+      if(!mine.length) return [];
+      const next = [];
+      for(const [a1,a2] of acc) for(const [b1,b2] of mine){
+        const s = Math.max(a1,b1), e = Math.min(a2,b2);
+        if(e > s) next.push([s,e]);
+      }
+      acc = next;
+      if(!acc.length) return [];
+    }
+    return acc.sort((x,y)=>x[0]-y[0]);
+  },
+
   isBlocked(startMin, endMin, day, settings){
     return (settings.blockedSlots||[]).some(b => {
       if(b.day !== day) return false;
@@ -2771,7 +2857,7 @@ const Scheduler = {
         for(const st of occupantsOf(sl)){
           const av=st.availability && st.availability[d];
           if(!av||!av.on) issues.push(`${st.name} δεν είναι διαθέσιμος ${D[d]}`);
-          else if(s0<this.toMin(av.start)||e0>this.toMin(av.end)+15)
+          else if(!this.fitsAvailability(st, d, s0, e0))
             issues.push(`${st.name} ${D[d]} ${sl.start}-${sl.end} εκτός παραθύρου ${av.start}-${av.end}`);
         }
 
@@ -2891,8 +2977,7 @@ const Scheduler = {
         }
 
         const violates = !av || !av.on ||
-          s0 < this.toMin(av.start) ||
-          e0 > this.toMin(av.end) + 15 ||
+          !this.fitsAvailability(st, d, s0, e0) ||
           (dh && e0 > this.toMin(dh.end) + 15) ||
           (dh && s0 < this.toMin(dh.start)) ||
           this.isBlocked(s0, e0, d, settings) ||
@@ -2963,13 +3048,16 @@ const Scheduler = {
       const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
         ? sl.groupMemberIds
         : [sl.studentId, sl.pairedStudentId].filter(Boolean);
-      let earliest = dayStart, latest = dayEnd;
-      for(const id of ids){
-        const av = sm[id] && sm[id].availability && sm[id].availability[day];
-        if(!av || !av.on) return null;          // this person cannot be here at all
-        earliest = Math.max(earliest, this.toMin(av.start));
-        latest   = Math.min(latest,   this.toMin(av.end)+15);
-      }
+      // Every stretch shared by everyone in this slot. A student busy in the
+      // middle of the day has two of them and either will do.
+      const occupants = ids.map(id=>sm[id]).filter(Boolean);
+      if(occupants.length !== ids.length) return null;
+      const clipped = this.commonWindows(occupants, day, settings)
+        .map(w=>[Math.max(w[0],dayStart), Math.min(w[1],dayEnd)]);
+      const wins = clipped.filter((w,i)=>w[1]+this.windowFlex(clipped,i)-w[0] >= dur);
+      if(!wins.length) return null;
+      let earliest = Math.max(dayStart, wins[0][0]);
+      let latest = dayEnd;
       if(prev){
         // Same student back to back is one continuous block: no travel, no margin.
         const need = prev.studentId === sl.studentId ? 0
@@ -2977,11 +3065,18 @@ const Scheduler = {
                               this.toMin(prev.end)) + margin;
         earliest = Math.max(earliest, this.toMin(prev.end) + need);
       }
-      for(let guard=0; guard<breaks.length+1; guard++){
+      // Alternate between the two: landing after a break can fall in a gap of
+      // the student's availability, and snapping into a stretch can land in a
+      // break. Loop until both hold.
+      for(let guard=0; guard<breaks.length+wins.length+2; guard++){
+        const snapped = this.earliestFit(wins, earliest, dur);
+        if(snapped === null) return null;
+        earliest = snapped;
         const hit = breaks.find(b => earliest < b.end && earliest+dur > b.start);
         if(!hit) break;
         earliest = hit.end;
       }
+      if(!clipped.some((w,i)=>earliest>=w[0] && earliest+dur<=w[1]+this.windowFlex(clipped,i))) return null;
       if(earliest+dur > latest || earliest+dur > dayEnd) return null;
       const laid = {...sl, start:this.toTime(earliest), end:this.toTime(earliest+dur)};
       out.push(laid); prev = laid;
@@ -3226,14 +3321,15 @@ const Scheduler = {
         const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
           ? sl.groupMemberIds
           : [sl.studentId, sl.pairedStudentId].filter(Boolean);
-        let earliest = dayStart, known = ids.length > 0;
-        for(const id of ids){
-          const av = sm[id] && sm[id].availability && sm[id].availability[d];
-          if(!av || !av.on){ known = false; break; }
-          earliest = Math.max(earliest, this.toMin(av.start));
-        }
-        // Unknown constraints — leave it exactly where it is rather than guess.
-        if(!known){ prev = sl; continue; }
+        // Every stretch shared by everyone in this slot. A student busy in the
+        // middle of the day has two of them and either will do. No stretch that
+        // can hold the lesson means leave it exactly where it is.
+        const occupants = ids.map(id=>sm[id]).filter(Boolean);
+        if(!ids.length || occupants.length !== ids.length){ prev = sl; continue; }
+        const all = this.commonWindows(occupants, d, settings);
+        const wins = all.filter((w,i)=>w[1]+this.windowFlex(all,i)-w[0] >= dur);
+        if(!wins.length){ prev = sl; continue; }
+        let earliest = Math.max(dayStart, wins[0][0]);
 
         if(prev){
           // Same student back-to-back (a δίωρο) is one continuous block: no
@@ -3245,15 +3341,19 @@ const Scheduler = {
           earliest = Math.max(earliest, this.toMin(prev.end) + need);
         }
 
-        // Land after any break it would otherwise overlap (pushing past one
-        // break can land inside the next, hence the loop).
-        for(let guard=0; guard<breaks.length+1; guard++){
+        // Land inside one free stretch AND outside every break. Either can push
+        // into the other, so alternate until both hold.
+        let ok = false;
+        for(let guard=0; guard<breaks.length+wins.length+2; guard++){
+          const snapped = this.earliestFit(wins, earliest, dur);
+          if(snapped === null) break;
+          earliest = snapped;
           const hit = breaks.find(b => earliest < b.end && earliest+dur > b.start);
-          if(!hit) break;
+          if(!hit){ ok = true; break; }
           earliest = hit.end;
         }
 
-        if(earliest < s0 && !this.isBlocked(earliest, earliest+dur, d, settings)){
+        if(ok && earliest < s0 && !this.isBlocked(earliest, earliest+dur, d, settings)){
           sl.start = this.toTime(earliest);
           sl.end   = this.toTime(earliest+dur);
           savedMin += s0 - earliest;
@@ -3305,7 +3405,7 @@ const Scheduler = {
         // and shouldn't be forced into one long block just for tidiness.
         if(totalDur > 120) continue;
         if(dh && endMin > this.toMin(dh.end)+15) continue;
-        if(av && endMin > this.toMin(av.end)+15) continue;
+        if(av && !this.fitsAvailability(st, d, startMin, endMin)) continue;
         // The collapsed block spans the gap the fragments left — which may be
         // occupied. Bail out if anything else on the day (another student's
         // lesson, or a blocked break) sits inside that span: swallowing it
@@ -3523,7 +3623,7 @@ const Scheduler = {
       for(const s of slots){
         const av=studentsById[s.studentId]&&studentsById[s.studentId].availability&&studentsById[s.studentId].availability[day];
         if(!av||!av.on) return false;
-        if(s.start<this.toMin(av.start)||s.end>this.toMin(av.end)) return false;
+        if(!this.fitsAvailability(studentsById[s.studentId], day, s.start, s.end, 0)) return false;
         // Second line of defence behind rebuildDay's push-past-blocked logic:
         // reject outright rather than accept a candidate arrangement that
         // overlaps a blocked time.
@@ -5999,10 +6099,11 @@ const App = {
   // by taking the working-hours window and keeping the largest free gap left after
   // removing the exception blocks (single-window schema, so only one gap can win).
   //
-  // When a day is cut into several usable gaps, the smaller ones are genuinely
-  // lost — the scheduler only understands one window per day. Rather than let
-  // that happen silently, every discarded gap is pushed into the optional
-  // `dropped` array so the caller can tell the user what will not be used.
+  // A day cut into several usable stretches keeps all of them, in av.windows.
+  // It used to survive only as the largest one, and the rest were reported to
+  // the user as time that would not be used. Nothing is dropped any more; the
+  // second parameter remains only so an old caller cannot break, and is always
+  // left empty.
   computeAvailabilityFromExceptions(exceptions, dropped){
     const workDays = state.settings.workDays||[1,2,3,4,5];
     const dayHours = state.settings.dayHours||{};
@@ -6032,17 +6133,16 @@ const App = {
       });
       if(cursor<dayEnd) gaps.push([cursor,dayEnd]);
       if(gaps.length===0){ availability[d] = {on:false}; return; }
+      // Every free stretch is kept. start/end still name the largest one, so
+      // any code not yet reading `windows` behaves exactly as it did.
       let best = gaps[0];
       gaps.forEach(g=>{ if((g[1]-g[0])>(best[1]-best[0])) best=g; });
-      if(dropped){
-        // Ignore slivers no lesson could ever fit into; reporting those would
-        // just be noise.
-        gaps.forEach(g=>{
-          if(g===best || (g[1]-g[0])<30) return;
-          dropped.push({ day:d, start:Scheduler.minToTime(g[0]), end:Scheduler.minToTime(g[1]) });
-        });
-      }
-      availability[d] = { on:true, start:Scheduler.minToTime(best[0]), end:Scheduler.minToTime(best[1]) };
+      availability[d] = {
+        on: true,
+        start: Scheduler.minToTime(best[0]),
+        end: Scheduler.minToTime(best[1]),
+        windows: gaps.map(g=>[g[0], g[1]]),
+      };
     });
     return availability;
   },
@@ -6057,6 +6157,91 @@ const App = {
   // `days` limits the work to the days that actually changed, so every other
   // day keeps exactly the window it had. Students saved by an older build with
   // no exceptions list are left alone rather than guessed at.
+  // A split shift — 09:00-13:00 and 17:00-21:00, say — is stored as the OUTER
+  // hours plus an automatic break covering each gap. Blocked times are already
+  // honoured by every phase and heavily tested, so a split day needs no new
+  // scheduler logic at all.
+  //
+  // Auto breaks are tagged so that re-editing the hours replaces them without
+  // touching breaks the user added by hand.
+  // One "from — to" pair. A day can have several: a split shift is normal for
+  // anyone who teaches mornings and evenings.
+  _dayIntervalRowHtml(day, k, iv){
+    return `<div class="dh-row" data-day="${day}" style="display:flex;align-items:center;gap:6px">
+      <input type="time" class="dh-start" data-day="${day}" value="${esc(iv.start||'')}" style="flex:1">
+      <span style="font-size:12px;color:var(--text3)">–</span>
+      <input type="time" class="dh-end" data-day="${day}" value="${esc(iv.end||'')}" style="flex:1">
+      ${k>0 ? `<button class="chip chip-gray" style="border:none;cursor:pointer;font-size:12px;padding:2px 7px"
+        onclick="App.removeDayInterval(${day},${k})">✕</button>` : '<span style="width:26px"></span>'}
+    </div>`;
+  },
+
+  addDayInterval(day){
+    const box = document.getElementById('dh-rows-'+day);
+    if(!box) return;
+    const rows = box.querySelectorAll('.dh-row').length;
+    box.insertAdjacentHTML('beforeend', this._dayIntervalRowHtml(day, rows, {start:'',end:''}));
+  },
+
+  removeDayInterval(day, k){
+    const box = document.getElementById('dh-rows-'+day);
+    if(!box) return;
+    const rows = box.querySelectorAll('.dh-row');
+    if(rows[k]) rows[k].remove();
+  },
+
+  // What the form currently shows for one day.
+  readDayIntervals(day){
+    const box = document.getElementById('dh-rows-'+day);
+    if(!box) return [];
+    return [...box.querySelectorAll('.dh-row')].map(r=>({
+      start: r.querySelector('.dh-start')?.value || '',
+      end:   r.querySelector('.dh-end')?.value || '',
+    }));
+  },
+
+  setDayIntervals(day, intervals){
+    const clean = (intervals||[])
+      .filter(iv => iv && iv.start && iv.end && Scheduler.toMin(iv.end) > Scheduler.toMin(iv.start))
+      .sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    state.settings.blockedSlots = (state.settings.blockedSlots||[])
+      .filter(b => !(b.day===day && b.auto==='hours'));
+    if(!clean.length){ delete state.settings.dayHours[day]; return []; }
+
+    // Overlapping or touching intervals are one interval.
+    const merged = [clean[0]];
+    for(const iv of clean.slice(1)){
+      const last = merged[merged.length-1];
+      if(Scheduler.toMin(iv.start) <= Scheduler.toMin(last.end)){
+        if(Scheduler.toMin(iv.end) > Scheduler.toMin(last.end)) last.end = iv.end;
+      } else merged.push({...iv});
+    }
+    state.settings.dayHours[day] = { start: merged[0].start, end: merged[merged.length-1].end };
+    for(let i=1;i<merged.length;i++){
+      state.settings.blockedSlots.push({
+        day, start: merged[i-1].end, end: merged[i].start,
+        reason: t('hours_gap_reason'), auto: 'hours',
+      });
+    }
+    return merged;
+  },
+
+  // Read the split back out of the two places it lives.
+  dayIntervals(day){
+    const dh = state.settings.dayHours && state.settings.dayHours[day];
+    if(!dh) return [];
+    const gaps = (state.settings.blockedSlots||[])
+      .filter(b => b.day===day && b.auto==='hours')
+      .sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+    const out = []; let cur = dh.start;
+    for(const g of gaps){
+      if(Scheduler.toMin(g.start) > Scheduler.toMin(cur)) out.push({start:cur, end:g.start});
+      cur = g.end;
+    }
+    if(Scheduler.toMin(dh.end) > Scheduler.toMin(cur)) out.push({start:cur, end:dh.end});
+    return out.length ? out : [{start:dh.start, end:dh.end}];
+  },
+
   reapplyWorkingHours(days){
     if(!days || !days.length) return { students:0, days:[] };
     let changed = 0;
@@ -6114,15 +6299,9 @@ const App = {
     if(saveBtn){ saveBtn.disabled=true; saveBtn.style.opacity='0.6'; saveBtn.textContent=t('saving_ellipsis'); }
 
     const availabilityExceptions = this._editingExceptions||[];
-    const droppedWindows = [];
-    const availability = this.computeAvailabilityFromExceptions(availabilityExceptions, droppedWindows);
+    const availability = this.computeAvailabilityFromExceptions(availabilityExceptions);
     if(!Object.values(availability).some(av=>av.on)){
       Toast.show(t('toast_select_day'),'error'); return
-    }
-    // Don't quietly throw away usable time — say which windows won't be used.
-    if(droppedWindows.length){
-      const list = droppedWindows.map(w=>`${DAYS[w.day]} ${w.start}-${w.end}`).join(', ');
-      Toast.show(tf('toast_avail_windows_dropped', {windows:list}), 'info', 6000);
     }
 
     const st = {
@@ -7269,9 +7448,13 @@ const App = {
         ${allDays.filter(d=>st.workDays.includes(d)).map(d=>`
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="width:36px;font-size:13px;font-weight:600;color:var(--text2)">${DAYS[d]}</span>
-            <input type="time" id="dh-start-${d}" value="${st.dayHours?.[d]?.start||''}" style="flex:1">
-            <span style="font-size:12px;color:var(--text3)">–</span>
-            <input type="time" id="dh-end-${d}" value="${st.dayHours?.[d]?.end||''}" style="flex:1">
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px" id="dh-rows-${d}">
+              ${(this.dayIntervals(d).length ? this.dayIntervals(d) : [{start:'',end:''}])
+                .map((iv,k)=>this._dayIntervalRowHtml(d,k,iv)).join('')}
+            </div>
+            <button class="chip chip-gray" title="${esc(t('settings_add_interval'))}"
+              style="border:none;cursor:pointer;font-size:14px;padding:4px 9px;font-weight:700;align-self:flex-start"
+              onclick="App.addDayInterval(${d})">＋</button>
           </div>
           ${!st.dayHours?.[d] ? `<p style="font-size:12px;color:var(--orange);padding:2px 0 6px">${tf('settings_day_hours_missing',{day:DAYS_FULL[d]})}</p>` : ''}`).join('')}
         <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">${t('settings_workday_hint')}</p>
@@ -7526,11 +7709,10 @@ const App = {
     }
     this._homeAddrPendingCoord = null;
 
-    // Day hours
+    // Day hours — one or several intervals per day.
     s.workDays.forEach(d=>{
-      const st2 = document.getElementById('dh-start-'+d)?.value;
-      const en  = document.getElementById('dh-end-'+d)?.value;
-      if(st2 && en) s.dayHours[d] = {start:st2,end:en};
+      const rows = this.readDayIntervals(d).filter(iv=>iv.start && iv.end);
+      if(rows.length) this.setDayIntervals(d, rows);
     });
 
     Storage.saveSettings(s);

@@ -1304,3 +1304,148 @@ describe('travel time from the lesson before', () => {
     assert.equal(slot.start, '18:00', 'and at the earliest the student is free');
   });
 });
+
+describe('a student free in two stretches of one day', () => {
+  // Being busy 17:00-18:30 leaves BOTH 15:00-17:00 and 18:30-22:00 usable.
+  // Availability used to survive as a single window — the largest — so the
+  // earlier stretch was simply thrown away.
+  function twoStretches(app, n, gap) {
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } });
+    app.setState({ settings: cfg, coords: { home: { lat: 38.24, lon: 21.73 } } });
+    const sts = Array.from({ length: n }, (_, i) => {
+      const st = student('s' + i, { days: [1, 2], lessonsPerWeek: 1, lessonDuration: 60 });
+      st.availabilityExceptions = [1, 2].map(d => ({ day: d, ...gap }));
+      st.availability = app.App.computeAvailabilityFromExceptions(st.availabilityExceptions);
+      return st;
+    });
+    sts.forEach((s, i) => { app.state.coords[s.id] = { lat: 38.24 + i / 900, lon: 21.73 + i / 900 }; });
+    app.setState({ students: sts });
+    return { sts, cfg };
+  }
+
+  test('both stretches are kept, with the larger still named by start/end', () => {
+    const app = loadApp();
+    const { sts } = twoStretches(app, 1, { start: '17:00', end: '18:30' });
+    const av = sts[0].availability[1];
+    assert.deepStrictEqual(Array.from(av.windows.map(w => Array.from(w))),
+      [[15 * 60, 17 * 60], [18 * 60 + 30, 22 * 60]]);
+    // start/end keep their old meaning so anything not reading windows still
+    // sees a real, legal window rather than one spanning the busy hour.
+    assert.equal(av.start, '18:30');
+    assert.equal(av.end, '22:00');
+  });
+
+  test('the scheduler offers slots in the earlier stretch too', () => {
+    const app = loadApp();
+    const { sts, cfg } = twoStretches(app, 1, { start: '17:00', end: '18:30' });
+    const S = app.Scheduler;
+    const slot = S.findSlotFixed(sts[0], 1, [], cfg, 60);
+    assert.ok(slot, 'a slot should be found');
+    assert.equal(slot.start, '15:00', 'the earliest usable moment is in the first stretch');
+  });
+
+  test('nothing is ever placed inside the stated gap', async () => {
+    const app = loadApp({ seed: 3 });
+    const { sts, cfg } = twoStretches(app, 8, { start: '17:00', end: '18:30' });
+    const S = app.Scheduler;
+    const sched = await runPipeline(app, sts, cfg, app.state.coords);
+
+    assertClean(auditSchedule(S, sched, sts, cfg));
+    for (const d of cfg.workDays) {
+      for (const sl of (sched[d] || [])) {
+        assert.ok(S.toMin(sl.end) <= S.toMin('17:00') || S.toMin(sl.start) >= S.toMin('18:30'),
+          `${sl.studentId} sits at ${sl.start}-${sl.end}, inside the hours they said they cannot do`);
+      }
+    }
+  });
+
+  test('the 15-minute overrun never eats into a stated gap', () => {
+    const app = loadApp();
+    const { sts } = twoStretches(app, 1, { start: '17:00', end: '18:30' });
+    const S = app.Scheduler;
+    // 16:10-17:10 would overrun the first stretch by ten minutes. That slack
+    // exists for the end of the DAY, not for an hour someone said they are busy.
+    assert.equal(S.fitsAvailability(sts[0], 1, S.toMin('16:10'), S.toMin('17:10')), false);
+    // The same overrun at the end of the day is still tolerated, as before.
+    assert.equal(S.fitsAvailability(sts[0], 1, S.toMin('21:10'), S.toMin('22:10')), true);
+  });
+
+  test('both stretches actually get used when the day is busy', async () => {
+    const app = loadApp({ seed: 3 });
+    const { sts, cfg } = twoStretches(app, 8, { start: '17:00', end: '18:30' });
+    const sched = await runPipeline(app, sts, cfg, app.state.coords);
+    const early = cfg.workDays.flatMap(d => (sched[d] || []))
+      .filter(sl => app.Scheduler.toMin(sl.start) < app.Scheduler.toMin('17:00'));
+    assert.ok(early.length > 0,
+      'the stretch before the gap must be used, not written off as it used to be');
+  });
+});
+
+describe('a teacher working a split shift', () => {
+  test('two intervals become outer hours plus a break in the gap', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } }) });
+    app.App.setDayIntervals(1, [{ start: '09:00', end: '13:00' }, { start: '17:00', end: '21:00' }]);
+
+    assert.deepStrictEqual(Object.assign({}, app.state.settings.dayHours[1]),
+      { start: '09:00', end: '21:00' });
+    const auto = app.state.settings.blockedSlots.filter(b => b.auto === 'hours');
+    assert.equal(auto.length, 1);
+    assert.equal(auto[0].start, '13:00');
+    assert.equal(auto[0].end, '17:00');
+  });
+
+  test('re-editing the hours does not disturb a break the user added', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '21:00' } } }) });
+    app.state.settings.blockedSlots = [{ day: 1, start: '20:00', end: '20:30', reason: 'mine' }];
+    app.App.setDayIntervals(1, [{ start: '09:00', end: '13:00' }, { start: '17:00', end: '21:00' }]);
+    app.App.setDayIntervals(1, [{ start: '10:00', end: '12:00' }, { start: '18:00', end: '21:00' }]);
+
+    const mine = app.state.settings.blockedSlots.filter(b => b.reason === 'mine');
+    assert.equal(mine.length, 1, 'the hand-added break must survive');
+    assert.equal(app.state.settings.blockedSlots.filter(b => b.auto === 'hours').length, 1,
+      'and the previous auto break must be replaced, not stacked');
+  });
+
+  test('overlapping intervals collapse into one', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({ workDays: [1] }) });
+    app.App.setDayIntervals(1, [{ start: '09:00', end: '14:00' }, { start: '13:00', end: '18:00' }]);
+    assert.equal(app.state.settings.blockedSlots.filter(b => b.auto === 'hours').length, 0);
+    assert.deepStrictEqual(Object.assign({}, app.state.settings.dayHours[1]),
+      { start: '09:00', end: '18:00' });
+  });
+
+  test('the split reads back exactly as it was entered', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({ workDays: [1] }) });
+    const given = [{ start: '09:00', end: '13:00' }, { start: '17:00', end: '21:00' }];
+    app.App.setDayIntervals(1, given);
+    assert.deepStrictEqual(Array.from(app.App.dayIntervals(1)).map(x => Object.assign({}, x)), given);
+  });
+
+  test('no lesson lands in the middle of a split shift', async () => {
+    const app = loadApp({ seed: 5 });
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '21:00' } } });
+    app.setState({ settings: cfg, coords: { home: { lat: 38.24, lon: 21.73 } }, students: [] });
+    app.App.setDayIntervals(1, [{ start: '09:00', end: '13:00' }, { start: '17:00', end: '21:00' }]);
+
+    const sts = Array.from({ length: 10 }, (_, i) =>
+      student('s' + i, { days: [1], lessonsPerWeek: 1, lessonDuration: 60,
+        window: { start: '09:00', end: '21:00' } }));
+    sts.forEach((s, i) => { app.state.coords[s.id] = { lat: 38.24 + i / 900, lon: 21.73 + i / 900 }; });
+    app.setState({ students: sts });
+
+    const sched = await runPipeline(app, sts, cfg, app.state.coords);
+
+    assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
+    const S = app.Scheduler;
+    for (const sl of (sched[1] || [])) {
+      assert.ok(S.toMin(sl.end) <= S.toMin('13:00') || S.toMin(sl.start) >= S.toMin('17:00'),
+        `${sl.studentId} at ${sl.start}-${sl.end} falls in the middle of the split shift`);
+    }
+    assert.ok((sched[1] || []).length > 0, 'and the day must still be used');
+  });
+});

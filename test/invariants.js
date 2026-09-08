@@ -45,8 +45,18 @@ function auditSchedule(Scheduler, schedule, students, settings) {
       for (const st of occupants(sl)) {
         const av = st.availability && st.availability[d];
         if (!av || !av.on) { errs.push(`[${d}] ${st.name}: not available this day`); continue; }
-        if (s0 < S.toMin(av.start) || e0 > S.toMin(av.end) + 15)
-          errs.push(`[${d}] ${st.name}: outside own window (${sl.start}-${sl.end} vs ${av.start}-${av.end})`);
+        // Derived here rather than calling the app's fitsAvailability: the point
+        // of this file is to check the schedule against the RULES, independently
+        // of the app's own reading of them. A student free in two stretches must
+        // sit inside ONE of them — not merely between the first and the last.
+        const windows = (Array.isArray(av.windows) && av.windows.length)
+          ? av.windows
+          : [[S.toMin(av.start), S.toMin(av.end)]];
+        // The 15-minute overrun belongs to the end of the day only. A stretch
+        // that ends because the student SAID they are busy gets none.
+        if (!windows.some(([ws, we], i) => s0 >= ws && e0 <= we + (i === windows.length - 1 ? 15 : 0)))
+          errs.push(`[${d}] ${st.name}: outside own windows (${sl.start}-${sl.end} vs ` +
+            windows.map(([a, b]) => `${S.toTime(a)}-${S.toTime(b)}`).join(', ') + ')');
       }
 
       if (S.isBlocked(s0, e0, d, settings))

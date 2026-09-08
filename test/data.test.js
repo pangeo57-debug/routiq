@@ -158,21 +158,24 @@ describe('availability exceptions round trip', () => {
     assert.ok(!av[1] || !av[1].on, 'a full-day block should switch the day off');
   });
 
-  test('a day cut into two windows reports the one it has to discard', () => {
+  test('a day cut into two windows keeps both of them', () => {
     const app = loadApp();
     const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
     app.setState({ settings: cfg });
-    // 15:00-17:00 free, blocked 17:00-18:00, 18:00-22:00 free. The schema keeps
-    // one window per day, so the 2h morning gap loses to the 4h evening one —
-    // but the user must be told, not silently robbed of two usable hours.
+    // 15:00-17:00 free, busy 17:00-18:00, 18:00-22:00 free. Both halves are
+    // usable. This used to survive as the larger one only, with the two morning
+    // hours reported to the user as lost — they are not lost any more.
     const dropped = [];
     const av = app.App.computeAvailabilityFromExceptions(
       [{ day: 1, start: '17:00', end: '18:00' }], dropped);
+    assert.deepStrictEqual(Array.from(av[1].windows.map(w => Array.from(w))),
+      [[15 * 60, 17 * 60], [18 * 60, 22 * 60]]);
+    // start/end still name the largest window, so code that has not been
+    // converted to windows keeps reading a real one rather than a span that
+    // covers the busy hour.
     assert.equal(av[1].start, '18:00');
     assert.equal(av[1].end, '22:00');
-    assert.equal(dropped.length, 1, 'the discarded window should be reported');
-    assert.equal(dropped[0].start, '15:00');
-    assert.equal(dropped[0].end, '17:00');
+    assert.equal(dropped.length, 0, 'nothing is discarded any more');
   });
 
   test('nothing is reported when only one window survives', () => {
