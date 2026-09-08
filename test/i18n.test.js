@@ -8,7 +8,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
-const { loadApp, APP_FILE } = require('./harness');
+const { loadApp, settings, APP_FILE } = require('./harness');
 
 const LANGS = ['el', 'en', 'fr', 'de'];
 
@@ -74,5 +74,58 @@ describe('i18n', () => {
         assert.ok(dict[lang].subjects[s], `${lang} is missing a translation for "${s}"`);
       }
     }
+  });
+});
+
+describe('each trade gets its own list of services', () => {
+  // A personal trainer choosing between Μαθηματικά, Φυσική and Χημεία was the
+  // giveaway that this list was written for one profession only.
+  test('every profession has its own list, and none is the school one', () => {
+    const app = loadApp();
+    const seen = new Map();
+    for (const p of app.PROFESSION_VALUES) {
+      app.setState({ settings: settings({ profession: p }) });
+      const list = Array.from(app.ctx.getSubjects());
+      assert.ok(list.length >= 4, `${p} has only ${list.length} services`);
+      seen.set(p, list.join('|'));
+    }
+    for (const [p, list] of seen) {
+      if (p === 'tutor') continue;
+      assert.notEqual(list, seen.get('tutor'), `${p} still offers the school subjects`);
+    }
+  });
+
+  test('every service reads properly in all four languages', () => {
+    const app = loadApp();
+    for (const lang of ['el', 'en', 'fr', 'de']) {
+      for (const p of app.PROFESSION_VALUES) {
+        app.setState({ settings: settings({ profession: p, language: lang }) });
+        for (const key of app.ctx.getSubjects()) {
+          // Membership, not difference: in Greek several keys ARE their own
+          // translation, which is correct — the keys were written in Greek.
+          assert.ok(Object.prototype.hasOwnProperty.call(app.I18N[lang].subjects, key),
+            `${lang}/${p}: "${key}" is missing from the dictionary and would show its raw key`);
+          assert.ok(app.subjectLabel(key), `${lang}/${p}: "${key}" renders blank`);
+        }
+      }
+    }
+  });
+
+  test('keys are identifiers, so switching language cannot change stored data', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({ profession: 'personal_training', language: 'el' }) });
+    const el = Array.from(app.ctx.getSubjects());
+    app.setState({ settings: settings({ profession: 'personal_training', language: 'de' }) });
+    assert.deepStrictEqual(Array.from(app.ctx.getSubjects()), el,
+      'the values stored on a student must not depend on the interface language');
+  });
+
+  test('a subject from another trade still displays after switching profession', () => {
+    const app = loadApp();
+    // Someone who starts as a tutor and later switches has students on file
+    // with school subjects. Those records must stay readable.
+    app.setState({ settings: settings({ profession: 'personal_training', language: 'el' }) });
+    assert.equal(app.subjectLabel('Μαθηματικά'), 'Μαθηματικά');
+    assert.equal(app.subjectLabel('unknown_key'), 'unknown_key', 'and nothing may render blank');
   });
 });
