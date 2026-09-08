@@ -794,6 +794,8 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    pair_distance_unknown:'απόσταση άγνωστη (η διεύθυνση δεν έχει εντοπιστεί ακόμα)',
+    form_find_match:'Ψάξε αν υπάρχει ταίρι', toast_already_paired:'Έχει ήδη ζεύγος — καθάρισέ το πρώτα αν θες άλλο', toast_no_match:'Κανένα ταίρι: χρειάζεται ίδια διάρκεια, ίδιο αντικείμενο, κοντινή διεύθυνση και κοινές ελεύθερες ώρες', confirm_match_title:'Ταιριάζει με {name}', confirm_match_text:'Θα κάνουν μαζί {mins} λεπτά, {days}{dist}. Οι περιορισμοί και των δύο μένουν ως έχουν — το μάθημα μπαίνει μόνο όπου είναι ελεύθεροι και οι δύο.{more}\\n\\nΝα γίνουν ζεύγος και να υπολογιστεί το πρόγραμμα;', confirm_match_more:' (βρέθηκαν {n} ακόμα)',
     pairs_find_btn:'Βρες ποιοι μπορούν να έρθουν μαζί', pair_days_count:'{n} κοινές μέρες', toast_no_pairs:'Δεν βρέθηκαν {clients} που να μπορούν να μοιραστούν ώρα — χρειάζονται ίδια διάρκεια, ίδιο αντικείμενο, κοντινές διευθύνσεις και κοινές ελεύθερες ώρες', confirm_pairs_title:'Βρέθηκαν {n} πιθανά ζευγάρια', confirm_pairs_text:'Θα μοιράζονται μία ώρα ο καθένας. Οι περιορισμοί τους μένουν ως έχουν — το μάθημα μπαίνει μόνο όπου είναι ελεύθεροι και οι δύο.\\n\\n{list}\\n\\nΝα δημιουργηθούν και να ξαναϋπολογιστεί το πρόγραμμα;', toast_pairs_created:'Δημιουργήθηκαν {n} ζευγάρια — υπολογίζω ξανά',
     settings_add_interval:'Πρόσθεσε διάστημα (σπαστό ωράριο)', hours_gap_reason:'Εκτός ωραρίου',
     toast_availability_updated:'Ενημερώθηκε η διαθεσιμότητα {n} μαθητών με βάση το νέο ωράριο', confirm_new_workday_title:'Πρόσθεσες {days}', confirm_new_workday_text:'Κανένας μαθητής δεν έχει δηλώσει διαθεσιμότητα για {days}. Να θεωρηθούν ελεύθεροι όλες τις ώρες εκείνης της μέρας ({n} μαθητές); Μπορείς να το αλλάξεις ανά μαθητή μετά.',
@@ -986,6 +988,8 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    pair_distance_unknown:'distance unknown (the address is not located yet)',
+    form_find_match:'Look for a match', toast_already_paired:'Already paired — clear that first if you want a different partner', toast_no_match:'No match: it needs the same length, the same subject, an address nearby and free time in common', confirm_match_title:'Matches {name}', confirm_match_text:'They would share {mins} minutes, {days}{dist}. Neither one\u2019s constraints change — the session only goes where BOTH are free.{more}\\n\\nPair them and work out the schedule?', confirm_match_more:' ({n} more found)',
     pairs_find_btn:'Find who could come together', pair_days_count:'{n} days in common', toast_no_pairs:'No {clients} can share a session — they need the same length, the same subject, addresses close together and free time in common', confirm_pairs_title:'{n} possible pairs found', confirm_pairs_text:"They would share one session each. Nobody's constraints change — the lesson only goes where BOTH are free.\\n\\n{list}\\n\\nCreate them and recalculate?", toast_pairs_created:'{n} pairs created — recalculating',
     settings_add_interval:'Add an interval (split shift)', hours_gap_reason:'Outside working hours',
     toast_availability_updated:'Updated availability for {n} students to match the new hours', confirm_new_workday_title:'You added {days}', confirm_new_workday_text:'No student has said anything about {days}. Treat all {n} of them as free that whole day? You can change it per student afterwards.',
@@ -1178,6 +1182,8 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    pair_distance_unknown:'distance inconnue (adresse pas encore localisée)',
+    form_find_match:'Chercher un binôme', toast_already_paired:'Déjà en binôme — retirez-le d\u2019abord pour en choisir un autre', toast_no_match:'Aucun binôme : il faut même durée, même matière, une adresse proche et des disponibilités communes', confirm_match_title:'Compatible avec {name}', confirm_match_text:'Ils partageraient {mins} minutes, {days}{dist}. Aucune contrainte ne change — la séance ne va que là où les DEUX sont libres.{more}\\n\\nLes mettre en binôme et calculer le planning ?', confirm_match_more:' ({n} autres trouvés)',
     pairs_find_btn:'Trouver qui peut venir ensemble', pair_days_count:'{n} jours en commun', toast_no_pairs:'Aucun {clients} ne peut partager une séance — il faut même durée, même matière, adresses proches et disponibilités communes', confirm_pairs_title:'{n} paires possibles', confirm_pairs_text:'Ils partageraient une séance. Aucune contrainte ne change — le cours ne va que là où les DEUX sont libres.\\n\\n{list}\\n\\nLes créer et recalculer ?', toast_pairs_created:'{n} paires créées — recalcul en cours',
     settings_add_interval:'Ajouter une plage (horaire coupé)', hours_gap_reason:'Hors horaires',
     toast_availability_updated:'Disponibilité mise à jour pour {n} élèves selon les nouveaux horaires', confirm_new_workday_title:'Vous avez ajouté {days}', confirm_new_workday_text:'Aucun élève ne s\u2019est prononcé sur {days}. Les considérer tous ({n}) comme libres toute la journée ? Modifiable ensuite par élève.',
@@ -1370,6 +1376,8 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    pair_distance_unknown:'Entfernung unbekannt (Adresse noch nicht lokalisiert)',
+    form_find_match:'Nach einem Partner suchen', toast_already_paired:'Bereits gepaart — zuerst lösen, um einen anderen zu wählen', toast_no_match:'Kein Partner: nötig sind gleiche Dauer, gleiches Fach, eine nahe Adresse und gemeinsame freie Zeit', confirm_match_title:'Passt zu {name}', confirm_match_text:'Sie teilen sich {mins} Minuten, {days}{dist}. Keine Vorgabe ändert sich — die Stunde kommt nur dorthin, wo BEIDE frei sind.{more}\\n\\nPaar anlegen und Plan berechnen?', confirm_match_more:' ({n} weitere gefunden)',
     pairs_find_btn:'Finden, wer zusammenkommen kann', pair_days_count:'{n} gemeinsame Tage', toast_no_pairs:'Keine {clients} können sich eine Stunde teilen — nötig sind gleiche Dauer, gleiches Fach, nahe Adressen und gemeinsame freie Zeit', confirm_pairs_title:'{n} mögliche Paare gefunden', confirm_pairs_text:'Sie würden sich je eine Stunde teilen. Keine Vorgabe ändert sich — die Stunde kommt nur dorthin, wo BEIDE frei sind.\\n\\n{list}\\n\\nAnlegen und neu berechnen?', toast_pairs_created:'{n} Paare erstellt — Neuberechnung läuft',
     settings_add_interval:'Zeitraum hinzufügen (geteilte Schicht)', hours_gap_reason:'Außerhalb der Arbeitszeit',
     toast_availability_updated:'Verfügbarkeit von {n} Schülern an die neuen Zeiten angepasst', confirm_new_workday_title:'{days} hinzugefügt', confirm_new_workday_text:'Kein Schüler hat sich zu {days} geäußert. Alle {n} als ganztägig frei behandeln? Pro Schüler später änderbar.',
@@ -2867,6 +2875,57 @@ const Scheduler = {
   //
   // Ranked by how much it helps: whoever is currently going unplaced first,
   // then whoever is nearest.
+  // Can these two share a session, and how well? Returns null when they cannot.
+  //
+  // Sole home of the pairing rules. Both callers — the sweep over everybody and
+  // the "find a match for this one" button in the client form — go through here,
+  // so the two can never drift into disagreeing about what a workable pair is.
+  //
+  // How far apart two clients may live before a shared session stops being a
+  // favour to either of them.
+  PAIR_MAX_KM: 3,
+  pairViability(a, b, settings, coords){
+    if(!a || !b || a.id === b.id) return null;
+    if(a.lessonDuration !== b.lessonDuration) return null;
+    if((a.subject||'') !== (b.subject||'')) return null;
+
+    const dur = a.lessonDuration;
+    const need = Math.min(a.lessonsPerWeek||1, b.lessonsPerWeek||1);
+    const days = [];
+    for(const d of (settings.workDays||[])){
+      const shared = this.commonWindows([a,b], d, settings).filter(w=>w[1]-w[0] >= dur);
+      if(shared.length) days.push({day:d, minutes: shared.reduce((n,w)=>n+(w[1]-w[0]),0)});
+    }
+    if(days.length < need) return null;      // cannot cover the sessions they need
+
+    // Real geocoded positions only. safeCoord would invent one from a hash of
+    // the address when none exists, which is fine for ordering a route but
+    // useless here — it would judge "are these two neighbours?" against a
+    // position nobody lives at. Unknown stays unknown, and the caller says so
+    // rather than pretending the check was made.
+    const ca = this.validCoord(coords[a.id]) ? coords[a.id] : null;
+    const cb = this.validCoord(coords[b.id]) ? coords[b.id] : null;
+    const km = (ca && cb) ? this.haversineKm(ca, cb) : null;
+    if(km != null && km > this.PAIR_MAX_KM) return null;
+
+    return { a, b, dur, sessions: need,
+      days: days.map(x=>x.day),
+      sharedMinutes: days.reduce((n,x)=>n+x.minutes,0),
+      km };
+  },
+
+  // Everyone `student` could share a session with, best first. `student` need
+  // not be saved yet — the client form uses this while the record is still
+  // being typed.
+  matchesFor(student, students, settings, coords){
+    if(student.pairedWith || (student.type==='group' && student.group)) return [];
+    return students
+      .filter(o => o.id !== student.id && !o.pairedWith && !(o.type==='group' && o.group))
+      .map(o => this.pairViability(student, o, settings, coords))
+      .filter(Boolean)
+      .sort((x,y) => (x.km??99)-(y.km??99) || y.sharedMinutes-x.sharedMinutes);
+  },
+
   suggestPairs(students, settings, coords, unplacedIds){
     const unplaced = new Set(unplacedIds||[]);
     const eligible = students.filter(s => !s.pairedWith && !(s.type==='group' && s.group));
@@ -2874,33 +2933,10 @@ const Scheduler = {
 
     for(let i=0;i<eligible.length;i++){
       for(let j=i+1;j<eligible.length;j++){
-        const a=eligible[i], b=eligible[j];
-        if(a.lessonDuration !== b.lessonDuration) continue;
-        if((a.subject||'') !== (b.subject||'')) continue;
-
-        const dur = a.lessonDuration;
-        const need = Math.min(a.lessonsPerWeek||1, b.lessonsPerWeek||1);
-        const days = [];
-        for(const d of (settings.workDays||[])){
-          const shared = this.commonWindows([a,b], d, settings).filter(w=>w[1]-w[0] >= dur);
-          if(shared.length) days.push({day:d, minutes: shared.reduce((n,w)=>n+(w[1]-w[0]),0)});
-        }
-        if(days.length < need) continue;      // cannot cover the sessions they need
-
-        const ca = this.safeCoord(coords, a.id, a.address);
-        const cb = this.safeCoord(coords, b.id, b.address);
-        const km = (ca && cb) ? this.haversineKm(ca, cb) : null;
-        // Someone has to get to the other. Beyond a few kilometres a shared
-        // session stops being a favour to either of them.
-        if(km != null && km > 3) continue;
-
-        out.push({
-          a, b, dur, sessions: need,
-          days: days.map(x=>x.day),
-          sharedMinutes: days.reduce((n,x)=>n+x.minutes,0),
-          km,
-          helps: (unplaced.has(a.id)?1:0) + (unplaced.has(b.id)?1:0),
-        });
+        const m = this.pairViability(eligible[i], eligible[j], settings, coords);
+        if(!m) continue;
+        out.push({ ...m,
+          helps: (unplaced.has(m.a.id)?1:0) + (unplaced.has(m.b.id)?1:0) });
       }
     }
 
@@ -5634,6 +5670,8 @@ const App = {
           <option value="">${t('form_paired_none')}</option>
           ${state.students.filter(s=>s.id!==(st?.id||'')).map(s=>`<option value="${s.id}" ${(st?.pairedWith||'')=== s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
         </select>
+        <button type="button" class="btn btn-secondary btn-full" style="margin-top:8px"
+          onclick="App.findMatchForForm()">🔎 ${esc(t('form_find_match'))}</button>
       </div>
       <div class="form-group" style="margin-top:14px">
         <label>${t('student_notes_label')}</label>
@@ -7073,6 +7111,115 @@ const App = {
     Storage.saveSettings(state.settings);
     this.runAndNotify();
     Toast.show(tf('toast_hours_extended',{day:DAYS_FULL[day],min:extMin}),'success');
+  },
+
+  // Ask whether to look for clients who could share a session, show what was
+  // found, and only act on a yes. Nothing is created without the user seeing
+  // exactly who would be paired with whom.
+  findPairSuggestions(){
+    const L = getLabels();
+    let pairs = [];
+    try{
+      pairs = Scheduler.suggestPairs(state.students, state.settings, state.coords,
+        this.computeUnplacedLive().map(u=>u.student.id));
+    }catch(e){ console.error('suggestPairs failed', e); }
+
+    if(!pairs.length){
+      Toast.show(tf('toast_no_pairs',{clients:L.clients.toLowerCase()}),'info',7000);
+      return;
+    }
+    const lines = pairs.map(p=>
+      `• ${p.a.name} + ${p.b.name} — ${p.dur}${t('unit_min')}, ${tf('pair_days_count',{n:p.days.length})}` +
+      (p.km!=null ? `, ${p.km.toFixed(1)}km` : '')).join('\n');
+
+    this.confirm(
+      tf('confirm_pairs_title',{n:pairs.length}),
+      tf('confirm_pairs_text',{list:lines}),
+      ()=>this.applyPairSuggestions(pairs),
+      t('btn_apply'), false);
+  },
+
+  // Create the pairs and recalculate. Everything the user set stays: each
+  // client keeps their own availability, and the shared session is placed only
+  // where BOTH are genuinely free.
+  applyPairSuggestions(pairs){
+    let made = 0;
+    for(const p of pairs){
+      const a = state.students.find(x=>x.id===p.a.id);
+      const b = state.students.find(x=>x.id===p.b.id);
+      if(!a || !b || a.pairedWith || b.pairedWith) continue;   // changed underneath us
+      a.pairedWith = b.id;
+      b.pairedWith = a.id;
+      made++;
+    }
+    if(!made) return;
+    Storage.saveStudents(state.students);
+    Toast.show(tf('toast_pairs_created',{n:made}),'success');
+    if(state.currentScreen==='students') this.renderStudents();
+    this.runAndNotify();
+  },
+
+  // Build a client record from whatever is currently typed in the form, so a
+  // match can be looked for BEFORE the client is saved. Returns null when the
+  // form does not yet describe someone concrete enough to match.
+  _studentFromForm(){
+    const name = document.getElementById('st-name')?.value?.trim();
+    if(!name) return null;
+    const exceptions = this._editingExceptions || [];
+    return {
+      id: state.editingStudentId || '__new__',
+      name,
+      address: document.getElementById('st-addr')?.value?.trim() || '',
+      subject: document.getElementById('st-subject')?.value || '',
+      lessonDuration: Number(document.getElementById('st-dur')?.value) || 60,
+      lessonsPerWeek: Number(document.getElementById('st-freq')?.value) || 1,
+      type: document.getElementById('st-type')?.value || 'solo',
+      group: document.getElementById('st-group')?.value || '',
+      pairedWith: document.getElementById('st-paired')?.value || null,
+      availability: this.computeAvailabilityFromExceptions(exceptions),
+      availabilityExceptions: exceptions,
+    };
+  },
+
+  // "Does anyone already on the books fit with this one?" — asked from inside
+  // the client form, while the record is still being typed. Same rules as the
+  // sweep over everybody; there is only one definition of a workable pair.
+  findMatchForForm(){
+    const me = this._studentFromForm();
+    if(!me){ Toast.show(t('toast_enter_fullname'),'error'); return; }
+    if(me.pairedWith){ Toast.show(t('toast_already_paired'),'info'); return; }
+
+    // An unsaved client has no geocoded address yet. Use the coordinate the
+    // address autocomplete already resolved, so distance is still checked
+    // rather than quietly skipped.
+    const coords = {...state.coords};
+    if(this._addrPendingCoord) coords[me.id] = this._addrPendingCoord;
+
+    let matches = [];
+    try{ matches = Scheduler.matchesFor(me, state.students, state.settings, coords); }
+    catch(e){ console.error('matchesFor failed', e); }
+
+    if(!matches.length){ Toast.show(t('toast_no_match'),'info',7000); return; }
+
+    const best = matches[0];
+    const other = best.a.id === me.id ? best.b : best.a;
+    this.confirm(
+      tf('confirm_match_title',{name:other.name}),
+      tf('confirm_match_text',{
+        name: other.name, mins: best.dur,
+        days: tf('pair_days_count',{n:best.days.length}),
+        dist: best.km!=null ? `, ${best.km.toFixed(1)}km` : `, ${t('pair_distance_unknown')}`,
+        more: matches.length>1 ? tf('confirm_match_more',{n:matches.length-1}) : '',
+      }),
+      ()=>{
+        const sel = document.getElementById('st-paired');
+        if(sel) sel.value = other.id;
+        // saveStudent already links both records and clears any previous
+        // partner, so a pair is only ever created down one path.
+        this.saveStudent();
+        this.runAndNotify();
+      },
+      t('btn_apply'), false);
   },
 
   forceMergeAndReschedule(studentId){

@@ -69,12 +69,12 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 ### Testing
 
 ```bash
-npm test     # correctness — 143 tests
+npm test     # correctness — 148 tests
 npm run bench                    # quality, against published best-known solutions
 npm run bench -- --against HEAD~1  # this build vs another, identical inputs
 ```
 
-143 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+148 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run

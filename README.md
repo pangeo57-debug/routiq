@@ -69,12 +69,12 @@ PRIVACY.md, TERMS.md → πρόχειρα νομικά κείμενα (ΧΡΕΙ�
 ### Testing
 
 ```bash
-npm test        # ορθότητα — 143 τεστ
+npm test        # ορθότητα — 148 τεστ
 npm run bench                      # ποιότητα, απέναντι σε δημοσιευμένες λύσεις
 npm run bench -- --against HEAD~1  # αυτή η έκδοση εναντίον άλλης, ίδια δεδομένα
 ```
 
-143 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
+148 τεστ, καμία εξάρτηση — μόνο το built-in `node:test` (Node 18+).
 
 Επειδή η εφαρμογή είναι ένα αρχείο HTML, τα τεστ φορτώνουν το πραγματικό
 `<script>` σε Node `vm` sandbox με stubbed browser API (`test/harness.js`).

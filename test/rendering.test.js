@@ -11,7 +11,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { loadApp, student, settings, slot, cityCoords } = require('./harness');
+const { loadApp, student, settings, slot, cityCoords, APP_FILE } = require('./harness');
 
 const PAYLOAD = '<img src=x onerror="alert(1)">';
 
@@ -397,3 +397,98 @@ describe('when the scheduler itself fails', () => {
     assert.ok(km('a', 'addr-a', 'b', 'addr-b', 1, 900) > 0);
   });
 });
+
+describe('buttons point at handlers that exist', () => {
+  // A button was shipped calling App.findPairSuggestions() while that function
+  // had never made it into the file. Nothing caught it: the tests exercised the
+  // Scheduler directly and never the wiring, so the button was simply dead.
+  test('every App.x() referenced from an onclick is a real function', () => {
+    const app = loadApp();
+    const html = require('fs').readFileSync(APP_FILE, 'utf8');
+    const called = new Set();
+    for (const m of html.matchAll(/App\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)) called.add(m[1]);
+    const missing = [...called].filter(name => typeof app.App[name] !== 'function');
+    assert.deepStrictEqual(missing, [],
+      `these are called from the markup but do not exist: ${missing.join(', ')}`);
+  });
+});
+
+describe('finding a match while the client is still being typed', () => {
+  function form(app, values) {
+    const vals = Object.assign({
+      'st-name': 'New Person', 'st-addr': 'Somewhere 1', 'st-subject': 'Μαθηματικά',
+      'st-dur': '60', 'st-freq': '1', 'st-type': 'solo', 'st-group': '', 'st-paired': '',
+    }, values);
+    app.ctx.document.getElementById = (id) => (id in vals)
+      ? { value: vals[id], style: {}, classList: { add(){}, remove(){} } }
+      : { style: {}, dataset: {}, value: '', textContent: '', innerHTML: '', disabled: false,
+          classList: { add(){}, remove(){}, contains: () => false, toggle(){} },
+          addEventListener(){}, appendChild(){}, remove(){},
+          querySelectorAll: () => [], querySelector: () => null };
+    app.App._editingExceptions = [];
+    return vals;
+  }
+
+  function withExisting(app) {
+    const cfg = settings({ workDays: [1, 2, 3] });
+    const mate = student('mate', { days: [1, 2, 3], lessonsPerWeek: 1, lessonDuration: 60 });
+    mate.subject = 'Μαθηματικά';
+    const far = student('far', { days: [1, 2, 3], lessonsPerWeek: 1, lessonDuration: 60 });
+    far.subject = 'Μαθηματικά';
+    app.setState({ students: [mate, far], settings: cfg, schedule: {},
+      coords: { home: { lat: 38.240, lon: 21.730 },
+                mate: { lat: 38.2451, lon: 21.7351 },
+                far: { lat: 38.900, lon: 22.500 } } });
+    return { mate, far, cfg };
+  }
+
+  test('an unsaved client can still be matched', () => {
+    const app = loadApp();
+    withExisting(app);
+    form(app);
+    state_editing(app, null);
+    const me = app.App._studentFromForm();
+    assert.ok(me, 'the form describes someone concrete enough to match');
+    assert.equal(me.id, '__new__', 'and they do not need an id yet');
+    const matches = app.Scheduler.matchesFor(me, app.state.students, app.state.settings, app.state.coords);
+    assert.equal(matches.length, 2, 'both are compatible on subject, length and hours');
+    // Nothing has geocoded this address yet, so how far apart they live is
+    // genuinely unknown. Reporting it as unknown is right; the old code invented
+    // a position from a hash of the address string and judged distance against
+    // somewhere nobody lives.
+    assert.ok(matches.every(m => m.km === null),
+      'distance must be reported as unknown, not guessed');
+  });
+
+  test('the address just picked is used, so distance is not skipped', () => {
+    const app = loadApp();
+    withExisting(app);
+    form(app);
+    // Autocomplete resolved a coordinate next door to the far-away client.
+    app.App._addrPendingCoord = { lat: 38.9001, lon: 22.5001 };
+    const me = app.App._studentFromForm();
+    const coords = { ...app.state.coords, [me.id]: app.App._addrPendingCoord };
+    const ids = app.Scheduler.matchesFor(me, app.state.students, app.state.settings, coords)
+      .map(m => (m.a.id === me.id ? m.b.id : m.a.id));
+    assert.deepStrictEqual(Array.from(ids), ['far'],
+      'standing next to the far client should match that one and not the other');
+  });
+
+  test('a client already paired is not offered another match', () => {
+    const app = loadApp();
+    withExisting(app);
+    form(app, { 'st-paired': 'mate' });
+    const me = app.App._studentFromForm();
+    assert.deepStrictEqual(
+      Array.from(app.Scheduler.matchesFor(me, app.state.students, app.state.settings, app.state.coords)), []);
+  });
+
+  test('an empty form matches nobody rather than guessing', () => {
+    const app = loadApp();
+    withExisting(app);
+    form(app, { 'st-name': '' });
+    assert.equal(app.App._studentFromForm(), null);
+  });
+});
+
+function state_editing(app, id) { app.state.editingStudentId = id; }
