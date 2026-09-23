@@ -334,3 +334,93 @@ describe('changing your working hours reaches the students', () => {
       'without an exceptions list there is nothing to recompute from — do not guess');
   });
 });
+
+describe('importing a backup', () => {
+  const good = () => ({
+    students: [Object.assign(student('a'), { availabilityExceptions: [] })],
+    settings: settings(),
+    schedule: {}, coords: { home: { lat: 38.2, lon: 21.7 } },
+  });
+
+  /**
+   * Drive the REAL App.importData with a stubbed file picker and FileReader.
+   *
+   * An earlier version of this helper re-implemented importData's steps
+   * instead of calling it. That is the third time in this project a test has
+   * covered a unit while leaving the wiring untested: deleting the validation
+   * call from importData left every one of these tests green.
+   */
+  function importing(app, data) {
+    const before = JSON.stringify(app.state.students);
+    const toasts = [];
+    app.ctx.document.createElement = () => ({
+      type: '', accept: '', onchange: null, style: {}, className: '', children: [],
+      set textContent(v) { toasts.push(v); }, get textContent() { return ''; },
+      set innerHTML(v) {}, get innerHTML() { return ''; },
+      appendChild() {}, remove() {},
+      click() { this.onchange && this.onchange({ target: { files: [{ name: 'backup.json' }] } }); },
+    });
+    app.ctx.document.getElementById = () => ({ appendChild() {} });
+    app.ctx.FileReader = function FileReader() {
+      this.readAsText = () => { this.onload({ target: { result: JSON.stringify(data) } }); };
+    };
+
+    app.App.importData();
+
+    return { toasts, untouched: JSON.stringify(app.state.students) === before };
+  }
+
+  test('a valid backup is accepted', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings() });
+    assert.deepStrictEqual(Array.from(app.App.validateBackup(good())), []);
+  });
+
+  const broken = {
+    'students is a string': { students: 'oops', settings: settings() },
+    'a record is null': { students: [null], settings: settings() },
+    'a record has no id': { students: [{ name: 'X', lessonDuration: 60, lessonsPerWeek: 1 }], settings: settings() },
+    'settings is a number': { students: [], settings: 7 },
+    'workDays is a string': { students: [], settings: { workDays: '12345' } },
+    'schedule is an array': { students: [], settings: settings(), schedule: [1, 2, 3] },
+    'availability is a string': { students: [{ id: 'a', name: 'A', lessonDuration: 60, lessonsPerWeek: 1, availability: 'yes' }], settings: settings() },
+    'an absurd session count': { students: [{ id: 'a', name: 'A', lessonDuration: 60, lessonsPerWeek: 1e9 }], settings: settings() },
+    'a zero-length session': { students: [{ id: 'a', name: 'A', lessonDuration: 0, lessonsPerWeek: 1 }], settings: settings() },
+    'not an object at all': { students: undefined, settings: undefined },
+  };
+
+  for (const [name, data] of Object.entries(broken)) {
+    test(`refuses a backup where ${name}, without touching what is stored`, () => {
+      const app = loadApp();
+      const mine = [student('mine')];
+      app.setState({ students: mine, settings: settings() });
+
+      const { toasts, untouched } = importing(app, data);
+
+      assert.ok(toasts.some(x => x && /error|σφάλμα/i.test(x)),
+        `this file must be refused, and say so. Toasts: ${JSON.stringify(toasts)}`);
+      // The important half. The old code wrote to localStorage first and
+      // validated never, so a bad file destroyed the real data and left an app
+      // that threw on the next calculation.
+      assert.ok(untouched, 'a refused file must not replace what was already there');
+      assert.equal(app.state.students[0].id, 'mine');
+    });
+  }
+
+  test('the refusal says what is wrong, not just that it failed', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings() });
+    const problems = app.App.validateBackup(
+      { students: [{ id: 'a', name: 'A', lessonDuration: 0, lessonsPerWeek: 0 }], settings: settings() });
+    assert.ok(problems.length >= 2, 'both bad fields should be named');
+    assert.ok(problems.every(p => typeof p === 'string' && p.length > 5));
+  });
+
+  test('optional sections may be absent', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings() });
+    // Backups written before coords/schedule existed must still load.
+    const d = good(); delete d.schedule; delete d.coords;
+    assert.deepStrictEqual(Array.from(app.App.validateBackup(d)), []);
+  });
+});
