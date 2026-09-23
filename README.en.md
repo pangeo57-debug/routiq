@@ -69,12 +69,12 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 ### Testing
 
 ```bash
-npm test     # correctness — 148 tests
+npm test     # correctness — 152 tests
 npm run bench                    # quality, against published best-known solutions
 npm run bench -- --against HEAD~1  # this build vs another, identical inputs
 ```
 
-148 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+152 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run
@@ -111,4 +111,20 @@ The service worker is network-first, so a device with connectivity always gets t
 
 ## Security
 
-Reviewed for XSS (all user-controlled content passes through `esc()` before being inserted into `innerHTML`). No server-side attack surface yet, since there's no backend.
+No backend, so there is no server-side attack surface. What that leaves:
+
+- **XSS** — all user-controlled content, and everything returned by the geocoding
+  providers, passes through `esc()` before reaching `innerHTML`. Toast messages
+  are set as text, never markup.
+- **Supply chain** — every file loaded from the CDN carries an SRI hash, so the
+  browser refuses anything but the exact published bytes. This is the largest
+  attack surface an app without a backend has: a compromised CDN would otherwise
+  run arbitrary code with access to every client's name and address.
+- **CSP** — `connect-src` limits where data can be sent to the five services the
+  app actually uses. It cannot stop injected script from running (the app is one
+  inline block with 83 inline handlers, and a static page cannot carry a nonce),
+  so it contains a breach rather than preventing one. `frame-ancestors` is
+  deliberately absent: browsers ignore it in a meta tag and GitHub Pages cannot
+  set headers, so listing it would imply a defence that is not there.
+- **The HERE key is public** in the client, a deliberate trade-off until there is
+  a backend. Restricting it to this domain in the HERE portal is worth doing.

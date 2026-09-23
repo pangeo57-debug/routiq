@@ -492,3 +492,74 @@ describe('finding a match while the client is still being typed', () => {
 });
 
 function state_editing(app, id) { app.state.editingStudentId = id; }
+
+describe('what the page is allowed to load and talk to', () => {
+  const head = () => require('fs').readFileSync(APP_FILE, 'utf8').split('<style>')[0];
+  const policy = () => {
+    const m = head().match(/http-equiv="Content-Security-Policy" content="([^"]+)"/);
+    assert.ok(m, 'the page must carry a Content-Security-Policy');
+    return Object.fromEntries(m[1].split(';').map(d => d.trim()).filter(Boolean)
+      .map(d => { const [k, ...v] = d.split(/\s+/); return [k, v]; }));
+  };
+
+  test('every remote script carries an integrity hash', () => {
+    const html = require('fs').readFileSync(APP_FILE, 'utf8');
+    // A CDN is a single point at which somebody else's code can be swapped for
+    // something that reads every student's name and address out of localStorage.
+    for (const m of html.matchAll(/<(script|link)\b[^>]*?(?:src|href)="(https:\/\/cdn\.jsdelivr\.net[^"]+)"[^>]*>/g)) {
+      assert.match(m[0], /integrity="sha\d{3}-/, `loaded without an integrity hash: ${m[2]}`);
+      assert.match(m[0], /crossorigin=/, `integrity needs crossorigin: ${m[2]}`);
+    }
+    // The lazily loaded libraries go through a lookup table rather than markup.
+    // Counting is what catches a hash going missing: looking "near" each url
+    // finds the NEXT entry's hash and passes when it should not.
+    const urls = [...html.matchAll(/https:\/\/cdn\.jsdelivr\.net\/npm\/[^"'\s]+\.(?:js|css)/g)]
+      .map(m => m[0]);
+    const hashes = [...html.matchAll(/sha\d{3}-[A-Za-z0-9+/=]{20,}/g)].map(m => m[0]);
+    assert.equal(hashes.length, new Set(urls).size,
+      `${new Set(urls).size} files come from the CDN but only ${hashes.length} hashes are present`);
+  });
+
+  test('connect-src lists every service the app actually calls', () => {
+    const html = require('fs').readFileSync(APP_FILE, 'utf8');
+    const allowed = policy()['connect-src'];
+    assert.ok(allowed, 'connect-src is the directive that stops data walking out');
+    const hosts = new Set();
+    // Every remote host the code names, however the string is quoted. The
+    // earlier version only matched single quotes and so never saw the HERE
+    // endpoints, which are template literals — dropping them from connect-src
+    // changed nothing and the test stayed green.
+    for (const m of html.matchAll(/["'`](https:\/\/[a-z0-9.-]+)/gi)) {
+      const h = m[1];
+      if (/hereapi|openstreetmap|project-osrm|cloudflareinsights/i.test(h)) hosts.add(h);
+    }
+    assert.ok(hosts.size >= 5, `expected to find the remote services, found ${hosts.size}`);
+    for (const host of hosts) {
+      const h = host.replace('https://', '');
+      const ok = allowed.some(a => {
+        const p = a.replace('https://', '');
+        return p === h || (p.startsWith('*.') && h.endsWith(p.slice(1)));
+      });
+      assert.ok(ok, `${host} is called but not allowed by connect-src — it would fail silently at runtime`);
+    }
+  });
+
+  test('the policy keeps the dangerous directives shut', () => {
+    const p = policy();
+    assert.deepStrictEqual(p['object-src'], ["'none'"]);
+    assert.deepStrictEqual(p['base-uri'], ["'none'"]);
+    assert.deepStrictEqual(p['form-action'], ["'none'"]);
+    // Script may only be LOADED from these. 'unsafe-inline' has to stay — the
+    // app is one inline block with 83 inline handlers — so this does not stop
+    // injected script running, and the test says so rather than implying it.
+    assert.ok(p['script-src'].includes('https://cdn.jsdelivr.net'));
+    assert.ok(!p['script-src'].includes('*'), 'never a wildcard script origin');
+  });
+
+  test('no directive claims a protection the browser will ignore', () => {
+    // frame-ancestors only works as an HTTP header; in a meta tag it is
+    // silently dropped, so listing it would suggest a defence that is not there.
+    assert.ok(!('frame-ancestors' in policy()),
+      'frame-ancestors is inert in a meta tag and must not be listed');
+  });
+});

@@ -2,6 +2,22 @@
 <html lang="el">
 <head>
 <meta charset="UTF-8">
+<!-- Content Security Policy.
+     Read what this does and does not do. The app is one inline script block
+     with 83 inline onclick handlers, and a static file served from GitHub Pages
+     cannot carry a per-request nonce — so 'unsafe-inline' has to stay, and this
+     policy does NOT prevent injected script from executing.
+     What it does: script can only be LOADED from jsDelivr, and — the part that
+     matters for an app holding children's names and home addresses — connect-src
+     means anything that does run cannot send that data anywhere except the five
+     services below. It contains a breach rather than preventing one.
+     Keep connect-src in step with Router; a new provider added there and not
+     here fails silently at runtime.
+     No frame-ancestors: browsers ignore it in a meta tag and GitHub Pages
+     cannot set response headers, so protection against being framed is simply
+     not available here. Listing it anyway would only log a warning and suggest
+     a defence that is not there. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#f7f6f3">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,8 +30,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
+      crossorigin="anonymous"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
+        crossorigin="anonymous"></script>
 <style>
 :root {
   --green: #059669;
@@ -4740,17 +4760,29 @@ const App = {
       return Promise.resolve();
     }
     if(this._pdfLibsPromise) return this._pdfLibsPromise; // a second click must not load them twice
+    // Loaded with an integrity hash, like the ones in the head. A CDN is a
+    // single point at which somebody else's code can be swapped for something
+    // that reads every student's name and address out of localStorage; the hash
+    // means the browser refuses anything but the exact bytes published for
+    // these versions. Bump the hash whenever the version is bumped — a stale
+    // one blocks the file outright, which is the correct failure but an
+    // unhelpful one to debug.
+    const SRI = {
+      'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js':
+        'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
+      'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js':
+        'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
+    };
     const script = (src) => new Promise((resolve, reject) => {
       const el = document.createElement('script');
       el.src = src;
+      if(SRI[src]){ el.integrity = SRI[src]; el.crossOrigin = 'anonymous'; }
       el.onload = resolve;
       el.onerror = () => reject(new Error('failed to load ' + src));
       document.head.appendChild(el);
     });
-    this._pdfLibsPromise = Promise.all([
-      script('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'),
-      script('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
-    ]).catch(err => {
+    this._pdfLibsPromise = Promise.all(Object.keys(SRI).map(script))
+    .catch(err => {
       this._pdfLibsPromise = null; // allow a retry after a transient failure
       throw err;
     });
