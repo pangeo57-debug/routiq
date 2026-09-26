@@ -4018,7 +4018,7 @@ const Scheduler = {
     const studentsById = Object.fromEntries(students.map(s=>[s.id,s]));
     const isAvailable=(sid,day)=>{const av=studentsById[sid]&&studentsById[sid].availability&&studentsById[sid].availability[day];return !!(av&&av.on);};
     const roadKm=(idA,addrA,idB,addrB,day)=>this.travelEstKm(idA,addrA,idB,addrB,day);
-    const trvMin=(idA,addrA,idB,addrB,day)=>this.travelEstMin(idA,addrA,idB,addrB,day);
+    const trvMin=(idA,addrA,idB,addrB,day,atMin)=>this.travelEstMin(idA,addrA,idB,addrB,day,atMin);
 
     // Convert app's slot format -> internal {studentId,address,start,end} (minutes).
     // Merged/group blocks are left untouched throughout (never removed/moved),
@@ -4053,15 +4053,34 @@ const Scheduler = {
         const student=studentsById[s.studentId]; if(!student) return null;
         const dur=student.lessonDuration||(s.end-s.start)||30;
         const prevId=i===0?HOME_ID:out[i-1].studentId, prevAddr=i===0?HOME_ADDR:out[i-1].address;
-        const trav=i===0?0:trvMin(prevId,prevAddr,s.studentId,s.address,day);
+        // Pass the departure time: without it travelEstMin falls back to the
+        // PEAK matrix for every journey, so the optimizer judged a 10:00
+        // arrangement by rush-hour driving times that no other part of the app
+        // uses — and rejected layouts as too long for the day that in fact fit.
+        const trav=i===0?0:trvMin(prevId,prevAddr,s.studentId,s.address,day,out[i-1].end);
         cur=i===0?dayStart:out[i-1].end+trav+buf;
+        // Wait for the student rather than declaring the whole arrangement
+        // impossible. This used to pin the first lesson to the exact start of
+        // the working day, so if that student was not free until later,
+        // dayFeasible rejected the candidate and the optimizer explored
+        // NOTHING. A tutor whose hours begin at 15:00 while every student is
+        // at school until 17:00 got no optimization at all — measured at 49%
+        // of a day's driving on a three-stop day.
+        const wins=this.availWindows(student, day);
+        const fit=this.earliestFit(wins, cur, dur, 0);
+        if(fit==null) return null;
+        cur=fit;
         let end=cur+dur;
         // Push past any fixed block this candidate window collides with (loop:
-        // pushing past one block can land inside another later block).
+        // pushing past one block can land inside another later block), then
+        // re-seat inside the student's own free time, since being pushed past
+        // a break can land the lesson outside it.
         for(let guard=0; guard<fixed.length+1; guard++){
           const hit=fixed.find(f=>cur<f.end+buf && end+buf>f.start);
           if(!hit) break;
-          cur=hit.end+buf; end=cur+dur;
+          const next=this.earliestFit(wins, hit.end+buf, dur, 0);
+          if(next==null) return null;
+          cur=next; end=cur+dur;
         }
         if(end>dayEnd) return null;
         out.push({studentId:s.studentId, address:s.address, start:cur, end});

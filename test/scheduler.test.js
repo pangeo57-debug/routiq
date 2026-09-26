@@ -2081,3 +2081,121 @@ describe('a long gap survives only if nobody can go in it', () => {
     assert.equal(JSON.stringify(sched), before, 'a tight week must not be disturbed');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Things that silently switched the optimizer off
+// ---------------------------------------------------------------------------
+
+describe('the optimizer is not disabled by the working hours', () => {
+  // Found by auditing rather than by a bug report, and it was the expensive
+  // one: alnsOptimize laid every candidate day out starting at the exact
+  // opening of the working day, so if the first student in that arrangement
+  // was not free yet, the whole arrangement was declared infeasible. A tutor
+  // whose hours begin at 15:00 while the students are at school until 17:00
+  // therefore got NO optimization at all — the search rejected everything it
+  // generated.
+
+  function town(app, openAt) {
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: openAt, end: '22:00' } } });
+    const sts = [
+      student('a', { days: [1], window: { start: '17:00', end: '22:00' } }),
+      student('b', { days: [1], window: { start: '17:00', end: '22:00' } }),
+      student('c', { days: [1], window: { start: '17:00', end: '22:00' } }),
+    ];
+    // a and c are neighbours out of town; b is next door to home. Visiting
+    // a, b, c in that order crosses the city twice for nothing.
+    const coords = { home: { lat: 38.240, lon: 21.730 },
+      a: { lat: 38.300, lon: 21.790 }, c: { lat: 38.302, lon: 21.792 },
+      b: { lat: 38.241, lon: 21.731 } };
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return { cfg, sts, coords };
+  }
+  const badOrder = () => ({ 1: [
+    slot('a', '17:00', '18:00', { address: 'addr-a' }),
+    slot('b', '18:20', '19:20', { address: 'addr-b' }),
+    slot('c', '19:40', '20:40', { address: 'addr-c' }),
+  ]});
+
+  async function optimisedKm(openAt) {
+    const app = loadApp({ seed: 7 });
+    const { cfg, sts, coords } = town(app, openAt);
+    const S = app.Scheduler;
+    const sched = badOrder();
+    const km = () => S.dayKm(sched[1].slice()
+      .sort((x, y) => S.toMin(x.start) - S.toMin(y.start)), 1, cfg);
+    const before = km();
+    await S.alnsOptimize(sched, sts, cfg, coords, 3000);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, sched, sts, cfg)), []);
+    return { before, after: km() };
+  }
+
+  test('a day that opens before anyone is free still gets optimized', async () => {
+    const open15 = await optimisedKm('15:00');
+    assert.ok(open15.after < open15.before * 0.75,
+      `the crossing should be removed: ${open15.before.toFixed(1)} -> ${open15.after.toFixed(1)} km`);
+  });
+
+  test('and reaches the same answer as a day that opens when they are', async () => {
+    // The user's opening time is not information about the route. Two tutors
+    // with identical students must get identical routes.
+    const [wide, tight] = [await optimisedKm('15:00'), await optimisedKm('17:00')];
+    assert.equal(wide.after.toFixed(1), tight.after.toFixed(1),
+      `opening earlier must not cost quality: ${wide.after.toFixed(1)} vs ${tight.after.toFixed(1)}`);
+  });
+});
+
+describe('the optimizer uses the same travel times as everything else', () => {
+  // travelEstMin has always been time-aware; the optimizer simply never told
+  // it what time it was, so every journey it costed came back at rush-hour
+  // length. Testing the helper alone passes on the broken build — this project
+  // has shipped three bugs that lived in the CALL, not the function — so this
+  // goes through alnsOptimize and watches what it does with a morning.
+  const MIN = 60;
+  function morning(app) {
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '13:00' } } });
+    const sts = ['a', 'b', 'c'].map(id =>
+      student(id, { days: [1], window: { start: '09:00', end: '13:00' }, lessonDuration: 60 }));
+    // Distances: a and c are neighbours, b sits next to home. Order a,b,c
+    // crosses town twice. Peak claims every leg takes an hour, off-peak five
+    // minutes — so under peak timings three lessons cannot fit the morning at
+    // all, and the optimizer rejects every arrangement it generates.
+    const ids = ['home', 'a', 'b', 'c'];
+    const pos = { home: 0, a: 10, b: 0.5, c: 10.2 };
+    const dist = ids.map(i => ids.map(j => Math.abs(pos[i] - pos[j]) * 1000));
+    const mk = (secs) => ({ coordIds: ids,
+      durations: ids.map((i, x) => ids.map((j, y) => (x === y ? 0 : secs))),
+      distances: dist });
+    app.setState({ students: sts, settings: cfg,
+      coords: { home: { lat: 38.24, lon: 21.73 }, a: { lat: 38.33, lon: 21.73 },
+                b: { lat: 38.245, lon: 21.73 }, c: { lat: 38.332, lon: 21.73 } },
+      travelMatrixPeak: mk(60 * MIN), travelMatrixOffPeak: mk(5 * MIN), travelMatrix: null });
+    return { cfg, sts };
+  }
+
+  test('a morning is optimized using its own travel times, not rush hour', async () => {
+    const app = loadApp({ seed: 4 });
+    const { cfg, sts } = morning(app);
+    const S = app.Scheduler;
+    const sched = { 1: [
+      slot('a', '09:00', '10:00', { address: 'addr-a' }),
+      slot('b', '10:05', '11:05', { address: 'addr-b' }),
+      slot('c', '11:10', '12:10', { address: 'addr-c' }),
+    ]};
+    const km = () => S.dayKm(sched[1].slice()
+      .sort((x, y) => S.toMin(x.start) - S.toMin(y.start)), 1, cfg);
+    const before = km();
+    await S.alnsOptimize(sched, sts, cfg, {}, 3000);
+    assert.ok(km() < before * 0.8,
+      `the double crossing should go: ${before.toFixed(1)} -> ${km().toFixed(1)} km`);
+  });
+
+  test('and the helper itself still answers by time of day', () => {
+    const app = loadApp();
+    const { cfg } = morning(app);
+    const S = app.Scheduler;
+    assert.equal(S.travelEstMin('a', 'addr-a', 'b', 'addr-b', 1, S.toMin('10:00')), 5);
+    assert.equal(S.travelEstMin('a', 'addr-a', 'b', 'addr-b', 1, S.toMin('17:00')), 60);
+    assert.equal(S.travelEstMin('a', 'addr-a', 'b', 'addr-b', 1), 60, 'no time given: assume the worst');
+  });
+});

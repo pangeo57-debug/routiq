@@ -49,6 +49,12 @@ async function runPipeline(app, sts, cfg, coords, budgets) {
   S.collapseForceMergeFragments(r.schedule, sts, cfg);
   S.tidyDays(r.schedule, sts, cfg);
   S.compactDays(r.schedule, sts, cfg);
+  // Keep in step with runAndNotify. This file has drifted from it before, and
+  // a benchmark of a pipeline the user never runs measures nothing.
+  if (S.fillGaps) {
+    const f = S.fillGaps(r.schedule, sts, cfg);
+    if (f.moved.length) S.compactDays(r.schedule, sts, cfg);
+  }
   return { schedule: r.schedule, ms: Date.now() - t0 };
 }
 
