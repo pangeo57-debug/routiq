@@ -622,6 +622,23 @@ input[type=time]{color-scheme:light}
   </div>
 </div>
 
+<!-- SEND TIMES SHEET -->
+<div class="confirm-overlay" id="send-overlay">
+  <div class="confirm-box" style="max-width:420px">
+    <div class="confirm-title" id="send-title">Στείλε τις ώρες</div>
+    <div class="confirm-text" id="send-hint" style="margin-bottom:10px"></div>
+    <textarea id="send-text" rows="7" style="width:100%;font-size:13px;line-height:1.5;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);resize:vertical"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" style="flex:1" id="send-wa-btn" onclick="App.sendVia('whatsapp')">WhatsApp</button>
+      <button class="btn btn-secondary" style="flex:1" id="send-sms-btn" onclick="App.sendVia('sms')">SMS</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="App.sendVia('copy')">Copy</button>
+    </div>
+    <div class="confirm-actions" style="margin-top:8px">
+      <button class="btn btn-secondary" style="flex:1" onclick="App.closeSendSheet()">Άκυρο</button>
+    </div>
+  </div>
+</div>
+
 <!-- MAP PICKER -->
 <div id="map-picker-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg,#f7f6f3);flex-direction:column">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2)">
@@ -716,6 +733,9 @@ function defaultSettings(){
     lunchBreak:0,
     avgCitySpeedKmh:25,
     hereApiKey:'',
+    // WhatsApp only accepts a full international number. Local numbers get
+    // this in front of them; '30' because the app shipped in Greece first.
+    countryCode:'30',
     language:'el',
     theme:'system',
   };
@@ -817,6 +837,7 @@ const I18N = {
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
     mode_week:'Εβδομάδα', mode_day:'Ημέρα', day_title:'Ημερήσιο πρόγραμμα', day_plan_btn:'Σχεδίασε τη μέρα', day_today:'Σήμερα', day_tomorrow:'Αύριο', day_stops:'στάσεις', day_driving:'οδήγηση', day_add_job:'Νέα δουλειά', day_edit_job:'Επεξεργασία δουλειάς', day_jobs_count:'{n} δουλειές — {date}', day_no_jobs:'Καμία δουλειά για αυτή τη μέρα. Πρόσθεσε ό,τι έχεις κλείσει και πάτα «Σχεδίασε τη μέρα».', day_not_planned:'εκτός προγράμματος', day_unplanned:'{n} δεν χώρεσαν', day_planned_ok:'{n} στάσεις, {km}χλμ', day_nothing_to_plan:'Δεν υπάρχει δουλειά να προγραμματιστεί', day_planning:'Υπολογίζω…', day_job_name:'Τι είναι η δουλειά', day_job_name_ph:'π.χ. Διαρροή — Παπαδόπουλος', day_dur_min:'Διάρκεια (λεπτά)', day_dur_max:'Το πολύ', day_dur_max_ph:'προαιρετικό', day_window:'Χρονικό παράθυρο πελάτη', day_window_hint:'Άφησέ το κενό αν μπορεί οποιαδήποτε ώρα μέσα στο ωράριό σου.', day_window_invalid:'Το «ως» πρέπει να είναι μετά το «από»', day_delete_title:'Διαγραφή «{name}»;', day_delete_text:'Η δουλειά θα αφαιρεθεί από αυτή τη μέρα.',
+    send_times_btn:'Στείλε ώρες', send_title:'Στείλε τις ώρες', send_hint:'Άλλαξε το κείμενο αν θες και μετά διάλεξε τρόπο αποστολής.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Αντιγραφή', send_no_times:'Δεν έχει ώρες στο πρόγραμμα ακόμα.', send_no_phone:'Πρόσθεσε τηλέφωνο στην καρτέλα για WhatsApp ή SMS. Μπορείς πάντως να αντιγράψεις το κείμενο.', send_copied:'Το κείμενο αντιγράφηκε', send_copy_failed:'Δεν μπόρεσα να αντιγράψω — κράτα το κείμενο πατημένο και αντίγραψέ το.', send_intro:'Γεια σου! Οι ώρες μας:', send_job_intro:'Γεια σου! Θα είμαι εκεί:', send_sign:'— {name}', form_phone_label:'Τηλέφωνο (προαιρετικό)', form_phone_ph:'π.χ. 6941234567', student_phone_label:'Τηλέφωνο', settings_country_code:'Κωδικός χώρας (για WhatsApp)', settings_country_code_hint:'Μπαίνει μπροστά σε τοπικά νούμερα. Για Ελλάδα 30.', backup_student_bad_phone:'Ο πελάτης {name} έχει άκυρο τηλέφωνο', backup_jobs_not_list:'Οι δουλειές δεν είναι λίστα',
     backup_not_an_object:'Το αρχείο δεν είναι αντίγραφο RoutePal', backup_students_not_list:'Η λίστα πελατών λείπει ή είναι κατεστραμμένη', backup_student_bad:'Η εγγραφή #{n} δεν είναι έγκυρη', backup_student_no_id:'Η εγγραφή #{n} δεν έχει αναγνωριστικό', backup_student_no_name:'Η εγγραφή #{n} δεν έχει όνομα', backup_student_bad_duration:'{name}: μη έγκυρη διάρκεια', backup_student_bad_count:'{name}: μη έγκυρος αριθμός μαθημάτων', backup_student_bad_avail:'{name}: κατεστραμμένη διαθεσιμότητα', backup_settings_bad:'Οι ρυθμίσεις λείπουν ή είναι κατεστραμμένες', backup_workdays_bad:'Μη έγκυρες εργάσιμες ημέρες', backup_dayhours_bad:'Μη έγκυρο ωράριο', backup_blocked_bad:'Μη έγκυρες μπλοκαρισμένες ώρες', backup_schedule_bad:'Κατεστραμμένο πρόγραμμα', backup_coords_bad:'Κατεστραμμένες συντεταγμένες', backup_and_more:' · και {n} ακόμα',
     pair_distance_unknown:'απόσταση άγνωστη (η διεύθυνση δεν έχει εντοπιστεί ακόμα)',
     form_find_match:'Ψάξε αν υπάρχει ταίρι', toast_already_paired:'Έχει ήδη ζεύγος — καθάρισέ το πρώτα αν θες άλλο', toast_no_match:'Κανένα ταίρι: χρειάζεται ίδια διάρκεια, ίδιο αντικείμενο, κοντινή διεύθυνση και κοινές ελεύθερες ώρες', confirm_match_title:'Ταιριάζει με {name}', confirm_match_text:'Θα κάνουν μαζί {mins} λεπτά, {days}{dist}. Οι περιορισμοί και των δύο μένουν ως έχουν — το μάθημα μπαίνει μόνο όπου είναι ελεύθεροι και οι δύο.{more}\\n\\nΝα γίνουν ζεύγος και να υπολογιστεί το πρόγραμμα;', confirm_match_more:' (βρέθηκαν {n} ακόμα)',
@@ -1013,6 +1034,7 @@ const I18N = {
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
     mode_week:'Week', mode_day:'Day', day_title:'Day plan', day_plan_btn:'Plan the day', day_today:'Today', day_tomorrow:'Tomorrow', day_stops:'stops', day_driving:'driving', day_add_job:'New job', day_edit_job:'Edit job', day_jobs_count:'{n} jobs — {date}', day_no_jobs:'Nothing booked for this day. Add what you have and press Plan the day.', day_not_planned:'not scheduled', day_unplanned:'{n} did not fit', day_planned_ok:'{n} stops, {km}km', day_nothing_to_plan:'There is no work to plan', day_planning:'Working it out…', day_job_name:'What the job is', day_job_name_ph:'e.g. Leak — Papadopoulos', day_dur_min:'Takes (minutes)', day_dur_max:'At most', day_dur_max_ph:'optional', day_window:'Customer time window', day_window_hint:'Leave empty if any time within your working hours will do.', day_window_invalid:'The end must be after the start', day_delete_title:'Delete \u201c{name}\u201d?', day_delete_text:'The job will be removed from this day.',
+    send_times_btn:'Send times', send_title:'Send the times', send_hint:'Edit the text if you like, then pick how to send it.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copy', send_no_times:'Nothing scheduled for them yet.', send_no_phone:'Add a phone number on the card to use WhatsApp or SMS. You can still copy the text.', send_copied:'Text copied', send_copy_failed:"Couldn't copy — select the text and copy it by hand.", send_intro:'Hi {name}, here are our times:', send_job_intro:'Hi {name}, I will be there:', send_sign:'— {name}', form_phone_label:'Phone (optional)', form_phone_ph:'e.g. 6941234567', student_phone_label:'Phone', settings_country_code:'Country code (for WhatsApp)', settings_country_code_hint:'Added in front of local numbers. Greece is 30.', backup_student_bad_phone:'Client {name} has an invalid phone number', backup_jobs_not_list:'Jobs are not a list',
     backup_not_an_object:'This file is not a RoutePal backup', backup_students_not_list:'The client list is missing or corrupt', backup_student_bad:'Record #{n} is not valid', backup_student_no_id:'Record #{n} has no identifier', backup_student_no_name:'Record #{n} has no name', backup_student_bad_duration:'{name}: invalid session length', backup_student_bad_count:'{name}: invalid number of sessions', backup_student_bad_avail:'{name}: corrupt availability', backup_settings_bad:'The settings are missing or corrupt', backup_workdays_bad:'Invalid working days', backup_dayhours_bad:'Invalid working hours', backup_blocked_bad:'Invalid blocked times', backup_schedule_bad:'Corrupt schedule', backup_coords_bad:'Corrupt coordinates', backup_and_more:' · and {n} more',
     pair_distance_unknown:'distance unknown (the address is not located yet)',
     form_find_match:'Look for a match', toast_already_paired:'Already paired — clear that first if you want a different partner', toast_no_match:'No match: it needs the same length, the same subject, an address nearby and free time in common', confirm_match_title:'Matches {name}', confirm_match_text:'They would share {mins} minutes, {days}{dist}. Neither one\u2019s constraints change — the session only goes where BOTH are free.{more}\\n\\nPair them and work out the schedule?', confirm_match_more:' ({n} more found)',
@@ -1209,6 +1231,7 @@ const I18N = {
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
     mode_week:'Semaine', mode_day:'Jour', day_title:'Planning du jour', day_plan_btn:'Planifier la journée', day_today:'Aujourd\u2019hui', day_tomorrow:'Demain', day_stops:'arrêts', day_driving:'trajet', day_add_job:'Nouvelle intervention', day_edit_job:'Modifier l\u2019intervention', day_jobs_count:'{n} interventions — {date}', day_no_jobs:'Rien de prévu ce jour. Ajoutez vos interventions puis appuyez sur Planifier la journée.', day_not_planned:'non planifiée', day_unplanned:'{n} n\u2019ont pas tenu', day_planned_ok:'{n} arrêts, {km}km', day_nothing_to_plan:'Aucune intervention à planifier', day_planning:'Calcul en cours…', day_job_name:'Nature de l\u2019intervention', day_job_name_ph:'ex. Fuite — Papadopoulos', day_dur_min:'Durée (minutes)', day_dur_max:'Au plus', day_dur_max_ph:'facultatif', day_window:'Créneau du client', day_window_hint:'Laissez vide si n\u2019importe quelle heure de vos horaires convient.', day_window_invalid:'La fin doit suivre le début', day_delete_title:'Supprimer « {name} » ?', day_delete_text:'L\u2019intervention sera retirée de cette journée.',
+    send_times_btn:'Envoyer les horaires', send_title:'Envoyer les horaires', send_hint:'Modifiez le texte si besoin, puis choisissez le mode d\u2019envoi.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copier', send_no_times:'Aucun horaire pour le moment.', send_no_phone:'Ajoutez un téléphone sur la fiche pour WhatsApp ou SMS. Vous pouvez tout de même copier le texte.', send_copied:'Texte copié', send_copy_failed:'Copie impossible — sélectionnez le texte et copiez-le manuellement.', send_intro:'Bonjour {name}, voici nos horaires :', send_job_intro:'Bonjour {name}, je serai là :', send_sign:'— {name}', form_phone_label:'Téléphone (facultatif)', form_phone_ph:'ex. 0612345678', student_phone_label:'Téléphone', settings_country_code:'Indicatif pays (pour WhatsApp)', settings_country_code_hint:'Ajouté devant les numéros locaux. France : 33.', backup_student_bad_phone:'Le client {name} a un téléphone invalide', backup_jobs_not_list:'Les interventions ne sont pas une liste',
     backup_not_an_object:'Ce fichier n\u2019est pas une sauvegarde RoutePal', backup_students_not_list:'La liste des clients est absente ou corrompue', backup_student_bad:'L\u2019entrée #{n} n\u2019est pas valide', backup_student_no_id:'L\u2019entrée #{n} n\u2019a pas d\u2019identifiant', backup_student_no_name:'L\u2019entrée #{n} n\u2019a pas de nom', backup_student_bad_duration:'{name} : durée invalide', backup_student_bad_count:'{name} : nombre de séances invalide', backup_student_bad_avail:'{name} : disponibilité corrompue', backup_settings_bad:'Les réglages sont absents ou corrompus', backup_workdays_bad:'Jours de travail invalides', backup_dayhours_bad:'Horaires invalides', backup_blocked_bad:'Heures bloquées invalides', backup_schedule_bad:'Planning corrompu', backup_coords_bad:'Coordonnées corrompues', backup_and_more:' · et {n} autres',
     pair_distance_unknown:'distance inconnue (adresse pas encore localisée)',
     form_find_match:'Chercher un binôme', toast_already_paired:'Déjà en binôme — retirez-le d\u2019abord pour en choisir un autre', toast_no_match:'Aucun binôme : il faut même durée, même matière, une adresse proche et des disponibilités communes', confirm_match_title:'Compatible avec {name}', confirm_match_text:'Ils partageraient {mins} minutes, {days}{dist}. Aucune contrainte ne change — la séance ne va que là où les DEUX sont libres.{more}\\n\\nLes mettre en binôme et calculer le planning ?', confirm_match_more:' ({n} autres trouvés)',
@@ -1405,6 +1428,7 @@ const I18N = {
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
     mode_week:'Woche', mode_day:'Tag', day_title:'Tagesplan', day_plan_btn:'Tag planen', day_today:'Heute', day_tomorrow:'Morgen', day_stops:'Stopps', day_driving:'Fahrt', day_add_job:'Neuer Auftrag', day_edit_job:'Auftrag bearbeiten', day_jobs_count:'{n} Aufträge — {date}', day_no_jobs:'Für diesen Tag ist nichts eingetragen. Aufträge hinzufügen und Tag planen drücken.', day_not_planned:'nicht eingeplant', day_unplanned:'{n} passten nicht', day_planned_ok:'{n} Stopps, {km}km', day_nothing_to_plan:'Es gibt nichts zu planen', day_planning:'Wird berechnet…', day_job_name:'Worum es geht', day_job_name_ph:'z.B. Leck — Papadopoulos', day_dur_min:'Dauer (Minuten)', day_dur_max:'Höchstens', day_dur_max_ph:'optional', day_window:'Zeitfenster des Kunden', day_window_hint:'Leer lassen, wenn jede Zeit innerhalb Ihrer Arbeitszeit passt.', day_window_invalid:'Das Ende muss nach dem Beginn liegen', day_delete_title:'\u201e{name}\u201c löschen?', day_delete_text:'Der Auftrag wird von diesem Tag entfernt.',
+    send_times_btn:'Zeiten senden', send_title:'Zeiten senden', send_hint:'Text bei Bedarf anpassen, dann Versandweg wählen.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Kopieren', send_no_times:'Dafür ist noch nichts eingeplant.', send_no_phone:'Telefonnummer auf der Karte ergänzen für WhatsApp oder SMS. Kopieren geht trotzdem.', send_copied:'Text kopiert', send_copy_failed:'Kopieren nicht möglich — Text markieren und selbst kopieren.', send_intro:'Hallo {name}, unsere Zeiten:', send_job_intro:'Hallo {name}, ich komme:', send_sign:'— {name}', form_phone_label:'Telefon (optional)', form_phone_ph:'z.B. 01701234567', student_phone_label:'Telefon', settings_country_code:'Ländervorwahl (für WhatsApp)', settings_country_code_hint:'Wird lokalen Nummern vorangestellt. Deutschland: 49.', backup_student_bad_phone:'Kunde {name} hat eine ungültige Telefonnummer', backup_jobs_not_list:'Aufträge sind keine Liste',
     backup_not_an_object:'Diese Datei ist keine RoutePal-Sicherung', backup_students_not_list:'Die Kundenliste fehlt oder ist beschädigt', backup_student_bad:'Eintrag #{n} ist ungültig', backup_student_no_id:'Eintrag #{n} hat keine Kennung', backup_student_no_name:'Eintrag #{n} hat keinen Namen', backup_student_bad_duration:'{name}: ungültige Dauer', backup_student_bad_count:'{name}: ungültige Anzahl', backup_student_bad_avail:'{name}: beschädigte Verfügbarkeit', backup_settings_bad:'Die Einstellungen fehlen oder sind beschädigt', backup_workdays_bad:'Ungültige Arbeitstage', backup_dayhours_bad:'Ungültige Arbeitszeiten', backup_blocked_bad:'Ungültige blockierte Zeiten', backup_schedule_bad:'Beschädigter Plan', backup_coords_bad:'Beschädigte Koordinaten', backup_and_more:' · und {n} weitere',
     pair_distance_unknown:'Entfernung unbekannt (Adresse noch nicht lokalisiert)',
     form_find_match:'Nach einem Partner suchen', toast_already_paired:'Bereits gepaart — zuerst lösen, um einen anderen zu wählen', toast_no_match:'Kein Partner: nötig sind gleiche Dauer, gleiches Fach, eine nahe Adresse und gemeinsame freie Zeit', confirm_match_title:'Passt zu {name}', confirm_match_text:'Sie teilen sich {mins} Minuten, {days}{dist}. Keine Vorgabe ändert sich — die Stunde kommt nur dorthin, wo BEIDE frei sind.{more}\\n\\nPaar anlegen und Plan berechnen?', confirm_match_more:' ({n} weitere gefunden)',
@@ -5655,6 +5679,7 @@ const App = {
         </div>
         <div class="student-body" id="sb-${st.id}">
           <div class="student-detail-row"><span class="student-detail-label">${t('student_address_label')}</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="${t('student_geocoded_title')} ✓">📍</span>`:`<span style="color:var(--text3);font-size:10px" title="${t('student_not_geocoded_title')}"> ○</span>`} ${this._farFromHomeWarning(st.id)}</span></div>
+          ${st.phone?`<div class="student-detail-row"><span class="student-detail-label">${t('student_phone_label')}</span><span style="font-size:12px">${esc(st.phone)}</span></div>`:''}
           <div class="student-detail-row"><span class="student-detail-label">${t('student_duration_label')}</span><span>${st.lessonDuration} ${t('student_minutes_suffix')}</span></div>
           <div class="student-detail-row"><span class="student-detail-label">${t('student_type_label')}</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?t('student_type_group_prefix')+': '+esc(st.group):t('student_type_solo')}</span></div>
           ${st.pairedWith ? (()=>{
@@ -5664,6 +5689,13 @@ const App = {
           })() : ''}
           <div class="student-detail-row"><span class="student-detail-label">${t('student_availability_label')}</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${avDays||'—'}</span></div>
           ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">${t('student_notes_label')}</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${esc(st.notes)}</span></div>`:''}
+          ${placed>0?`
+          <div class="student-actions" style="margin-bottom:8px">
+            <button class="btn btn-primary" style="flex:1" onclick="App.openSendSheet('student','${st.id}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              ${t('send_times_btn')}
+            </button>
+          </div>`:''}
           <div class="student-actions">
             <button class="btn btn-secondary" style="flex:1" onclick="App.openStudentDrawer('${st.id}')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -5725,6 +5757,10 @@ const App = {
       <div class="form-group">
         <label>${t('form_fullname_label')}</label>
         <input type="text" id="st-name" placeholder="${t('form_fullname_placeholder')}" value="${esc(st?.name||'')}">
+      </div>
+      <div class="form-group">
+        <label>${t('form_phone_label')}</label>
+        <input type="tel" id="st-phone" placeholder="${t('form_phone_ph')}" value="${esc(st?.phone||'')}" autocomplete="tel">
       </div>
       <div class="form-group" style="position:relative">
         <label>${t('student_address_label')}</label>
@@ -6586,6 +6622,7 @@ const App = {
       id: state.editingStudentId||('s'+Date.now()),
       name,
       address: addr,
+      phone: document.getElementById('st-phone')?.value?.trim()||'',
       subject: document.getElementById('st-subject')?.value||'Μαθηματικά',
       lessonDuration: Number(document.getElementById('st-dur')?.value)||60,
       lessonsPerWeek: Number(document.getElementById('st-freq')?.value)||2,
@@ -6799,6 +6836,8 @@ const App = {
                 x.job.service ? ' · '+esc(subjectLabel(x.job.service)) : ''}</span></div>
               <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:3px 9px;margin-top:6px"
                 onclick="App.openJobInMaps('${esc(x.job.id)}')">🗺️ Google Maps</button>
+              <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:3px 9px;margin-top:6px;margin-left:6px"
+                onclick="App.openSendSheet('job','${esc(x.job.id)}')">✉️ ${esc(t('send_times_btn'))}</button>
             </div>
           </div>`).join('')}</div>` : ''}
         ${plan.unplanned.length ? `
@@ -6855,6 +6894,8 @@ const App = {
         <input type="text" id="jb-name" value="${esc(j?.name||'')}" placeholder="${esc(t('day_job_name_ph'))}"></div>
       <div class="form-group"><label>${t('student_address_label')}</label>
         <input type="text" id="jb-addr" value="${esc(j?.address||'')}" placeholder="${esc(t('form_address_placeholder'))}"></div>
+      <div class="form-group"><label>${t('form_phone_label')}</label>
+        <input type="tel" id="jb-phone" value="${esc(j?.phone||'')}" placeholder="${esc(t('form_phone_ph'))}" autocomplete="tel"></div>
       <div class="form-group"><label>${getLabels().session}</label>
         <select id="jb-service">${getSubjects().map(sub=>
           `<option value="${esc(sub)}" ${j?.service===sub?'selected':''}>${esc(subjectLabel(sub))}</option>`).join('')}</select></div>
@@ -6893,6 +6934,7 @@ const App = {
       id: state.editingJobId || ('j'+Date.now()),
       date: state.planDate || this.todayISO(),
       name, address: addr,
+      phone: document.getElementById('jb-phone')?.value?.trim() || '',
       service: document.getElementById('jb-service')?.value || '',
       durationMin: lo,
       // A max below the min is not a range, it is a typo.
@@ -8063,6 +8105,11 @@ const App = {
           <label>${t('settings_name')}</label>
           <input type="text" id="set-name" value="${esc(st.teacherName||'')}" placeholder="${t('settings_name_placeholder')}">
         </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>${t('settings_country_code')}</label>
+          <input type="text" id="set-country-code" inputmode="numeric" value="${esc(st.countryCode||'30')}" placeholder="30">
+          <div class="settings-sub" style="margin-top:4px">${t('settings_country_code_hint')}</div>
+        </div>
         <div class="form-group" style="margin:0;position:relative">
           <label>${t('settings_home_address')}
             <span id="set-home-geo-status">${this._homeGeoStatusHtml()}</span>
@@ -8331,6 +8378,9 @@ const App = {
     const prevHours = persisted.dayHours || {};
     s.teacherName = document.getElementById('set-name')?.value?.trim()||'';
     s.homeAddress = document.getElementById('set-home')?.value?.trim()||'';
+    // Digits only — '+30' or '0030' here would end up doubled inside wa.me links.
+    s.countryCode = (document.getElementById('set-country-code')?.value||'').replace(/\D/g,'')
+      || (s.countryCode||'30');
     s.travelMode  = document.getElementById('set-mode')?.value||'car';
     s.fuelConsumption = Number(document.getElementById('set-fuel')?.value)||7;
     s.travelMargin = Number(document.getElementById('set-margin')?.value)??3;
@@ -8625,7 +8675,13 @@ const App = {
       if(!(per > 0 && per <= 50)) bad.push(tf('backup_student_bad_count',{name:st.name||i+1}));
       if(st.availability != null && !isObj(st.availability))
         bad.push(tf('backup_student_bad_avail',{name:st.name||i+1}));
+      // A non-string phone would be interpolated into a wa.me link as
+      // "[object Object]" and silently send nowhere.
+      if(st.phone != null && typeof st.phone !== 'string')
+        bad.push(tf('backup_student_bad_phone',{name:st.name||i+1}));
     });
+
+    if(data.jobs != null && !Array.isArray(data.jobs)) bad.push(t('backup_jobs_not_list'));
 
     if(!isObj(data.settings)) bad.push(t('backup_settings_bad'));
     else {
@@ -8659,10 +8715,12 @@ const App = {
               (problems.length>3 ? tf('backup_and_more',{n:problems.length-3}) : ''));
           }
           state.students=data.students||[];
+          state.jobs=Array.isArray(data.jobs)?data.jobs:(state.jobs||[]);
           state.settings=data.settings||defaultSettings();
           state.schedule=data.schedule||{};
           state.coords=data.coords||state.coords||{}; // keep existing if the backup predates coords export
           Storage.saveStudents(state.students);
+          Storage.saveJobs(state.jobs);
           Storage.saveSettings(state.settings);
           Storage.saveCoords(state.coords);
           Storage.saveSchedule(state.schedule);
@@ -8683,6 +8741,9 @@ const App = {
     const data = {
       settings: state.settings,
       students: state.students,
+      // Day-mode work lives in its own list and was missing from the backup,
+      // so an export→import round trip used to drop every booked job.
+      jobs: state.jobs||[],
       schedule: state.schedule,
       // Must be exported: importData overwrites state.coords from the file, so
       // omitting them here meant a normal export→import round trip silently
@@ -8704,6 +8765,148 @@ const App = {
   // `danger` defaults to true because most confirmations here really are
   // destructive; pass false for the ones that only add data, so the user isn't
   // asked to press a red "Delete" to load demo students.
+  // ---- SENDING THE TIMES TO THE CLIENT ----
+  // The schedule is only worth something once the other person knows it. This
+  // is the handoff: compose the times as plain text, let the user edit it, and
+  // hand it to WhatsApp, SMS or the clipboard. Nothing is sent from the app
+  // itself — the messaging app the user already has does the sending, so there
+  // is no gateway, no account and no delivery to get wrong.
+
+  /**
+   * Turn whatever the user typed into an international number for wa.me.
+   * Returns '' when that cannot be done honestly — a wrong number sends the
+   * message to a stranger, which is worse than showing no button.
+   */
+  normalizePhone(raw, cc){
+    const txt = String(raw||'').trim();
+    if(!txt) return '';
+    // Letters mean it is not a phone number at all (e.g. a note in the field).
+    if(/[a-zA-Zα-ωΑ-Ω]/.test(txt)) return '';
+    const digits = txt.replace(/\D/g,'');
+    if(!digits) return '';
+    let intl;
+    if(/^\+/.test(txt))        intl = digits;          // already international
+    else if(/^00/.test(digits)) intl = digits.slice(2); // 00 prefix form
+    else {
+      const code = String(cc||'').replace(/\D/g,'');
+      if(!code) return '';
+      // A national trunk '0' is not part of the international number.
+      intl = code + digits.replace(/^0+/,'');
+    }
+    // Shortest real international numbers are 8 digits; longest is 15 (E.164).
+    return (intl.length >= 8 && intl.length <= 15) ? intl : '';
+  },
+
+  /** All of one client's placed lessons, as day-ordered text lines. */
+  _weekTimeLines(studentId){
+    const lines = [];
+    for(const d of [1,2,3,4,5,6,7]){
+      (state.schedule[d]||[])
+        .filter(e => e.studentId===studentId || e.pairedStudentId===studentId ||
+                     (e.groupMemberIds||[]).includes(studentId))
+        .sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start))
+        .forEach(e => lines.push(`${DAYS_FULL[d]||''} ${e.start}–${e.end}`));
+    }
+    return lines;
+  },
+
+  /** The one planned stop for a job on the current plan date. */
+  _jobTimeLines(jobId){
+    const stop = ((state.dayPlan||{}).stops||[]).find(x => x.job && x.job.id===jobId);
+    if(!stop) return [];
+    return [`${this.prettyDate(state.planDate||this.todayISO())}, ${stop.start}–${stop.end}`];
+  },
+
+  /**
+   * The message body. Built here rather than in the sheet so it can be tested
+   * without a DOM, and so both modes produce the same shape.
+   */
+  timesMessage(kind, id){
+    const isJob = kind === 'job';
+    const who = isJob
+      ? (state.jobs||[]).find(j=>j.id===id)
+      : state.students.find(s=>s.id===id);
+    if(!who) return '';
+    const lines = isJob ? this._jobTimeLines(id) : this._weekTimeLines(id);
+    if(!lines.length) return '';
+    const first = String(who.name||'').trim().split(/\s+/)[0] || '';
+    const intro = tf(isJob?'send_job_intro':'send_intro', { name: first });
+    const me = String(state.settings.teacherName||'').trim();
+    return [intro, ...lines, me ? tf('send_sign',{name:me}) : ''].filter(Boolean).join('\n');
+  },
+
+  openSendSheet(kind, id){
+    const text = this.timesMessage(kind, id);
+    if(!text){ Toast.show(t('send_no_times'),'error'); return; }
+    const who = kind==='job'
+      ? (state.jobs||[]).find(j=>j.id===id)
+      : state.students.find(s=>s.id===id);
+    const intl = this.normalizePhone(who && who.phone, state.settings.countryCode);
+    state.sendTarget = { raw: (who && who.phone) || '', intl };
+    document.getElementById('send-title').textContent = t('send_title');
+    document.getElementById('send-hint').textContent = intl ? t('send_hint') : t('send_no_phone');
+    const ta = document.getElementById('send-text');
+    if(ta) ta.value = text;
+    for(const [btnId, on] of [['send-wa-btn', !!intl], ['send-sms-btn', !!state.sendTarget.raw]]){
+      const b = document.getElementById(btnId);
+      if(b){ b.disabled = !on; b.style.opacity = on ? '' : '.45'; }
+    }
+    document.getElementById('send-overlay').classList.add('open');
+  },
+
+  closeSendSheet(){
+    document.getElementById('send-overlay')?.classList.remove('open');
+    state.sendTarget = null;
+  },
+
+  // encodeURIComponent, never concatenation: a message containing & or # would
+  // otherwise cut itself short or inject parameters into the link.
+  waLink(intl, text){ return intl ? `https://wa.me/${intl}?text=${encodeURIComponent(text)}` : null },
+  smsLink(raw, text){
+    const num = String(raw||'').replace(/[^\d+]/g,'');
+    // '?&body=' is the form both iOS and Android accept.
+    return num ? `sms:${num}?&body=${encodeURIComponent(text)}` : null;
+  },
+
+  sendVia(how){
+    const text = document.getElementById('send-text')?.value || '';
+    const tgt = state.sendTarget || { raw:'', intl:'' };
+    if(!text.trim()) return;
+    if(how === 'copy'){
+      this.copyText(text);
+      this.closeSendSheet();
+      return;
+    }
+    const url = how==='whatsapp' ? this.waLink(tgt.intl, text) : this.smsLink(tgt.raw, text);
+    if(!url){ Toast.show(t('send_no_phone'),'error'); return; }
+    this.closeSendSheet();
+    try{
+      if(how==='whatsapp') window.open(url, '_blank');
+      else window.location.href = url;   // sms: must be a navigation, not a popup
+    }catch(e){ Toast.show(t('send_copy_failed'),'error'); }
+  },
+
+  copyText(text){
+    const done = () => Toast.show(t('send_copied'),'success');
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done).catch(()=>this._copyFallback(text));
+        return;
+      }
+    }catch(e){}
+    this._copyFallback(text);
+  },
+  _copyFallback(text){
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok = document.execCommand && document.execCommand('copy');
+      ta.remove();
+      Toast.show(ok ? t('send_copied') : t('send_copy_failed'), ok?'success':'error');
+    }catch(e){ Toast.show(t('send_copy_failed'),'error'); }
+  },
+
   confirm(title, text, cb, okLabel, danger=true){
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-text').textContent = text;

@@ -424,3 +424,129 @@ describe('importing a backup', () => {
     assert.deepStrictEqual(Array.from(app.App.validateBackup(d)), []);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sending the times to the client
+// ---------------------------------------------------------------------------
+
+describe('sending the times to the client', () => {
+  function appWith(schedule, stOv = {}, setOv = {}) {
+    const app = loadApp();
+    const st = student('A', Object.assign({ name: 'Νίκος Παπαδόπουλος' }, stOv));
+    app.setState({
+      students: [st], settings: settings(Object.assign({ teacherName: 'Γιάννης' }, setOv)),
+      schedule, coords: {},
+    });
+    return app;
+  }
+
+  describe('phone normalisation', () => {
+    const cases = [
+      ['6941234567',      '30', '306941234567', 'a local mobile gets the country code'],
+      ['0694 123 4567',   '30', '306941234567', 'the national trunk 0 is dropped, spaces ignored'],
+      ['+30 694 1234567', '30', '306941234567', 'an already-international number is kept as is'],
+      ['0030 6941234567', '30', '306941234567', 'the 00 prefix form is understood'],
+      ['(694) 123-4567',  '30', '306941234567', 'punctuation is ignored'],
+      ['+44 7700 900123', '30', '447700900123', 'a foreign number keeps ITS code, not ours'],
+    ];
+    for (const [raw, cc, want, why] of cases) {
+      test(why, () => {
+        assert.strictEqual(appWith({}).App.normalizePhone(raw, cc), want);
+      });
+    }
+
+    // Refusing is the point: a half-guessed number messages a stranger.
+    const refused = [
+      ['', '30', 'empty'],
+      ['   ', '30', 'blank'],
+      ['call the mother', '30', 'a note rather than a number'],
+      ['123', '30', 'too short to be a real number'],
+      ['69412345678901234', '30', 'longer than E.164 allows'],
+      ['6941234567', '', 'no country code configured'],
+    ];
+    for (const [raw, cc, why] of refused) {
+      test(`refuses ${why} rather than inventing a number`, () => {
+        assert.strictEqual(appWith({}).App.normalizePhone(raw, cc), '');
+      });
+    }
+  });
+
+  test('the message lists every placed lesson, in day and time order', () => {
+    const app = appWith({
+      3: [{ studentId: 'A', start: '19:00', end: '20:00' }],
+      1: [{ studentId: 'A', start: '17:00', end: '18:00' },
+          { studentId: 'B', start: '18:10', end: '19:10' }],
+    });
+    const msg = app.App.timesMessage('student', 'A');
+    const lines = msg.split('\n');
+    // Greek has a vocative case that cannot be derived from a name, so the
+    // Greek greeting deliberately carries no name at all — better than
+    // addressing someone as "Γεια σου Νίκος".
+    assert.ok(lines[0].length > 3 && !/\d/.test(lines[0]), 'opens with a greeting, not a time');
+    assert.strictEqual(lines[1], 'Δευτέρα 17:00–18:00');
+    assert.strictEqual(lines[2], 'Τετάρτη 19:00–20:00');
+    assert.strictEqual(lines[3], '— Γιάννης');
+    assert.ok(!msg.includes('18:10'), "another student's lesson must not leak into it");
+  });
+
+  test('a lesson shared as a pair or a group counts as that client\'s', () => {
+    const app = appWith({
+      2: [{ studentId: 'Z', pairedStudentId: 'A', start: '16:00', end: '17:00' }],
+      4: [{ studentId: 'Z', isGroup: true, groupMemberIds: ['Z', 'A'], start: '18:00', end: '19:00' }],
+    });
+    const msg = app.App.timesMessage('student', 'A');
+    assert.ok(msg.includes('16:00–17:00'), 'the paired lesson is theirs too');
+    assert.ok(msg.includes('18:00–19:00'), 'so is the group one');
+  });
+
+  test('nothing scheduled means no message rather than an empty one', () => {
+    assert.strictEqual(appWith({}).App.timesMessage('student', 'A'), '');
+  });
+
+  test('the signature is left out when the user has no name set', () => {
+    const app = appWith({ 1: [{ studentId: 'A', start: '17:00', end: '18:00' }] },
+      {}, { teacherName: '' });
+    const msg = app.App.timesMessage('student', 'A');
+    assert.ok(!msg.includes('—'), `no dangling dash: ${JSON.stringify(msg)}`);
+  });
+
+  test('links carry the text intact and escape what would break them', () => {
+    const app = appWith({});
+    const text = 'Δευτέρα 17:00 & Τετάρτη #2';
+    const wa = app.App.waLink('306941234567', text);
+    assert.ok(wa.startsWith('https://wa.me/306941234567?text='));
+    assert.ok(!wa.slice(wa.indexOf('?') + 1).includes('&'), '& must be encoded, not a new parameter');
+    assert.strictEqual(decodeURIComponent(wa.split('text=')[1]), text);
+
+    const sms = app.App.smsLink('+30 694 1234567', text);
+    assert.ok(sms.startsWith('sms:+306941234567?&body='));
+    assert.strictEqual(decodeURIComponent(sms.split('body=')[1]), text);
+
+    assert.strictEqual(app.App.waLink('', text), null, 'no number, no link');
+    assert.strictEqual(app.App.smsLink('', text), null);
+  });
+
+  test('a phone number survives export and import', () => {
+    const app = loadApp();
+    app.setState({
+      students: [student('A', { phone: '+30 694 1234567' })],
+      jobs: [{ id: 'j1', name: 'Διαρροή', address: 'x', phone: '2610123456', durationMin: 60 }],
+      settings: settings(), coords: {}, schedule: {},
+    });
+    let written = null;
+    app.ctx.Blob = function Blob(parts) { written = parts[0]; };
+    app.App.exportData();
+    const data = JSON.parse(written);
+    assert.strictEqual(data.students[0].phone, '+30 694 1234567');
+    assert.strictEqual(data.jobs.length, 1, 'day-mode jobs belong in the backup too');
+    assert.strictEqual(data.jobs[0].phone, '2610123456');
+    assert.deepStrictEqual(Array.from(app.App.validateBackup(data)), []);
+  });
+
+  test('a backup with a non-string phone is refused', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings() });
+    const bad = { students: [student('A', { phone: { n: 1 } })], settings: settings() };
+    assert.ok(app.App.validateBackup(bad).length > 0, 'must be caught before it reaches a link');
+  });
+});
