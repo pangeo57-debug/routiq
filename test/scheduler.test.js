@@ -141,7 +141,13 @@ describe('the constraints hold without the scheduler simply giving up', () => {
       'five one-hour gaps exist and all five should be used');
   });
 
-  test('two-hour lessons fill a four-hour day exactly twice', async () => {
+  // Four hours hold two two-hour lessons only if the drive between them costs
+  // nothing. It does not — so with the working hours taken literally the answer
+  // is ONE per day. The original version of this test asserted four, and passed
+  // only because the scheduler quietly allowed a 15-minute overrun; it was
+  // documenting the defect the user later reported as "it breaks the limits I
+  // set". The tolerance is now the user's to grant, so both answers are tested.
+  test('two-hour lessons fill a four-hour day as far as the drive allows', async () => {
     const app = loadApp();
     const cfg = settings({
       workDays: [1, 2],
@@ -155,8 +161,16 @@ describe('the constraints hold without the scheduler simply giving up', () => {
     const sched = await runPipeline(app, sts, cfg, cityCoords(sts));
 
     assertClean(auditSchedule(app.Scheduler, sched, sts, cfg));
-    assert.equal(totalPlaced(sched, cfg.workDays), 4,
-      'two days of four hours hold exactly four two-hour lessons');
+    assert.equal(totalPlaced(sched, cfg.workDays), 2,
+      'one two-hour lesson per four-hour day, since the second would overrun');
+
+    // Grant the quarter of an hour and the second lesson fits again.
+    const loose = loadApp();
+    const cfgLoose = Object.assign({}, cfg, { endFlexMin: 15 });
+    const schedLoose = await runPipeline(loose, sts, cfgLoose, cityCoords(sts));
+    assertClean(auditSchedule(loose.Scheduler, schedLoose, sts, cfgLoose));
+    assert.equal(totalPlaced(schedLoose, cfgLoose.workDays), 4,
+      'with the tolerance the user asked for, both fit');
   });
 
   test('six days, 60 students, pairs and two-hour blocks: still no violation', async () => {
@@ -1360,14 +1374,20 @@ describe('a student free in two stretches of one day', () => {
     }
   });
 
-  test('the 15-minute overrun never eats into a stated gap', () => {
+  test('an end-of-day overrun never eats into a stated gap', () => {
     const app = loadApp();
     const { sts } = twoStretches(app, 1, { start: '17:00', end: '18:30' });
     const S = app.Scheduler;
-    // 16:10-17:10 would overrun the first stretch by ten minutes. That slack
-    // exists for the end of the DAY, not for an hour someone said they are busy.
+    // The tolerance is off by default now, so neither of these may overrun.
     assert.equal(S.fitsAvailability(sts[0], 1, S.toMin('16:10'), S.toMin('17:10')), false);
-    // The same overrun at the end of the day is still tolerated, as before.
+    assert.equal(S.fitsAvailability(sts[0], 1, S.toMin('21:10'), S.toMin('22:10')), false);
+
+    // Turn it on and it applies to the END OF THE DAY only. Running ten
+    // minutes into an hour someone said they are busy is not a rounding error,
+    // whatever the setting says.
+    app.state.settings.endFlexMin = 15;
+    assert.equal(S.fitsAvailability(sts[0], 1, S.toMin('16:10'), S.toMin('17:10')), false,
+      'the middle-of-day gap is never negotiable');
     assert.equal(S.fitsAvailability(sts[0], 1, S.toMin('21:10'), S.toMin('22:10')), true);
   });
 
@@ -1723,5 +1743,161 @@ describe('planning one date, for work that does not repeat', () => {
     const app = loadApp({ seed: 2 });
     const { list, cfg, coords } = jobs(app);
     assert.equal(await app.Scheduler.planDay(list, cfg, coords, 'not-a-date'), null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The limits the user typed are the limits they get
+// ---------------------------------------------------------------------------
+
+describe('the working day the user set is not overridden by the app', () => {
+  // Both of these shipped. The user's report was "it leaves huge gaps and
+  // breaks the time limits I set, all by itself" — two separate defects, both
+  // of them the app quietly substituting its own numbers for theirs.
+
+  test('a lesson may not run past the end of the working day', async () => {
+    const app = loadApp({ seed: 3 });
+    const S = app.Scheduler;
+    // The day ends at 21:00 and everything before 20:00 is blocked, so the
+    // only room left is exactly one hour. The lesson needs seventy minutes.
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '17:00', end: '21:00' } },
+      blockedSlots: [{ day: 1, start: '17:00', end: '20:00', reason: 'x' }] });
+    const sts = [student('a', { days: [1], window: { start: '17:00', end: '23:00' },
+      lessonDuration: 70 })];
+    const coords = cityCoords(sts);
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+
+    const r = await S.runMultiAttempt(sts, cfg, coords, 3, false);
+    const placed = r.schedule[1] || [];
+    // It used to be placed 20:00–21:10: a hard-coded 15-minute tolerance let
+    // the scheduler overshoot the one number the user had set by hand.
+    assert.ok(placed.every(sl => S.toMin(sl.end) <= S.toMin('21:00')),
+      `nothing may end after 21:00, got ${placed.map(s => s.start + '-' + s.end).join(', ')}`);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, r.schedule, sts, cfg)), []);
+  });
+
+  test('the tolerance comes back only when the user asks for it', async () => {
+    const app = loadApp({ seed: 3 });
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '17:00', end: '21:00' } },
+      blockedSlots: [{ day: 1, start: '17:00', end: '20:00', reason: 'x' }],
+      endFlexMin: 15 });
+    const sts = [student('a', { days: [1], window: { start: '17:00', end: '23:00' },
+      lessonDuration: 70 })];
+    const coords = cityCoords(sts);
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+
+    const r = await S.runMultiAttempt(sts, cfg, coords, 3, false);
+    assert.equal((r.schedule[1] || []).length, 1, 'with 15 minutes of slack it fits');
+    assert.equal(r.schedule[1][0].end, '21:10');
+  });
+
+  test('the default for an existing user is strict, not the old 15 minutes', () => {
+    const app = loadApp();
+    app.setState({ settings: settings() });           // no endFlexMin at all
+    assert.equal(app.Scheduler.endFlex(), 0);
+  });
+});
+
+describe('planning a day the user has not configured', () => {
+  const SATURDAY = '2026-10-03';
+
+  function workdayHours(app) {
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5] });
+    cfg.dayHours = Object.fromEntries([1, 2, 3, 4, 5]
+      .map(d => [d, { start: '09:00', end: '14:00' }]));
+    const list = [
+      { id: 'j1', name: 'A', address: 'a1', durationMin: 60, date: SATURDAY },
+      { id: 'j2', name: 'B', address: 'a2', durationMin: 60, date: SATURDAY },
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    list.forEach((j, i) => { coords[j.id] = { lat: 38.24 + i / 300, lon: 21.73 + i / 400 }; });
+    app.setState({ settings: cfg, coords, students: [], jobs: list, schedule: {},
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    return { list, cfg, coords };
+  }
+
+  test('borrows the hours the user actually works instead of inventing a day', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = workdayHours(app);
+    const plan = await app.Scheduler.planDay(list, cfg, coords, SATURDAY, { budgetMs: 200 });
+    // The old fallback was a hard-coded 08:00–20:00, so a user whose days run
+    // 09:00–14:00 was handed a job starting at 08:00.
+    assert.ok(plan.stops.length > 0, 'the day should still be plannable');
+    for (const s of plan.stops) {
+      assert.ok(app.Scheduler.toMin(s.start) >= app.Scheduler.toMin('09:00'),
+        `${s.job.name} starts at ${s.start}, before any hour the user works`);
+      assert.ok(app.Scheduler.toMin(s.end) <= app.Scheduler.toMin('14:00'),
+        `${s.job.name} ends at ${s.end}, after any hour the user works`);
+    }
+  });
+
+  test('and says that it borrowed them', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = workdayHours(app);
+    const plan = await app.Scheduler.planDay(list, cfg, coords, SATURDAY, { budgetMs: 200 });
+    assert.equal(plan.hours.assumed, true, 'a borrowed working day must be flagged, not silent');
+    assert.equal(plan.hours.start, '09:00');
+    assert.equal(plan.hours.end, '14:00');
+  });
+
+  test('a configured day is used exactly, and not flagged', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = workdayHours(app);
+    const MONDAY_ = '2026-09-28';
+    const l = list.map(j => ({ ...j, date: MONDAY_ }));
+    const plan = await app.Scheduler.planDay(l, cfg, coords, MONDAY_, { budgetMs: 200 });
+    assert.equal(plan.hours.assumed, false);
+    assert.equal(plan.hours.start, '09:00');
+  });
+});
+
+describe('the day plan explains its holes', () => {
+  const FRIDAY = '2026-10-02';
+
+  test('waiting forced by a customer window is named as such', async () => {
+    const app = loadApp({ seed: 3 });
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5] });
+    cfg.dayHours = { 5: { start: '08:00', end: '18:00' } };
+    cfg.blockedSlots = [];
+    const list = [
+      { id: 'k1', name: 'Morning', address: 'a', durationMin: 60, date: FRIDAY,
+        window: { start: '08:00', end: '10:00' } },
+      { id: 'k2', name: 'Afternoon', address: 'b', durationMin: 60, date: FRIDAY,
+        window: { start: '16:00', end: '18:00' } },
+    ];
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    list.forEach((j, i) => { coords[j.id] = { lat: 38.24 + i / 200, lon: 21.73 + i / 200 }; });
+    app.setState({ settings: cfg, coords, students: [], schedule: {},
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+
+    const plan = await app.Scheduler.planDay(list, cfg, coords, FRIDAY, { budgetMs: 300 });
+    assert.equal(plan.stops.length, 2);
+    // Six hours of nothing in the middle of the day looks like a broken app
+    // until it says whose decision it was.
+    assert.equal(plan.waits.length, 1, 'the hole must be reported');
+    assert.equal(plan.waits[0].reason, 'window');
+    assert.ok(plan.waits[0].minutes > 240, `got ${plan.waits[0].minutes} minutes`);
+  });
+
+  test('travel and the safety margin are not counted as waiting', async () => {
+    const app = loadApp({ seed: 3 });
+    const cfg = settings({ workDays: [5] });
+    cfg.dayHours = { 5: { start: '08:00', end: '18:00' } };
+    cfg.blockedSlots = [];
+    const list = [];
+    for (let i = 0; i < 4; i++)
+      list.push({ id: 'n' + i, name: 'J' + i, address: 'a' + i, durationMin: 60, date: FRIDAY });
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    list.forEach((j, i) => { coords[j.id] = { lat: 38.24 + i * 0.004, lon: 21.73 + i * 0.004 }; });
+    app.setState({ settings: cfg, coords, students: [], schedule: {},
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+
+    const plan = await app.Scheduler.planDay(list, cfg, coords, FRIDAY, { budgetMs: 300 });
+    assert.equal(plan.stops.length, 4);
+    assert.deepStrictEqual(Array.from(plan.waits), [],
+      'a back-to-back day has no waiting to report');
   });
 });

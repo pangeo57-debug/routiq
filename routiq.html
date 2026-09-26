@@ -736,6 +736,9 @@ function defaultSettings(){
     // WhatsApp only accepts a full international number. Local numbers get
     // this in front of them; '30' because the app shipped in Greece first.
     countryCode:'30',
+    // How many minutes a lesson may run past the end of the working day.
+    // Zero: the hours the user typed are the hours they get.
+    endFlexMin:0,
     language:'el',
     theme:'system',
   };
@@ -837,7 +840,7 @@ const I18N = {
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
     mode_week:'Εβδομάδα', mode_day:'Ημέρα', day_title:'Ημερήσιο πρόγραμμα', day_plan_btn:'Σχεδίασε τη μέρα', day_today:'Σήμερα', day_tomorrow:'Αύριο', day_stops:'στάσεις', day_driving:'οδήγηση', day_add_job:'Νέα δουλειά', day_edit_job:'Επεξεργασία δουλειάς', day_jobs_count:'{n} δουλειές — {date}', day_no_jobs:'Καμία δουλειά για αυτή τη μέρα. Πρόσθεσε ό,τι έχεις κλείσει και πάτα «Σχεδίασε τη μέρα».', day_not_planned:'εκτός προγράμματος', day_unplanned:'{n} δεν χώρεσαν', day_planned_ok:'{n} στάσεις, {km}χλμ', day_nothing_to_plan:'Δεν υπάρχει δουλειά να προγραμματιστεί', day_planning:'Υπολογίζω…', day_job_name:'Τι είναι η δουλειά', day_job_name_ph:'π.χ. Διαρροή — Παπαδόπουλος', day_dur_min:'Διάρκεια (λεπτά)', day_dur_max:'Το πολύ', day_dur_max_ph:'προαιρετικό', day_window:'Χρονικό παράθυρο πελάτη', day_window_hint:'Άφησέ το κενό αν μπορεί οποιαδήποτε ώρα μέσα στο ωράριό σου.', day_window_invalid:'Το «ως» πρέπει να είναι μετά το «από»', day_delete_title:'Διαγραφή «{name}»;', day_delete_text:'Η δουλειά θα αφαιρεθεί από αυτή τη μέρα.',
-    send_times_btn:'Στείλε ώρες', send_title:'Στείλε τις ώρες', send_hint:'Άλλαξε το κείμενο αν θες και μετά διάλεξε τρόπο αποστολής.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Αντιγραφή', send_no_times:'Δεν έχει ώρες στο πρόγραμμα ακόμα.', send_no_phone:'Πρόσθεσε τηλέφωνο στην καρτέλα για WhatsApp ή SMS. Μπορείς πάντως να αντιγράψεις το κείμενο.', send_copied:'Το κείμενο αντιγράφηκε', send_copy_failed:'Δεν μπόρεσα να αντιγράψω — κράτα το κείμενο πατημένο και αντίγραψέ το.', send_intro:'Γεια σου! Οι ώρες μας:', send_job_intro:'Γεια σου! Θα είμαι εκεί:', send_sign:'— {name}', form_phone_label:'Τηλέφωνο (προαιρετικό)', form_phone_ph:'π.χ. 6941234567', student_phone_label:'Τηλέφωνο', settings_country_code:'Κωδικός χώρας (για WhatsApp)', settings_country_code_hint:'Μπαίνει μπροστά σε τοπικά νούμερα. Για Ελλάδα 30.', backup_student_bad_phone:'Ο πελάτης {name} έχει άκυρο τηλέφωνο', backup_jobs_not_list:'Οι δουλειές δεν είναι λίστα',
+    send_times_btn:'Στείλε ώρες', settings_end_flex:'Ανοχή στο τέλος της μέρας (λεπτά)', settings_end_flex_hint:'Πόσο μπορεί να ξεπεράσει ένα ραντεβού το ωράριό σου. 0 σημαίνει ούτε λεπτό.', day_hours_assumed:'Δεν έχεις ορίσει ωράριο για {day} — χρησιμοποιώ {from}–{to} από τις άλλες μέρες σου.', day_waiting_total:'Αναμονή: {n} λεπτά', day_wait_window:'{n} λεπτά πριν από «{before}» — ο πελάτης δίνει μόνο αυτό το παράθυρο.', day_wait_gap:'{n} λεπτά κενό μετά από «{after}».', day_reserved_max:'κρατημένο για {n} λεπτά (ελάχιστο {min})', send_title:'Στείλε τις ώρες', send_hint:'Άλλαξε το κείμενο αν θες και μετά διάλεξε τρόπο αποστολής.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Αντιγραφή', send_no_times:'Δεν έχει ώρες στο πρόγραμμα ακόμα.', send_no_phone:'Πρόσθεσε τηλέφωνο στην καρτέλα για WhatsApp ή SMS. Μπορείς πάντως να αντιγράψεις το κείμενο.', send_copied:'Το κείμενο αντιγράφηκε', send_copy_failed:'Δεν μπόρεσα να αντιγράψω — κράτα το κείμενο πατημένο και αντίγραψέ το.', send_intro:'Γεια σου! Οι ώρες μας:', send_job_intro:'Γεια σου! Θα είμαι εκεί:', send_sign:'— {name}', form_phone_label:'Τηλέφωνο (προαιρετικό)', form_phone_ph:'π.χ. 6941234567', student_phone_label:'Τηλέφωνο', settings_country_code:'Κωδικός χώρας (για WhatsApp)', settings_country_code_hint:'Μπαίνει μπροστά σε τοπικά νούμερα. Για Ελλάδα 30.', backup_student_bad_phone:'Ο πελάτης {name} έχει άκυρο τηλέφωνο', backup_jobs_not_list:'Οι δουλειές δεν είναι λίστα',
     backup_not_an_object:'Το αρχείο δεν είναι αντίγραφο RoutePal', backup_students_not_list:'Η λίστα πελατών λείπει ή είναι κατεστραμμένη', backup_student_bad:'Η εγγραφή #{n} δεν είναι έγκυρη', backup_student_no_id:'Η εγγραφή #{n} δεν έχει αναγνωριστικό', backup_student_no_name:'Η εγγραφή #{n} δεν έχει όνομα', backup_student_bad_duration:'{name}: μη έγκυρη διάρκεια', backup_student_bad_count:'{name}: μη έγκυρος αριθμός μαθημάτων', backup_student_bad_avail:'{name}: κατεστραμμένη διαθεσιμότητα', backup_settings_bad:'Οι ρυθμίσεις λείπουν ή είναι κατεστραμμένες', backup_workdays_bad:'Μη έγκυρες εργάσιμες ημέρες', backup_dayhours_bad:'Μη έγκυρο ωράριο', backup_blocked_bad:'Μη έγκυρες μπλοκαρισμένες ώρες', backup_schedule_bad:'Κατεστραμμένο πρόγραμμα', backup_coords_bad:'Κατεστραμμένες συντεταγμένες', backup_and_more:' · και {n} ακόμα',
     pair_distance_unknown:'απόσταση άγνωστη (η διεύθυνση δεν έχει εντοπιστεί ακόμα)',
     form_find_match:'Ψάξε αν υπάρχει ταίρι', toast_already_paired:'Έχει ήδη ζεύγος — καθάρισέ το πρώτα αν θες άλλο', toast_no_match:'Κανένα ταίρι: χρειάζεται ίδια διάρκεια, ίδιο αντικείμενο, κοντινή διεύθυνση και κοινές ελεύθερες ώρες', confirm_match_title:'Ταιριάζει με {name}', confirm_match_text:'Θα κάνουν μαζί {mins} λεπτά, {days}{dist}. Οι περιορισμοί και των δύο μένουν ως έχουν — το μάθημα μπαίνει μόνο όπου είναι ελεύθεροι και οι δύο.{more}\\n\\nΝα γίνουν ζεύγος και να υπολογιστεί το πρόγραμμα;', confirm_match_more:' (βρέθηκαν {n} ακόμα)',
@@ -1034,7 +1037,7 @@ const I18N = {
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
     mode_week:'Week', mode_day:'Day', day_title:'Day plan', day_plan_btn:'Plan the day', day_today:'Today', day_tomorrow:'Tomorrow', day_stops:'stops', day_driving:'driving', day_add_job:'New job', day_edit_job:'Edit job', day_jobs_count:'{n} jobs — {date}', day_no_jobs:'Nothing booked for this day. Add what you have and press Plan the day.', day_not_planned:'not scheduled', day_unplanned:'{n} did not fit', day_planned_ok:'{n} stops, {km}km', day_nothing_to_plan:'There is no work to plan', day_planning:'Working it out…', day_job_name:'What the job is', day_job_name_ph:'e.g. Leak — Papadopoulos', day_dur_min:'Takes (minutes)', day_dur_max:'At most', day_dur_max_ph:'optional', day_window:'Customer time window', day_window_hint:'Leave empty if any time within your working hours will do.', day_window_invalid:'The end must be after the start', day_delete_title:'Delete \u201c{name}\u201d?', day_delete_text:'The job will be removed from this day.',
-    send_times_btn:'Send times', send_title:'Send the times', send_hint:'Edit the text if you like, then pick how to send it.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copy', send_no_times:'Nothing scheduled for them yet.', send_no_phone:'Add a phone number on the card to use WhatsApp or SMS. You can still copy the text.', send_copied:'Text copied', send_copy_failed:"Couldn't copy — select the text and copy it by hand.", send_intro:'Hi {name}, here are our times:', send_job_intro:'Hi {name}, I will be there:', send_sign:'— {name}', form_phone_label:'Phone (optional)', form_phone_ph:'e.g. 6941234567', student_phone_label:'Phone', settings_country_code:'Country code (for WhatsApp)', settings_country_code_hint:'Added in front of local numbers. Greece is 30.', backup_student_bad_phone:'Client {name} has an invalid phone number', backup_jobs_not_list:'Jobs are not a list',
+    send_times_btn:'Send times', settings_end_flex:'End-of-day tolerance (minutes)', settings_end_flex_hint:'How far an appointment may run past your hours. 0 means not a minute.', day_hours_assumed:'You have set no hours for {day} — using {from}–{to} from your other days.', day_waiting_total:'Waiting: {n} minutes', day_wait_window:'{n} minutes before \u201c{before}\u201d — the customer only offers that window.', day_wait_gap:'{n} minutes idle after \u201c{after}\u201d.', day_reserved_max:'booked for {n} minutes (minimum {min})', send_title:'Send the times', send_hint:'Edit the text if you like, then pick how to send it.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copy', send_no_times:'Nothing scheduled for them yet.', send_no_phone:'Add a phone number on the card to use WhatsApp or SMS. You can still copy the text.', send_copied:'Text copied', send_copy_failed:"Couldn't copy — select the text and copy it by hand.", send_intro:'Hi {name}, here are our times:', send_job_intro:'Hi {name}, I will be there:', send_sign:'— {name}', form_phone_label:'Phone (optional)', form_phone_ph:'e.g. 6941234567', student_phone_label:'Phone', settings_country_code:'Country code (for WhatsApp)', settings_country_code_hint:'Added in front of local numbers. Greece is 30.', backup_student_bad_phone:'Client {name} has an invalid phone number', backup_jobs_not_list:'Jobs are not a list',
     backup_not_an_object:'This file is not a RoutePal backup', backup_students_not_list:'The client list is missing or corrupt', backup_student_bad:'Record #{n} is not valid', backup_student_no_id:'Record #{n} has no identifier', backup_student_no_name:'Record #{n} has no name', backup_student_bad_duration:'{name}: invalid session length', backup_student_bad_count:'{name}: invalid number of sessions', backup_student_bad_avail:'{name}: corrupt availability', backup_settings_bad:'The settings are missing or corrupt', backup_workdays_bad:'Invalid working days', backup_dayhours_bad:'Invalid working hours', backup_blocked_bad:'Invalid blocked times', backup_schedule_bad:'Corrupt schedule', backup_coords_bad:'Corrupt coordinates', backup_and_more:' · and {n} more',
     pair_distance_unknown:'distance unknown (the address is not located yet)',
     form_find_match:'Look for a match', toast_already_paired:'Already paired — clear that first if you want a different partner', toast_no_match:'No match: it needs the same length, the same subject, an address nearby and free time in common', confirm_match_title:'Matches {name}', confirm_match_text:'They would share {mins} minutes, {days}{dist}. Neither one\u2019s constraints change — the session only goes where BOTH are free.{more}\\n\\nPair them and work out the schedule?', confirm_match_more:' ({n} more found)',
@@ -1231,7 +1234,7 @@ const I18N = {
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
     mode_week:'Semaine', mode_day:'Jour', day_title:'Planning du jour', day_plan_btn:'Planifier la journée', day_today:'Aujourd\u2019hui', day_tomorrow:'Demain', day_stops:'arrêts', day_driving:'trajet', day_add_job:'Nouvelle intervention', day_edit_job:'Modifier l\u2019intervention', day_jobs_count:'{n} interventions — {date}', day_no_jobs:'Rien de prévu ce jour. Ajoutez vos interventions puis appuyez sur Planifier la journée.', day_not_planned:'non planifiée', day_unplanned:'{n} n\u2019ont pas tenu', day_planned_ok:'{n} arrêts, {km}km', day_nothing_to_plan:'Aucune intervention à planifier', day_planning:'Calcul en cours…', day_job_name:'Nature de l\u2019intervention', day_job_name_ph:'ex. Fuite — Papadopoulos', day_dur_min:'Durée (minutes)', day_dur_max:'Au plus', day_dur_max_ph:'facultatif', day_window:'Créneau du client', day_window_hint:'Laissez vide si n\u2019importe quelle heure de vos horaires convient.', day_window_invalid:'La fin doit suivre le début', day_delete_title:'Supprimer « {name} » ?', day_delete_text:'L\u2019intervention sera retirée de cette journée.',
-    send_times_btn:'Envoyer les horaires', send_title:'Envoyer les horaires', send_hint:'Modifiez le texte si besoin, puis choisissez le mode d\u2019envoi.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copier', send_no_times:'Aucun horaire pour le moment.', send_no_phone:'Ajoutez un téléphone sur la fiche pour WhatsApp ou SMS. Vous pouvez tout de même copier le texte.', send_copied:'Texte copié', send_copy_failed:'Copie impossible — sélectionnez le texte et copiez-le manuellement.', send_intro:'Bonjour {name}, voici nos horaires :', send_job_intro:'Bonjour {name}, je serai là :', send_sign:'— {name}', form_phone_label:'Téléphone (facultatif)', form_phone_ph:'ex. 0612345678', student_phone_label:'Téléphone', settings_country_code:'Indicatif pays (pour WhatsApp)', settings_country_code_hint:'Ajouté devant les numéros locaux. France : 33.', backup_student_bad_phone:'Le client {name} a un téléphone invalide', backup_jobs_not_list:'Les interventions ne sont pas une liste',
+    send_times_btn:'Envoyer les horaires', settings_end_flex:'Tolérance en fin de journée (minutes)', settings_end_flex_hint:'De combien un rendez-vous peut dépasser vos horaires. 0 : pas une minute.', day_hours_assumed:'Aucun horaire défini pour {day} — j\u2019utilise {from}–{to}, vos horaires des autres jours.', day_waiting_total:'Attente : {n} minutes', day_wait_window:'{n} minutes avant « {before} » — le client ne propose que ce créneau.', day_wait_gap:'{n} minutes creuses après « {after} ».', day_reserved_max:'réservé {n} minutes (minimum {min})', send_title:'Envoyer les horaires', send_hint:'Modifiez le texte si besoin, puis choisissez le mode d\u2019envoi.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copier', send_no_times:'Aucun horaire pour le moment.', send_no_phone:'Ajoutez un téléphone sur la fiche pour WhatsApp ou SMS. Vous pouvez tout de même copier le texte.', send_copied:'Texte copié', send_copy_failed:'Copie impossible — sélectionnez le texte et copiez-le manuellement.', send_intro:'Bonjour {name}, voici nos horaires :', send_job_intro:'Bonjour {name}, je serai là :', send_sign:'— {name}', form_phone_label:'Téléphone (facultatif)', form_phone_ph:'ex. 0612345678', student_phone_label:'Téléphone', settings_country_code:'Indicatif pays (pour WhatsApp)', settings_country_code_hint:'Ajouté devant les numéros locaux. France : 33.', backup_student_bad_phone:'Le client {name} a un téléphone invalide', backup_jobs_not_list:'Les interventions ne sont pas une liste',
     backup_not_an_object:'Ce fichier n\u2019est pas une sauvegarde RoutePal', backup_students_not_list:'La liste des clients est absente ou corrompue', backup_student_bad:'L\u2019entrée #{n} n\u2019est pas valide', backup_student_no_id:'L\u2019entrée #{n} n\u2019a pas d\u2019identifiant', backup_student_no_name:'L\u2019entrée #{n} n\u2019a pas de nom', backup_student_bad_duration:'{name} : durée invalide', backup_student_bad_count:'{name} : nombre de séances invalide', backup_student_bad_avail:'{name} : disponibilité corrompue', backup_settings_bad:'Les réglages sont absents ou corrompus', backup_workdays_bad:'Jours de travail invalides', backup_dayhours_bad:'Horaires invalides', backup_blocked_bad:'Heures bloquées invalides', backup_schedule_bad:'Planning corrompu', backup_coords_bad:'Coordonnées corrompues', backup_and_more:' · et {n} autres',
     pair_distance_unknown:'distance inconnue (adresse pas encore localisée)',
     form_find_match:'Chercher un binôme', toast_already_paired:'Déjà en binôme — retirez-le d\u2019abord pour en choisir un autre', toast_no_match:'Aucun binôme : il faut même durée, même matière, une adresse proche et des disponibilités communes', confirm_match_title:'Compatible avec {name}', confirm_match_text:'Ils partageraient {mins} minutes, {days}{dist}. Aucune contrainte ne change — la séance ne va que là où les DEUX sont libres.{more}\\n\\nLes mettre en binôme et calculer le planning ?', confirm_match_more:' ({n} autres trouvés)',
@@ -1428,7 +1431,7 @@ const I18N = {
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
     mode_week:'Woche', mode_day:'Tag', day_title:'Tagesplan', day_plan_btn:'Tag planen', day_today:'Heute', day_tomorrow:'Morgen', day_stops:'Stopps', day_driving:'Fahrt', day_add_job:'Neuer Auftrag', day_edit_job:'Auftrag bearbeiten', day_jobs_count:'{n} Aufträge — {date}', day_no_jobs:'Für diesen Tag ist nichts eingetragen. Aufträge hinzufügen und Tag planen drücken.', day_not_planned:'nicht eingeplant', day_unplanned:'{n} passten nicht', day_planned_ok:'{n} Stopps, {km}km', day_nothing_to_plan:'Es gibt nichts zu planen', day_planning:'Wird berechnet…', day_job_name:'Worum es geht', day_job_name_ph:'z.B. Leck — Papadopoulos', day_dur_min:'Dauer (Minuten)', day_dur_max:'Höchstens', day_dur_max_ph:'optional', day_window:'Zeitfenster des Kunden', day_window_hint:'Leer lassen, wenn jede Zeit innerhalb Ihrer Arbeitszeit passt.', day_window_invalid:'Das Ende muss nach dem Beginn liegen', day_delete_title:'\u201e{name}\u201c löschen?', day_delete_text:'Der Auftrag wird von diesem Tag entfernt.',
-    send_times_btn:'Zeiten senden', send_title:'Zeiten senden', send_hint:'Text bei Bedarf anpassen, dann Versandweg wählen.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Kopieren', send_no_times:'Dafür ist noch nichts eingeplant.', send_no_phone:'Telefonnummer auf der Karte ergänzen für WhatsApp oder SMS. Kopieren geht trotzdem.', send_copied:'Text kopiert', send_copy_failed:'Kopieren nicht möglich — Text markieren und selbst kopieren.', send_intro:'Hallo {name}, unsere Zeiten:', send_job_intro:'Hallo {name}, ich komme:', send_sign:'— {name}', form_phone_label:'Telefon (optional)', form_phone_ph:'z.B. 01701234567', student_phone_label:'Telefon', settings_country_code:'Ländervorwahl (für WhatsApp)', settings_country_code_hint:'Wird lokalen Nummern vorangestellt. Deutschland: 49.', backup_student_bad_phone:'Kunde {name} hat eine ungültige Telefonnummer', backup_jobs_not_list:'Aufträge sind keine Liste',
+    send_times_btn:'Zeiten senden', settings_end_flex:'Toleranz am Tagesende (Minuten)', settings_end_flex_hint:'Wie weit ein Termin über Ihre Arbeitszeit laufen darf. 0 heißt keine Minute.', day_hours_assumed:'Für {day} ist keine Arbeitszeit gesetzt — ich nehme {from}–{to} von Ihren anderen Tagen.', day_waiting_total:'Wartezeit: {n} Minuten', day_wait_window:'{n} Minuten vor \u201e{before}\u201c — der Kunde bietet nur dieses Fenster.', day_wait_gap:'{n} Minuten Leerlauf nach \u201e{after}\u201c.', day_reserved_max:'{n} Minuten reserviert (mindestens {min})', send_title:'Zeiten senden', send_hint:'Text bei Bedarf anpassen, dann Versandweg wählen.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Kopieren', send_no_times:'Dafür ist noch nichts eingeplant.', send_no_phone:'Telefonnummer auf der Karte ergänzen für WhatsApp oder SMS. Kopieren geht trotzdem.', send_copied:'Text kopiert', send_copy_failed:'Kopieren nicht möglich — Text markieren und selbst kopieren.', send_intro:'Hallo {name}, unsere Zeiten:', send_job_intro:'Hallo {name}, ich komme:', send_sign:'— {name}', form_phone_label:'Telefon (optional)', form_phone_ph:'z.B. 01701234567', student_phone_label:'Telefon', settings_country_code:'Ländervorwahl (für WhatsApp)', settings_country_code_hint:'Wird lokalen Nummern vorangestellt. Deutschland: 49.', backup_student_bad_phone:'Kunde {name} hat eine ungültige Telefonnummer', backup_jobs_not_list:'Aufträge sind keine Liste',
     backup_not_an_object:'Diese Datei ist keine RoutePal-Sicherung', backup_students_not_list:'Die Kundenliste fehlt oder ist beschädigt', backup_student_bad:'Eintrag #{n} ist ungültig', backup_student_no_id:'Eintrag #{n} hat keine Kennung', backup_student_no_name:'Eintrag #{n} hat keinen Namen', backup_student_bad_duration:'{name}: ungültige Dauer', backup_student_bad_count:'{name}: ungültige Anzahl', backup_student_bad_avail:'{name}: beschädigte Verfügbarkeit', backup_settings_bad:'Die Einstellungen fehlen oder sind beschädigt', backup_workdays_bad:'Ungültige Arbeitstage', backup_dayhours_bad:'Ungültige Arbeitszeiten', backup_blocked_bad:'Ungültige blockierte Zeiten', backup_schedule_bad:'Beschädigter Plan', backup_coords_bad:'Beschädigte Koordinaten', backup_and_more:' · und {n} weitere',
     pair_distance_unknown:'Entfernung unbekannt (Adresse noch nicht lokalisiert)',
     form_find_match:'Nach einem Partner suchen', toast_already_paired:'Bereits gepaart — zuerst lösen, um einen anderen zu wählen', toast_no_match:'Kein Partner: nötig sind gleiche Dauer, gleiches Fach, eine nahe Adresse und gemeinsame freie Zeit', confirm_match_title:'Passt zu {name}', confirm_match_text:'Sie teilen sich {mins} Minuten, {days}{dist}. Keine Vorgabe ändert sich — die Stunde kommt nur dorthin, wo BEIDE frei sind.{more}\\n\\nPaar anlegen und Plan berechnen?', confirm_match_more:' ({n} weitere gefunden)',
@@ -2110,7 +2113,7 @@ const Scheduler = {
       const winStart=Math.max(this.toMin(dayH.start),this.toMin(av.start));
       const winEnd  =Math.min(this.toMin(dayH.end),  this.toMin(av.end));
       if(winEnd-winStart<dur) return [];
-      const winEndFlex=winEnd+15;
+      const winEndFlex=winEnd+this.endFlex();
       const sorted=[...existing].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
       const candidates=new Set([winStart]);
       for(const e of sorted){
@@ -2330,7 +2333,7 @@ const Scheduler = {
     const wins=allWins.filter((w,i)=>w[1]+this.windowFlex(allWins,i)-w[0]>=dur);
     if(!wins.length) return null;
     const winStart=wins[0][0];
-    const winEndFlex=allWins[allWins.length-1][1]+this.END_FLEX;
+    const winEndFlex=allWins[allWins.length-1][1]+this.endFlex();
     const sorted=[...existing].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
 
     // Build candidate start times: the opening of every stretch, and right
@@ -2738,7 +2741,7 @@ const Scheduler = {
     const winStart = Math.max(this.toMin(dayH.start), this.toMin(av.start));
     const winEnd   = Math.min(this.toMin(dayH.end),   this.toMin(av.end));
     if(winEnd - winStart < dur) return null;
-    const winEndFlex = winEnd + 15; // allow up to 15 min overflow at end of day
+    const winEndFlex = winEnd + this.endFlex(); // the user's own end-of-day tolerance
     const sorted = [...existing].sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
     for(let t=winStart; t+dur<=winEndFlex; t+=5){
       if(this.isBlocked(t, t+dur, day, settings)) continue;
@@ -2848,10 +2851,20 @@ const Scheduler = {
   // the hour someone told you they cannot do is not a rounding error.
   //
   // So only the last stretch of the day is given any slack.
+  //
+  // And that slack is now ZERO unless the user asks for it. It used to be a
+  // hard-coded 15 minutes, which meant a user who set their day to end at
+  // 21:00 could be handed a lesson finishing at 21:10 — the app quietly
+  // overriding the one limit they had set by hand. Whoever wants the old
+  // tolerance can turn it on in Settings; nobody gets it by surprise.
   END_FLEX: 15,
+  endFlex(){
+    const v = Number(((typeof state !== 'undefined' && state.settings) || {}).endFlexMin);
+    return (Number.isFinite(v) && v >= 0) ? v : 0;
+  },
   windowFlex(windows, i, flex){
     if(flex != null) return flex;
-    return i === windows.length - 1 ? this.END_FLEX : 0;
+    return i === windows.length - 1 ? this.endFlex() : 0;
   },
 
   // Does a lesson from s to e fit inside ONE free stretch?
@@ -2936,8 +2949,32 @@ const Scheduler = {
 
   // A job as the scheduler understands it: someone who needs one session, on
   // one day, inside whatever window they gave.
+  /**
+   * The working hours to plan a given weekday with.
+   *
+   * The day planner used to fall back to a hard-coded 08:00–20:00 whenever the
+   * chosen date fell on a day the user had not configured — so a plumber whose
+   * days run 09:00–14:00 asked for a Saturday and was handed a job at 08:00.
+   * The app inventing a working day is exactly the thing the user would never
+   * forgive, so: use the configured hours when they exist, otherwise borrow
+   * the hours the user actually works on their other days and SAY SO.
+   */
+  hoursForDay(settings, day){
+    const dh = settings.dayHours && settings.dayHours[day];
+    if(dh && dh.start && dh.end) return { start: dh.start, end: dh.end, assumed: false };
+    // The widest day they actually work is the safest stand-in: it is their own
+    // schedule, not ours.
+    const known = Object.values(settings.dayHours||{}).filter(h => h && h.start && h.end);
+    if(known.length){
+      const start = known.reduce((a,h)=> this.toMin(h.start) < this.toMin(a) ? h.start : a, known[0].start);
+      const end   = known.reduce((a,h)=> this.toMin(h.end)   > this.toMin(a) ? h.end   : a, known[0].end);
+      return { start, end, assumed: true };
+    }
+    return { start:'09:00', end:'17:00', assumed: true };
+  },
+
   jobAsClient(job, day, settings){
-    const dh = (settings.dayHours && settings.dayHours[day]) || { start:'08:00', end:'20:00' };
+    const dh = this.hoursForDay(settings, day);
     const w = job.window || {};
     const start = w.start || dh.start;
     const end   = w.end   || dh.end;
@@ -2955,6 +2992,33 @@ const Scheduler = {
     };
   },
 
+  /**
+   * Why the day has holes in it.
+   *
+   * A day plan with a four-hour hole in the middle looks broken even when the
+   * hole is the customer's own doing. Naming the cause is the difference
+   * between "this app is stupid" and "of course, they said afternoon only".
+   * Travel and the safety margin are not waiting, so they are subtracted.
+   */
+  explainWaits(stops, jobs, day, settings){
+    const margin = settings.travelMargin ?? 2;
+    const byId = Object.fromEntries((jobs||[]).map(j => [j.id, j]));
+    const out = [];
+    for(let i=1;i<stops.length;i++){
+      const prev = stops[i-1], cur = stops[i];
+      const drive = this.travelEstMin(prev.job.id, prev.address, cur.job.id, cur.address, day) + margin;
+      const idle = this.toMin(cur.start) - this.toMin(prev.end) - drive;
+      if(idle < 10) continue;
+      const w = (byId[cur.job.id]||{}).window;
+      // Could this stop have started as soon as we arrived? If the customer's
+      // window opens later, no — and that is not the planner's fault.
+      const forced = !!(w && w.start && this.toMin(w.start) >= this.toMin(prev.end) + drive);
+      out.push({ after: prev.job.name, before: cur.job.name, minutes: idle,
+                 reason: forced ? 'window' : 'gap' });
+    }
+    return out;
+  },
+
   async planDay(jobs, settings, coords, dateISO, opts){
     const o = opts || {};
     const day = this.weekdayOf(dateISO);
@@ -2963,8 +3027,9 @@ const Scheduler = {
     if(!list.length) return { date: dateISO, day, stops: [], unplanned: [], km: 0 };
 
     const clients = list.map(j => this.jobAsClient(j, day, settings));
-    const dh = (settings.dayHours && settings.dayHours[day]) || { start:'08:00', end:'20:00' };
-    const cfg = { ...settings, workDays: [day], dayHours: { ...(settings.dayHours||{}), [day]: dh } };
+    const dh = this.hoursForDay(settings, day);
+    const cfg = { ...settings, workDays: [day],
+      dayHours: { ...(settings.dayHours||{}), [day]: { start: dh.start, end: dh.end } } };
 
     const r = await this.runMultiAttempt(clients, cfg, coords, o.attempts || 2, false);
     if(o.optimise !== false) await this.alnsOptimize(r.schedule, clients, cfg, coords, o.budgetMs || 4000);
@@ -2986,6 +3051,10 @@ const Scheduler = {
       unplanned: list.filter(j => !seen.has(j.id)),
       km: this.dayKm(placed, day, cfg),
       idle: this.dayIdle(placed, day, cfg),
+      hours: dh,
+      // Waiting the user can do nothing about (a customer window that starts
+      // later) is worth separating from waiting the planner chose.
+      waits: this.explainWaits(stops, list, day, cfg),
       issues: this.verifySchedule(r.schedule, clients, cfg),
     };
   },
@@ -3123,7 +3192,7 @@ const Scheduler = {
         const sl=slots[i];
         const s0=this.toMin(sl.start), e0=this.toMin(sl.end);
 
-        if(dh && e0>this.toMin(dh.end)+15)
+        if(dh && e0>this.toMin(dh.end)+this.endFlex())
           issues.push(`${sl.studentName} ${D[d]}: τελειώνει μετά το ωράριο (${sl.end}>${dh.end})`);
         if(dh && s0<this.toMin(dh.start))
           issues.push(`${sl.studentName} ${D[d]}: ξεκινά πριν το ωράριο (${sl.start}<${dh.start})`);
@@ -3252,7 +3321,7 @@ const Scheduler = {
 
         const violates = !av || !av.on ||
           !this.fitsAvailability(st, d, s0, e0) ||
-          (dh && e0 > this.toMin(dh.end) + 15) ||
+          (dh && e0 > this.toMin(dh.end) + this.endFlex()) ||
           (dh && s0 < this.toMin(dh.start)) ||
           this.isBlocked(s0, e0, d, settings) ||
           otherSameStudent ||
@@ -3312,7 +3381,7 @@ const Scheduler = {
     const margin = (settings.travelMargin ?? 2);
     const dh = settings.dayHours && settings.dayHours[day];
     if(!dh) return null;
-    const dayStart = this.toMin(dh.start), dayEnd = this.toMin(dh.end)+15;
+    const dayStart = this.toMin(dh.start), dayEnd = this.toMin(dh.end)+this.endFlex();
     const breaks = (settings.blockedSlots||[]).filter(b=>b.day===day)
       .map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)}));
 
@@ -3678,7 +3747,7 @@ const Scheduler = {
         // add up to more than that, they were placed that way for a reason
         // and shouldn't be forced into one long block just for tidiness.
         if(totalDur > 120) continue;
-        if(dh && endMin > this.toMin(dh.end)+15) continue;
+        if(dh && endMin > this.toMin(dh.end)+this.endFlex()) continue;
         if(av && !this.fitsAvailability(st, d, startMin, endMin)) continue;
         // The collapsed block spans the gap the fragments left — which may be
         // occupied. Bail out if anything else on the day (another student's
@@ -3859,7 +3928,7 @@ const Scheduler = {
     const rebuildDay=(slots,day)=>{
       if(!slots.length) return [];
       const dh=dayHours[day]; if(!dh) return null;
-      const dayStart=this.toMin(dh.start), dayEnd=this.toMin(dh.end)+15;
+      const dayStart=this.toMin(dh.start), dayEnd=this.toMin(dh.end)+this.endFlex();
       const buf=settings.travelMargin||2;
       // Immovable regions of this day that a re-laid-out lesson must be pushed
       // past: merged/group blocks (fixed clock times, never touched by this
@@ -6826,6 +6895,18 @@ const App = {
           <div class="stat-card"><div class="stat-val">${plan.km.toFixed(1)}<span>km</span></div>
             <div class="stat-label">${esc(t('day_driving'))}</div></div>
         </div>
+        ${plan.hours && plan.hours.assumed ? `
+          <div style="margin:0 16px 12px;background:rgba(217,119,6,.1);border:1.5px solid rgba(217,119,6,.35);border-radius:12px;padding:10px 14px;font-size:12px;color:var(--text2)">
+            ${tf('day_hours_assumed',{day:DAYS_FULL[plan.day]||'', from:plan.hours.start, to:plan.hours.end})}
+          </div>`:''}
+        ${(plan.waits||[]).length ? `
+          <div style="margin:0 16px 12px;background:var(--bg3);border-radius:12px;padding:10px 14px">
+            <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:4px">${
+              tf('day_waiting_total',{n:(plan.waits||[]).reduce((a,w)=>a+w.minutes,0)})}</div>
+            ${plan.waits.map(w=>`<div style="font-size:12px;color:var(--text3)">${
+              tf(w.reason==='window'?'day_wait_window':'day_wait_gap',
+                 {n:w.minutes, after:esc(w.after), before:esc(w.before)})}</div>`).join('')}
+          </div>`:''}
         ${plan.stops.length ? `<div style="padding:0 0 8px">${plan.stops.map((x,i)=>`
           <div class="stop-item">
             <div class="stop-num">${i+1}</div>
@@ -6834,6 +6915,9 @@ const App = {
               <div class="stop-addr">${esc(x.job.address||'')}</div>
               <div class="stop-travel"><span class="stop-travel-row">🕐 ${esc(x.start)} – ${esc(x.end)}${
                 x.job.service ? ' · '+esc(subjectLabel(x.job.service)) : ''}</span></div>
+              ${Number(x.job.durationMax) > Number(x.job.durationMin||0) ? `
+                <div style="font-size:11px;color:var(--text3)">${
+                  tf('day_reserved_max',{n:Number(x.job.durationMax), min:Number(x.job.durationMin)||0})}</div>`:''}
               <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:3px 9px;margin-top:6px"
                 onclick="App.openJobInMaps('${esc(x.job.id)}')">🗺️ Google Maps</button>
               <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:3px 9px;margin-top:6px;margin-left:6px"
@@ -7408,11 +7492,11 @@ const App = {
       for(const id of ids){
         const st = state.students.find(s=>s.id===id);
         const av = st && st.availability && st.availability[day];
-        if(!av || !av.on || end > Scheduler.toMin(av.end)+15){
+        if(!av || !av.on || end > Scheduler.toMin(av.end)+Scheduler.endFlex()){
           Toast.show(tf('toast_break_no_room',{name: st?st.name:''}),'error'); return;
         }
       }
-      if(dh && end > Scheduler.toMin(dh.end)+15){
+      if(dh && end > Scheduler.toMin(dh.end)+Scheduler.endFlex()){
         Toast.show(tf('toast_break_no_room',{name:''}),'error'); return;
       }
       moves.push({slot: sl, start, end});
@@ -8150,6 +8234,11 @@ const App = {
           </div>
           ${!st.dayHours?.[d] ? `<p style="font-size:12px;color:var(--orange);padding:2px 0 6px">${tf('settings_day_hours_missing',{day:DAYS_FULL[d]})}</p>` : ''}`).join('')}
         <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">${t('settings_workday_hint')}</p>
+        <div class="form-group" style="margin:10px 0 0">
+          <label>${t('settings_end_flex')}</label>
+          <input type="number" id="set-end-flex" value="${Number(st.endFlexMin)||0}" min="0" max="60" step="5">
+          <div class="settings-sub" style="margin-top:4px">${t('settings_end_flex_hint')}</div>
+        </div>
       </div>
 
       <div class="section-title">${t('settings_travel_fuel')}</div>
@@ -8385,6 +8474,12 @@ const App = {
     s.fuelConsumption = Number(document.getElementById('set-fuel')?.value)||7;
     s.travelMargin = Number(document.getElementById('set-margin')?.value)??3;
     s.avgCitySpeedKmh = Number(document.getElementById('set-speed')?.value)||25;
+    // 0 is a real answer here, so ||0 would be wrong for any other value and
+    // right for this one only by accident — clamp explicitly instead.
+    {
+      const f = Number(document.getElementById('set-end-flex')?.value);
+      s.endFlexMin = Number.isFinite(f) ? Math.min(60, Math.max(0, f)) : 0;
+    }
     s.hereApiKey = document.getElementById('set-here-key')?.value?.trim()||'';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
 

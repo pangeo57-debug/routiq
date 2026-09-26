@@ -39,7 +39,11 @@ function auditSchedule(Scheduler, schedule, students, settings) {
 
       if (dh) {
         if (s0 < S.toMin(dh.start)) errs.push(`[${d}] ${who}: starts before working hours`);
-        if (e0 > S.toMin(dh.end) + 15) errs.push(`[${d}] ${who}: ends after working hours`);
+        // The tolerance is the user's own setting, not a constant. It used to
+        // be a hard-coded 15 minutes here AND in the scheduler, so a lesson
+        // ending past the hours the user typed passed both.
+        const flex = Number(settings.endFlexMin) || 0;
+        if (e0 > S.toMin(dh.end) + flex) errs.push(`[${d}] ${who}: ends after working hours`);
       }
 
       for (const st of occupants(sl)) {
@@ -54,7 +58,7 @@ function auditSchedule(Scheduler, schedule, students, settings) {
           : [[S.toMin(av.start), S.toMin(av.end)]];
         // The 15-minute overrun belongs to the end of the day only. A stretch
         // that ends because the student SAID they are busy gets none.
-        if (!windows.some(([ws, we], i) => s0 >= ws && e0 <= we + (i === windows.length - 1 ? 15 : 0)))
+        if (!windows.some(([ws, we], i) => s0 >= ws && e0 <= we + (i === windows.length - 1 ? (Number(settings.endFlexMin) || 0) : 0)))
           errs.push(`[${d}] ${st.name}: outside own windows (${sl.start}-${sl.end} vs ` +
             windows.map(([a, b]) => `${S.toTime(a)}-${S.toTime(b)}`).join(', ') + ')');
       }
