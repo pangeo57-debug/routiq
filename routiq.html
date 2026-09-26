@@ -3718,6 +3718,113 @@ const Scheduler = {
   // together) but has a few minutes of leftover travel-margin gap between
   // the fragments instead of being a clean back-to-back block. Collapse any
   // such fragments into one true block as a final normalization pass.
+  // A gap this long is worth trying to close by bringing work over from
+  // another day. Below it, moving someone's lesson to a different weekday is a
+  // bigger imposition on them than the waiting is on the user.
+  GAP_FILL_MIN: 45,
+
+  /**
+   * Last resort against dead time: if a finished day still has a long hole in
+   * it, try to move a lesson from ANOTHER day into it.
+   *
+   * Everything before this closes gaps within one day — compactDays pulls
+   * lessons earlier, tidyDays reorders them — and lnsRepair only ever places
+   * students who are still short of lessons. Nothing moved an already-placed
+   * lesson across days, so a hole that could only be filled from Tuesday
+   * stayed open on Monday forever.
+   *
+   * Measured before it was written: across twelve generated weeks not one of
+   * the remaining gaps could be filled this way — every one was held open by
+   * the next student's own availability. So this is a guarantee rather than an
+   * optimization: it makes "the gap is still here because nobody can go in it"
+   * true by construction instead of true by my sampling. It is bounded
+   * accordingly and does nothing on a schedule that is already tight.
+   *
+   * Legality is judged by verifySchedule on a trial copy — the same rule set
+   * the scheduler holds itself to. A second, partial copy of the rules living
+   * here is exactly the bug this codebase keeps producing.
+   */
+  fillGaps(schedule, students, settings, budgetMs = 1500){
+    const t0 = Date.now();
+    const margin = settings.travelMargin ?? 2;
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const moved = [];
+    const before = new Set(this.verifySchedule(schedule, students, settings));
+
+    // The guard the other passes use (notWorse) weighs kilometres only, so it
+    // would veto exactly the trade this pass exists to make: a little more
+    // driving in exchange for a lot less waiting. Judge by the week's cost in
+    // the units tidyDays already uses, where a minute of dead time has a price.
+    const weekCost = (sch) => (settings.workDays || []).reduce((sum, d) =>
+      sum + this.dayCost((sch[d] || []).slice()
+        .sort((x,y) => this.toMin(x.start) - this.toMin(y.start)), d, settings), 0);
+    const placedNow = this.countTotal(schedule);
+
+    // A lesson that shares its slot with someone else cannot travel alone.
+    const movable = sl => !sl.isGroup && !sl.merged && !sl.pairedStudentId &&
+      !(sl.groupMemberIds && sl.groupMemberIds.length) &&
+      !(byId[sl.studentId] || {}).forceMerge;
+
+    const gapsOn = (day) => {
+      const slots = (schedule[day] || []).slice()
+        .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+      const out = [];
+      for(let i=1;i<slots.length;i++){
+        const drive = this.travelEstMin(slots[i-1].studentId, slots[i-1].address,
+          slots[i].studentId, slots[i].address, day, this.toMin(slots[i-1].end)) + margin;
+        const idle = this.toMin(slots[i].start) - this.toMin(slots[i-1].end) - drive;
+        if(idle >= this.GAP_FILL_MIN)
+          out.push({ from: this.toMin(slots[i-1].end), to: this.toMin(slots[i].start), idle });
+      }
+      return out;
+    };
+
+    for(const day of settings.workDays){
+      for(const gap of gapsOn(day)){
+        if(Date.now() - t0 > budgetMs) return { moved };
+        let done = false;
+        for(const other of settings.workDays){
+          if(done) break;
+          if(other === day) continue;
+          for(const cand of (schedule[other] || []).slice()){
+            if(Date.now() - t0 > budgetMs) return { moved };
+            if(!movable(cand)) continue;
+            const st = byId[cand.studentId];
+            if(!st) continue;
+            // Two lessons on one day is a different question, decided elsewhere.
+            if((schedule[day] || []).some(s => s.studentId === st.id)) continue;
+            const av = st.availability && st.availability[day];
+            if(!av || !av.on) continue;
+            const dur = this.toMin(cand.end) - this.toMin(cand.start);
+            if(dur > gap.idle) continue;
+
+            for(let t = gap.from; t + dur <= gap.to; t += 5){
+              const trial = {};
+              for(const d of settings.workDays) trial[d] = (schedule[d] || []).slice();
+              trial[other] = trial[other].filter(x => x !== cand);
+              trial[day] = trial[day]
+                .concat([{ ...cand, start: this.toTime(t), end: this.toTime(t + dur) }])
+                .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+              const introduced = this.verifySchedule(trial, students, settings)
+                .filter(x => !before.has(x));
+              if(introduced.length) continue;
+              // Moving never drops anyone, but assert it rather than trust it:
+              // a silent placement loss is the one outcome worse than the gap.
+              if(this.countTotal(trial) !== placedNow) continue;
+              if(weekCost(trial) >= weekCost(schedule)) continue;
+              for(const d of settings.workDays) schedule[d] = trial[d];
+              moved.push({ name: st.name, from: other, to: day, at: this.toTime(t) });
+              done = true;
+              break;
+            }
+            if(done) break;
+          }
+        }
+      }
+    }
+    return { moved };
+  },
+
   collapseForceMergeFragments(schedule, students, settings){
     const sm = Object.fromEntries(students.map(s=>[s.id,s]));
     let collapsed = 0;
@@ -5408,6 +5515,18 @@ const App = {
     try{
       const packed = Scheduler.compactDays(state.schedule, state.students, state.settings);
       if(packed.moved) console.info(`compactDays: pulled ${packed.moved} lessons earlier, ${packed.savedMin} min of dead time removed`);
+    }catch(e){}
+
+    // A hole that survived all of the above can only be closed by bringing a
+    // lesson over from another day. fillGaps does its own accepting, against
+    // the week's cost in km AND waiting — compacted again afterwards, since
+    // the day the lesson came FROM may now have a hole of its own to close.
+    try{
+      const f = Scheduler.fillGaps(state.schedule, state.students, state.settings);
+      if(f.moved.length){
+        console.info(`fillGaps: ${f.moved.map(m=>`${m.name} → day ${m.to} at ${m.at}`).join(', ')}`);
+        Scheduler.compactDays(state.schedule, state.students, state.settings);
+      }
     }catch(e){}
 
     // Verify constraints — surfaced to the user, not just the console, so a

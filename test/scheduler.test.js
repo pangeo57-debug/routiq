@@ -1901,3 +1901,183 @@ describe('the day plan explains its holes', () => {
       'a back-to-back day has no waiting to report');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Closing a hole with work from another day
+// ---------------------------------------------------------------------------
+
+describe('a long gap survives only if nobody can go in it', () => {
+  // Everything else closes gaps within a single day: compactDays pulls lessons
+  // earlier, tidyDays reorders them, and lnsRepair only places students who are
+  // still short of lessons. Nothing moved an already-placed lesson across days,
+  // so a hole on Monday that could only be filled from Tuesday stayed open.
+
+  function world(over = {}) {
+    const app = loadApp();
+    const cfg = settings(Object.assign({
+      workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } },
+    }, over.cfg || {}));
+    const sts = over.students || [
+      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+      student('free',  { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 2000, lon: 21.7305 + i / 2000 }; });
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return { app, cfg, sts };
+  }
+
+  // Monday: 15:00–16:00, then nothing until 19:00. Tuesday holds one lesson
+  // whose student is free on Monday all afternoon.
+  const holed = () => ({
+    1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+        slot('late',  '19:00', '20:00', { address: 'addr-late' })],
+    2: [slot('free',  '15:00', '16:00', { address: 'addr-free' })],
+  });
+
+  test('fills the hole from another day', () => {
+    const { app, cfg, sts } = world();
+    const sched = holed();
+    const r = app.Scheduler.fillGaps(sched, sts, cfg);
+
+    assert.equal(r.moved.length, 1, 'the movable lesson should have moved');
+    assert.equal(r.moved[0].from, 2);
+    assert.equal(r.moved[0].to, 1);
+    const monday = sched[1].map(s => s.studentId);
+    assert.ok(monday.includes('free'), `Monday is ${JSON.stringify(monday)}`);
+    assert.deepStrictEqual(Array.from(sched[2]), [], 'and left Tuesday');
+  });
+
+  test('without dropping anyone or breaking a rule', () => {
+    const { app, cfg, sts } = world();
+    const sched = holed();
+    const placedBefore = app.Scheduler.countTotal(sched);
+    app.Scheduler.fillGaps(sched, sts, cfg);
+    assert.equal(app.Scheduler.countTotal(sched), placedBefore,
+      'a placement lost to tidy up a gap is a bad trade at any price');
+    assert.deepStrictEqual(Array.from(auditSchedule(app.Scheduler, sched, sts, cfg)), []);
+  });
+
+  test('refuses when the student does not work that day', () => {
+    const { app, cfg, sts } = world({
+      students: [
+        student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+        student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+        student('free',  { days: [2], window: { start: '15:00', end: '21:00' } }),
+      ],
+    });
+    const sched = holed();
+    assert.equal(app.Scheduler.fillGaps(sched, sts, cfg).moved.length, 0);
+    assert.equal(sched[2].length, 1, 'their Tuesday lesson stays put');
+  });
+
+  test('refuses when it would give someone two lessons in one day', () => {
+    const { app, cfg, sts } = world();
+    const sched = holed();
+    // 'free' is already on Monday, so bringing their Tuesday lesson over too
+    // is not closing a gap, it is a double booking.
+    sched[1].push(slot('free', '20:30', '21:00', { address: 'addr-free', duration: 30 }));
+    sched[1].sort((a, b) => app.Scheduler.toMin(a.start) - app.Scheduler.toMin(b.start));
+    assert.equal(app.Scheduler.fillGaps(sched, sts, cfg).moved.length, 0);
+  });
+
+  test('leaves a short gap alone', () => {
+    const { app, cfg, sts } = world();
+    const S = app.Scheduler;
+    // A hole a 30-minute lesson genuinely fits into, but not a long one. The
+    // test proves the threshold is the reason it is refused, rather than the
+    // arithmetic quietly making the move impossible anyway: with the threshold
+    // lowered, the very same move goes through.
+    const build = () => ({
+      1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+          slot('late',  '16:40', '17:40', { address: 'addr-late' })],
+      2: [slot('free',  '15:00', '15:30', { address: 'addr-free', duration: 30 })],
+    });
+    const sched = build();
+    const before = JSON.stringify(sched);
+    assert.equal(S.fillGaps(sched, sts, cfg).moved.length, 0, 'too short to be worth it');
+    assert.equal(JSON.stringify(sched), before);
+
+    const keep = S.GAP_FILL_MIN;
+    try {
+      S.GAP_FILL_MIN = 5;
+      const loose = build();
+      assert.equal(S.fillGaps(loose, sts, cfg).moved.length, 1,
+        'the move itself is legal — only the threshold was stopping it');
+    } finally { S.GAP_FILL_MIN = keep; }
+  });
+
+  test('never moves a lesson two people share', () => {
+    const { app, cfg } = world();
+    const sts = [
+      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+      student('p1', { days: [1, 2], window: { start: '15:00', end: '21:00' }, pairedWith: 'p2' }),
+      student('p2', { days: [1, 2], window: { start: '15:00', end: '21:00' }, pairedWith: 'p1' }),
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 2000, lon: 21.7305 + i / 2000 }; });
+    app.setState({ coords, students: sts, settings: cfg });
+    const sched = {
+      1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+          slot('late',  '19:00', '20:00', { address: 'addr-late' })],
+      2: [slot('p1', '15:00', '16:00', { address: 'addr-p1',
+            pairedStudentId: 'p2', isGroup: true, groupMemberIds: ['p1', 'p2'] })],
+    };
+    assert.equal(app.Scheduler.fillGaps(sched, sts, cfg).moved.length, 0,
+      'a shared session cannot be moved by considering one occupant');
+  });
+
+  test('refuses a move that costs more driving than the waiting is worth', () => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+    const sts = [
+      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+      student('far',   { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+      student('stay',  { days: [2], window: { start: '15:00', end: '21:00' } }),
+    ];
+    // Two clusters. Monday's work and home are in one; Tuesday's are together
+    // in the other. 'far' could legally fill Monday's hole — the drive fits
+    // inside it — but Tuesday has to be driven out there for 'stay' anyway, so
+    // the move buys a tidier Monday with a round trip across the city.
+    const coords = {
+      home:  { lat: 38.2400, lon: 21.7300 },
+      early: { lat: 38.2405, lon: 21.7305 },
+      late:  { lat: 38.2410, lon: 21.7310 },
+      far:   { lat: 38.2750, lon: 21.7650 },
+      stay:  { lat: 38.2760, lon: 21.7660 },
+    };
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+
+    const sched = {
+      1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+          slot('late',  '19:00', '20:00', { address: 'addr-late' })],
+      2: [slot('far',  '15:00', '16:00', { address: 'addr-far' }),
+          slot('stay', '16:30', '17:30', { address: 'addr-stay' })],
+    };
+    const before = JSON.stringify(sched);
+    assert.equal(app.Scheduler.fillGaps(sched, sts, cfg).moved.length, 0,
+      'a tidier Monday is not worth a trip across the city');
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('a schedule with no long gaps comes back untouched', async () => {
+    const app = loadApp({ seed: 5 });
+    const cfg = settings({ workDays: [1, 2, 3] });
+    const sts = Array.from({ length: 9 }, (_, i) =>
+      student('s' + i, { days: [1, 2, 3], window: { start: '15:00', end: '22:00' },
+        lessonsPerWeek: 1 }));
+    const coords = cityCoords(sts);
+    const sched = await runPipeline(app, sts, cfg, coords);
+    const before = JSON.stringify(sched);
+    const r = app.Scheduler.fillGaps(sched, sts, cfg);
+    assert.equal(r.moved.length, 0);
+    assert.equal(JSON.stringify(sched), before, 'a tight week must not be disturbed');
+  });
+});
