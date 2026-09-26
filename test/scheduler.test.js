@@ -1584,3 +1584,144 @@ describe('suggesting two clients who could share a session', () => {
       `pairing should fit more people into the same three hours, got ${before} -> ${after}`);
   });
 });
+
+describe('planning one date, for work that does not repeat', () => {
+  // A plumber has five jobs tomorrow and nothing the week after. Until now the
+  // app could not hold that at all: the whole model is a template of weekdays.
+  // The design point is that this adds no second scheduler — one day's jobs
+  // become one-session clients on one weekday and the existing pipeline runs.
+  const MONDAY = '2026-09-28';
+
+  function jobs(app, extra) {
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5],
+      dayHours: Object.fromEntries([1,2,3,4,5].map(d => [d, { start: '08:00', end: '18:00' }])) });
+    const list = [
+      { id: 'j1', name: 'Leak', address: 'a1', durationMin: 60, date: MONDAY },
+      { id: 'j2', name: 'Boiler', address: 'a2', durationMin: 45, durationMax: 120, date: MONDAY },
+      { id: 'j3', name: 'Tap', address: 'a3', durationMin: 30, date: MONDAY,
+        window: { start: '14:00', end: '18:00' } },
+      { id: 'j4', name: 'Radiator', address: 'a4', durationMin: 90, date: MONDAY },
+      { id: 'j5', name: 'Another day', address: 'a5', durationMin: 60, date: '2026-09-29' },
+    ].concat(extra || []);
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    list.forEach((j, i) => { coords[j.id] = { lat: 38.240 + i / 300, lon: 21.730 + i / 400 }; });
+    app.setState({ jobs: list, settings: cfg, coords, students: [], schedule: {},
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    return { list, cfg, coords };
+  }
+
+  test('only the chosen date is planned', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = jobs(app);
+    const plan = await app.Scheduler.planDay(list, cfg, coords, MONDAY);
+    assert.equal(plan.stops.length, 4);
+    assert.ok(!plan.stops.some(x => x.job.id === 'j5'), 'a job dated another day must not appear');
+    assert.deepStrictEqual(Array.from(plan.unplanned), []);
+  });
+
+  test('a job with a range is booked for the longer estimate', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = jobs(app);
+    const S = app.Scheduler;
+    const plan = await S.planDay(list, cfg, coords, MONDAY);
+    const boiler = plan.stops.find(x => x.job.id === 'j2');
+    // Running over costs the next customer their slot; finishing early costs
+    // nobody anything.
+    assert.equal(S.toMin(boiler.end) - S.toMin(boiler.start), 120);
+  });
+
+  test('a customer time window is honoured', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = jobs(app);
+    const S = app.Scheduler;
+    const plan = await S.planDay(list, cfg, coords, MONDAY);
+    const tap = plan.stops.find(x => x.job.id === 'j3');
+    assert.ok(S.toMin(tap.start) >= S.toMin('14:00'), `booked at ${tap.start}, before the window opens`);
+    assert.ok(S.toMin(tap.end) <= S.toMin('18:00') + 15);
+  });
+
+  test('the day obeys working hours, travel and breaks', async () => {
+    const app = loadApp({ seed: 2 });
+    const cfgOv = { workDays: [1], dayHours: { 1: { start: '08:00', end: '18:00' } },
+      blockedSlots: [{ day: 1, start: '12:00', end: '13:00' }] };
+    const { list, cfg, coords } = jobs(app);
+    Object.assign(cfg, cfgOv);
+    const S = app.Scheduler;
+    const plan = await S.planDay(list, cfg, coords, MONDAY);
+    assert.equal(plan.issues.length, 0, `the verifier found: ${Array.from(plan.issues).join(' | ')}`);
+    for (const x of plan.stops) {
+      assert.ok(!S.isBlocked(S.toMin(x.start), S.toMin(x.end), 1, cfg),
+        `${x.job.name} at ${x.start} lands in the reserved break`);
+      assert.ok(S.toMin(x.start) >= S.toMin('08:00') && S.toMin(x.end) <= S.toMin('18:00') + 15);
+    }
+    // And enough time to drive between them.
+    for (let i = 1; i < plan.stops.length; i++) {
+      const a = plan.stops[i - 1], b = plan.stops[i];
+      const need = S.travelEstMin(a.job.id, a.address, b.job.id, b.address, 1) + (cfg.travelMargin ?? 2);
+      assert.ok(S.toMin(b.start) >= S.toMin(a.end) + need,
+        `${a.job.name} → ${b.job.name}: ${S.toMin(b.start) - S.toMin(a.end)} min for a ${need} min drive`);
+    }
+  });
+
+  test('what does not fit is reported, not dropped quietly', async () => {
+    const app = loadApp({ seed: 2 });
+    // Six two-hour jobs will not fit in a ten-hour day once travel is counted.
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      id: 'x' + i, name: 'Job ' + i, address: 'ax' + i, durationMin: 120, date: MONDAY }));
+    const { cfg, coords } = jobs(app, many);
+    const plan = await app.Scheduler.planDay(app.state.jobs, cfg, coords, MONDAY);
+    assert.ok(plan.unplanned.length > 0, 'an overbooked day must say what is left over');
+    const ids = new Set(plan.stops.map(x => x.job.id));
+    assert.ok(plan.unplanned.every(j => !ids.has(j.id)), 'nothing can be both planned and left over');
+  });
+
+  test('a job marked done is not planned again', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = jobs(app);
+    list[0].done = true;
+    const plan = await app.Scheduler.planDay(list, cfg, coords, MONDAY);
+    assert.ok(!plan.stops.some(x => x.job.id === 'j1'));
+  });
+
+  test('a Sunday borrows Saturday hours rather than refusing', async () => {
+    const app = loadApp({ seed: 2 });
+    const { cfg, coords } = jobs(app);
+    cfg.workDays = [6]; cfg.dayHours = { 6: { start: '09:00', end: '15:00' } };
+    const sunday = [{ id: 's1', name: 'Emergency', address: 'as', durationMin: 60, date: '2026-09-27' }];
+    coords.s1 = { lat: 38.245, lon: 21.735 };
+    assert.equal(app.Scheduler.weekdayOf('2026-09-27'), 6, 'Sunday maps onto the Saturday slot');
+    const plan = await app.Scheduler.planDay(sunday, cfg, coords, '2026-09-27');
+    assert.equal(plan.stops.length, 1, 'a Sunday callout must still be plannable');
+  });
+
+  test('planning a day leaves the weekly schedule untouched', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = jobs(app);
+    // The weekly roster and its schedule are a separate world and must survive
+    // intact — mixing the two lists would make every existing rule ambiguous.
+    const weekly = [student('w1', { lessonsPerWeek: 1 })];
+    const weeklySchedule = { 1: [{ studentId: 'w1', studentName: 'w1', address: 'addr-w1',
+      start: '15:00', end: '16:00', duration: 60 }] };
+    app.setState({ students: weekly, schedule: weeklySchedule });
+    const before = JSON.stringify(app.state.schedule);
+
+    await app.Scheduler.planDay(list, cfg, coords, MONDAY);
+
+    assert.equal(JSON.stringify(app.state.schedule), before, 'the weekly schedule must not move');
+    assert.equal(app.state.students.length, 1, 'and the roster must not gain the jobs');
+  });
+
+  test('an empty day is an empty plan, not an error', async () => {
+    const app = loadApp({ seed: 2 });
+    const { cfg, coords } = jobs(app);
+    const plan = await app.Scheduler.planDay([], cfg, coords, MONDAY);
+    assert.deepStrictEqual(Array.from(plan.stops), []);
+    assert.equal(plan.km, 0);
+  });
+
+  test('a nonsense date is refused rather than guessed at', async () => {
+    const app = loadApp({ seed: 2 });
+    const { list, cfg, coords } = jobs(app);
+    assert.equal(await app.Scheduler.planDay(list, cfg, coords, 'not-a-date'), null);
+  });
+});

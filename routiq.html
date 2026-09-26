@@ -669,7 +669,7 @@ function normalizeSearchText(str){
 // STORAGE
 // ============================================================
 const Storage = {
-  KEYS: { settings:'rp_settings', students:'rp_students', schedule:'rp_schedule', coords:'rp_coords' },
+  KEYS: { settings:'rp_settings', students:'rp_students', schedule:'rp_schedule', coords:'rp_coords', jobs:'rp_jobs' },
   get(k){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):null }catch(e){return null} },
   // A failed write used to be swallowed silently, which is the worst possible
   // outcome for an app whose data lives ONLY on this device: the user is told
@@ -696,6 +696,8 @@ const Storage = {
   saveSchedule(s){ this.set(this.KEYS.schedule,s) },
   loadCoords(){ return this.get(this.KEYS.coords) || {} },
   saveCoords(c){ this.set(this.KEYS.coords,c) },
+  loadJobs(){ const j = this.get(this.KEYS.jobs); return Array.isArray(j) ? j : [] },
+  saveJobs(j){ return this.set(this.KEYS.jobs, j) },
   clear(){ Object.values(this.KEYS).forEach(k=>localStorage.removeItem(k)) }
 };
 
@@ -814,6 +816,7 @@ const I18N = {
     toast_move_already_booked:'{name}: έχει ήδη μάθημα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    mode_week:'Εβδομάδα', mode_day:'Ημέρα', day_title:'Ημερήσιο πρόγραμμα', day_plan_btn:'Σχεδίασε τη μέρα', day_today:'Σήμερα', day_tomorrow:'Αύριο', day_stops:'στάσεις', day_driving:'οδήγηση', day_add_job:'Νέα δουλειά', day_edit_job:'Επεξεργασία δουλειάς', day_jobs_count:'{n} δουλειές — {date}', day_no_jobs:'Καμία δουλειά για αυτή τη μέρα. Πρόσθεσε ό,τι έχεις κλείσει και πάτα «Σχεδίασε τη μέρα».', day_not_planned:'εκτός προγράμματος', day_unplanned:'{n} δεν χώρεσαν', day_planned_ok:'{n} στάσεις, {km}χλμ', day_nothing_to_plan:'Δεν υπάρχει δουλειά να προγραμματιστεί', day_planning:'Υπολογίζω…', day_job_name:'Τι είναι η δουλειά', day_job_name_ph:'π.χ. Διαρροή — Παπαδόπουλος', day_dur_min:'Διάρκεια (λεπτά)', day_dur_max:'Το πολύ', day_dur_max_ph:'προαιρετικό', day_window:'Χρονικό παράθυρο πελάτη', day_window_hint:'Άφησέ το κενό αν μπορεί οποιαδήποτε ώρα μέσα στο ωράριό σου.', day_window_invalid:'Το «ως» πρέπει να είναι μετά το «από»', day_delete_title:'Διαγραφή «{name}»;', day_delete_text:'Η δουλειά θα αφαιρεθεί από αυτή τη μέρα.',
     backup_not_an_object:'Το αρχείο δεν είναι αντίγραφο RoutePal', backup_students_not_list:'Η λίστα πελατών λείπει ή είναι κατεστραμμένη', backup_student_bad:'Η εγγραφή #{n} δεν είναι έγκυρη', backup_student_no_id:'Η εγγραφή #{n} δεν έχει αναγνωριστικό', backup_student_no_name:'Η εγγραφή #{n} δεν έχει όνομα', backup_student_bad_duration:'{name}: μη έγκυρη διάρκεια', backup_student_bad_count:'{name}: μη έγκυρος αριθμός μαθημάτων', backup_student_bad_avail:'{name}: κατεστραμμένη διαθεσιμότητα', backup_settings_bad:'Οι ρυθμίσεις λείπουν ή είναι κατεστραμμένες', backup_workdays_bad:'Μη έγκυρες εργάσιμες ημέρες', backup_dayhours_bad:'Μη έγκυρο ωράριο', backup_blocked_bad:'Μη έγκυρες μπλοκαρισμένες ώρες', backup_schedule_bad:'Κατεστραμμένο πρόγραμμα', backup_coords_bad:'Κατεστραμμένες συντεταγμένες', backup_and_more:' · και {n} ακόμα',
     pair_distance_unknown:'απόσταση άγνωστη (η διεύθυνση δεν έχει εντοπιστεί ακόμα)',
     form_find_match:'Ψάξε αν υπάρχει ταίρι', toast_already_paired:'Έχει ήδη ζεύγος — καθάρισέ το πρώτα αν θες άλλο', toast_no_match:'Κανένα ταίρι: χρειάζεται ίδια διάρκεια, ίδιο αντικείμενο, κοντινή διεύθυνση και κοινές ελεύθερες ώρες', confirm_match_title:'Ταιριάζει με {name}', confirm_match_text:'Θα κάνουν μαζί {mins} λεπτά, {days}{dist}. Οι περιορισμοί και των δύο μένουν ως έχουν — το μάθημα μπαίνει μόνο όπου είναι ελεύθεροι και οι δύο.{more}\\n\\nΝα γίνουν ζεύγος και να υπολογιστεί το πρόγραμμα;', confirm_match_more:' (βρέθηκαν {n} ακόμα)',
@@ -1009,6 +1012,7 @@ const I18N = {
     toast_move_already_booked:'{name} already has a lesson — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    mode_week:'Week', mode_day:'Day', day_title:'Day plan', day_plan_btn:'Plan the day', day_today:'Today', day_tomorrow:'Tomorrow', day_stops:'stops', day_driving:'driving', day_add_job:'New job', day_edit_job:'Edit job', day_jobs_count:'{n} jobs — {date}', day_no_jobs:'Nothing booked for this day. Add what you have and press Plan the day.', day_not_planned:'not scheduled', day_unplanned:'{n} did not fit', day_planned_ok:'{n} stops, {km}km', day_nothing_to_plan:'There is no work to plan', day_planning:'Working it out…', day_job_name:'What the job is', day_job_name_ph:'e.g. Leak — Papadopoulos', day_dur_min:'Takes (minutes)', day_dur_max:'At most', day_dur_max_ph:'optional', day_window:'Customer time window', day_window_hint:'Leave empty if any time within your working hours will do.', day_window_invalid:'The end must be after the start', day_delete_title:'Delete \u201c{name}\u201d?', day_delete_text:'The job will be removed from this day.',
     backup_not_an_object:'This file is not a RoutePal backup', backup_students_not_list:'The client list is missing or corrupt', backup_student_bad:'Record #{n} is not valid', backup_student_no_id:'Record #{n} has no identifier', backup_student_no_name:'Record #{n} has no name', backup_student_bad_duration:'{name}: invalid session length', backup_student_bad_count:'{name}: invalid number of sessions', backup_student_bad_avail:'{name}: corrupt availability', backup_settings_bad:'The settings are missing or corrupt', backup_workdays_bad:'Invalid working days', backup_dayhours_bad:'Invalid working hours', backup_blocked_bad:'Invalid blocked times', backup_schedule_bad:'Corrupt schedule', backup_coords_bad:'Corrupt coordinates', backup_and_more:' · and {n} more',
     pair_distance_unknown:'distance unknown (the address is not located yet)',
     form_find_match:'Look for a match', toast_already_paired:'Already paired — clear that first if you want a different partner', toast_no_match:'No match: it needs the same length, the same subject, an address nearby and free time in common', confirm_match_title:'Matches {name}', confirm_match_text:'They would share {mins} minutes, {days}{dist}. Neither one\u2019s constraints change — the session only goes where BOTH are free.{more}\\n\\nPair them and work out the schedule?', confirm_match_more:' ({n} more found)',
@@ -1204,6 +1208,7 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    mode_week:'Semaine', mode_day:'Jour', day_title:'Planning du jour', day_plan_btn:'Planifier la journée', day_today:'Aujourd\u2019hui', day_tomorrow:'Demain', day_stops:'arrêts', day_driving:'trajet', day_add_job:'Nouvelle intervention', day_edit_job:'Modifier l\u2019intervention', day_jobs_count:'{n} interventions — {date}', day_no_jobs:'Rien de prévu ce jour. Ajoutez vos interventions puis appuyez sur Planifier la journée.', day_not_planned:'non planifiée', day_unplanned:'{n} n\u2019ont pas tenu', day_planned_ok:'{n} arrêts, {km}km', day_nothing_to_plan:'Aucune intervention à planifier', day_planning:'Calcul en cours…', day_job_name:'Nature de l\u2019intervention', day_job_name_ph:'ex. Fuite — Papadopoulos', day_dur_min:'Durée (minutes)', day_dur_max:'Au plus', day_dur_max_ph:'facultatif', day_window:'Créneau du client', day_window_hint:'Laissez vide si n\u2019importe quelle heure de vos horaires convient.', day_window_invalid:'La fin doit suivre le début', day_delete_title:'Supprimer « {name} » ?', day_delete_text:'L\u2019intervention sera retirée de cette journée.',
     backup_not_an_object:'Ce fichier n\u2019est pas une sauvegarde RoutePal', backup_students_not_list:'La liste des clients est absente ou corrompue', backup_student_bad:'L\u2019entrée #{n} n\u2019est pas valide', backup_student_no_id:'L\u2019entrée #{n} n\u2019a pas d\u2019identifiant', backup_student_no_name:'L\u2019entrée #{n} n\u2019a pas de nom', backup_student_bad_duration:'{name} : durée invalide', backup_student_bad_count:'{name} : nombre de séances invalide', backup_student_bad_avail:'{name} : disponibilité corrompue', backup_settings_bad:'Les réglages sont absents ou corrompus', backup_workdays_bad:'Jours de travail invalides', backup_dayhours_bad:'Horaires invalides', backup_blocked_bad:'Heures bloquées invalides', backup_schedule_bad:'Planning corrompu', backup_coords_bad:'Coordonnées corrompues', backup_and_more:' · et {n} autres',
     pair_distance_unknown:'distance inconnue (adresse pas encore localisée)',
     form_find_match:'Chercher un binôme', toast_already_paired:'Déjà en binôme — retirez-le d\u2019abord pour en choisir un autre', toast_no_match:'Aucun binôme : il faut même durée, même matière, une adresse proche et des disponibilités communes', confirm_match_title:'Compatible avec {name}', confirm_match_text:'Ils partageraient {mins} minutes, {days}{dist}. Aucune contrainte ne change — la séance ne va que là où les DEUX sont libres.{more}\\n\\nLes mettre en binôme et calculer le planning ?', confirm_match_more:' ({n} autres trouvés)',
@@ -1399,6 +1404,7 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    mode_week:'Woche', mode_day:'Tag', day_title:'Tagesplan', day_plan_btn:'Tag planen', day_today:'Heute', day_tomorrow:'Morgen', day_stops:'Stopps', day_driving:'Fahrt', day_add_job:'Neuer Auftrag', day_edit_job:'Auftrag bearbeiten', day_jobs_count:'{n} Aufträge — {date}', day_no_jobs:'Für diesen Tag ist nichts eingetragen. Aufträge hinzufügen und Tag planen drücken.', day_not_planned:'nicht eingeplant', day_unplanned:'{n} passten nicht', day_planned_ok:'{n} Stopps, {km}km', day_nothing_to_plan:'Es gibt nichts zu planen', day_planning:'Wird berechnet…', day_job_name:'Worum es geht', day_job_name_ph:'z.B. Leck — Papadopoulos', day_dur_min:'Dauer (Minuten)', day_dur_max:'Höchstens', day_dur_max_ph:'optional', day_window:'Zeitfenster des Kunden', day_window_hint:'Leer lassen, wenn jede Zeit innerhalb Ihrer Arbeitszeit passt.', day_window_invalid:'Das Ende muss nach dem Beginn liegen', day_delete_title:'\u201e{name}\u201c löschen?', day_delete_text:'Der Auftrag wird von diesem Tag entfernt.',
     backup_not_an_object:'Diese Datei ist keine RoutePal-Sicherung', backup_students_not_list:'Die Kundenliste fehlt oder ist beschädigt', backup_student_bad:'Eintrag #{n} ist ungültig', backup_student_no_id:'Eintrag #{n} hat keine Kennung', backup_student_no_name:'Eintrag #{n} hat keinen Namen', backup_student_bad_duration:'{name}: ungültige Dauer', backup_student_bad_count:'{name}: ungültige Anzahl', backup_student_bad_avail:'{name}: beschädigte Verfügbarkeit', backup_settings_bad:'Die Einstellungen fehlen oder sind beschädigt', backup_workdays_bad:'Ungültige Arbeitstage', backup_dayhours_bad:'Ungültige Arbeitszeiten', backup_blocked_bad:'Ungültige blockierte Zeiten', backup_schedule_bad:'Beschädigter Plan', backup_coords_bad:'Beschädigte Koordinaten', backup_and_more:' · und {n} weitere',
     pair_distance_unknown:'Entfernung unbekannt (Adresse noch nicht lokalisiert)',
     form_find_match:'Nach einem Partner suchen', toast_already_paired:'Bereits gepaart — zuerst lösen, um einen anderen zu wählen', toast_no_match:'Kein Partner: nötig sind gleiche Dauer, gleiches Fach, eine nahe Adresse und gemeinsame freie Zeit', confirm_match_title:'Passt zu {name}', confirm_match_text:'Sie teilen sich {mins} Minuten, {days}{dist}. Keine Vorgabe ändert sich — die Stunde kommt nur dorthin, wo BEIDE frei sind.{more}\\n\\nPaar anlegen und Plan berechnen?', confirm_match_more:' ({n} weitere gefunden)',
@@ -2880,6 +2886,84 @@ const Scheduler = {
       const b = (studentId && e.studentId === studentId) ? 0 : buf;
       return startMin < ee+b && endMin+b > es;
     });
+  },
+
+  // ---- PLANNING A SINGLE DATE ----------------------------------------
+  //
+  // A plumber has five jobs tomorrow. A courier has twelve stops today. Neither
+  // has a weekly pattern, and until now neither could enter their work at all:
+  // the whole model is a template of weekdays that repeats forever.
+  //
+  // The important part of the design is what it does NOT add. Planning one day
+  // is the same problem the scheduler already solves, with one day in it. So a
+  // day's jobs become one-session clients available only on that weekday, the
+  // settings get a workDays of exactly that day, and the existing pipeline runs
+  // untouched — placement, travel, blocked times, the tidy pass, compaction and
+  // the verifier all apply for free, and the weekly path is not modified at all.
+  //
+  // `date` is YYYY-MM-DD. Sunday has no weekday slot in this app, so a plan for
+  // one borrows Saturday's hours rather than refusing.
+  weekdayOf(dateISO){
+    const d = new Date(dateISO + 'T12:00:00');
+    if(Number.isNaN(d.getTime())) return null;
+    const wd = d.getDay();                 // 0 Sunday … 6 Saturday
+    return wd === 0 ? 6 : wd;
+  },
+
+  // A job as the scheduler understands it: someone who needs one session, on
+  // one day, inside whatever window they gave.
+  jobAsClient(job, day, settings){
+    const dh = (settings.dayHours && settings.dayHours[day]) || { start:'08:00', end:'20:00' };
+    const w = job.window || {};
+    const start = w.start || dh.start;
+    const end   = w.end   || dh.end;
+    // A range books the LONGER estimate. Running over on a plumbing job costs
+    // the next customer their slot; finishing early costs nobody anything.
+    const dur = Math.max(Number(job.durationMax) || 0, Number(job.durationMin) || Number(job.duration) || 60);
+    return {
+      id: job.id, name: job.name || '', address: job.address || '',
+      subject: job.service || '', color: job.color || 0,
+      lessonDuration: dur, lessonsPerWeek: 1,
+      type: 'solo', group: '', pairedWith: null, notes: job.notes || '',
+      mergeMode: 'off', forceMerge: false,
+      availabilityExceptions: [],
+      availability: { [day]: { on:true, start, end, windows: [[this.toMin(start), this.toMin(end)]] } },
+    };
+  },
+
+  async planDay(jobs, settings, coords, dateISO, opts){
+    const o = opts || {};
+    const day = this.weekdayOf(dateISO);
+    if(day == null) return null;
+    const list = (jobs||[]).filter(j => !j.done && (!j.date || j.date === dateISO));
+    if(!list.length) return { date: dateISO, day, stops: [], unplanned: [], km: 0 };
+
+    const clients = list.map(j => this.jobAsClient(j, day, settings));
+    const dh = (settings.dayHours && settings.dayHours[day]) || { start:'08:00', end:'20:00' };
+    const cfg = { ...settings, workDays: [day], dayHours: { ...(settings.dayHours||{}), [day]: dh } };
+
+    const r = await this.runMultiAttempt(clients, cfg, coords, o.attempts || 2, false);
+    if(o.optimise !== false) await this.alnsOptimize(r.schedule, clients, cfg, coords, o.budgetMs || 4000);
+    this.enforceConstraints(r.schedule, clients, cfg);
+    this.tidyDays(r.schedule, clients, cfg);
+    this.compactDays(r.schedule, clients, cfg);
+
+    const placed = (r.schedule[day] || []).slice()
+      .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+    const byId = Object.fromEntries(list.map(j => [j.id, j]));
+    const stops = placed.map(sl => ({
+      job: byId[sl.studentId], start: sl.start, end: sl.end,
+      address: sl.address,
+    })).filter(x => x.job);
+    const seen = new Set(stops.map(x => x.job.id));
+
+    return {
+      date: dateISO, day, stops,
+      unplanned: list.filter(j => !seen.has(j.id)),
+      km: this.dayKm(placed, day, cfg),
+      idle: this.dayIdle(placed, day, cfg),
+      issues: this.verifySchedule(r.schedule, clients, cfg),
+    };
   },
 
   // Which two clients could share one slot?
@@ -4429,6 +4513,13 @@ let _drag = null;
 let state = {
   currentScreen: 'home',
   students: [],
+  // One-off appointments for a particular date, kept entirely separate from the
+  // weekly roster. A plumber has five jobs tomorrow and nothing the week after;
+  // a tutor has the same Tuesday forever. The app has to do both, and mixing
+  // them into one list would make every existing rule ambiguous.
+  jobs: [],
+  dayPlan: null,          // the most recent result of planning a single date
+  planDate: null,         // which date that was
   settings: {},
   schedule: {},
   coords: {},
@@ -4456,6 +4547,7 @@ const App = {
       state.students = Storage.loadStudents();
       state.schedule = Storage.loadSchedule();
       state.coords   = Storage.loadCoords();
+    state.jobs = Storage.loadJobs();
     } catch(e) {
       localStorage.clear();
       state.settings = defaultSettings();
@@ -5595,7 +5687,13 @@ const App = {
     if(chevron) chevron.style.transform = open?'rotate(180deg)':'';
   },
 
+  _restoreStudentSave(){
+    const b = document.querySelector('#drawer-student .drawer-footer .btn-primary');
+    if(b) b.setAttribute('onclick','App.saveStudent()');
+  },
+
   openStudentDrawer(id){
+    this._restoreStudentSave();
     state.editingStudentId = id;
     const isNew = !id;
     const st = id ? state.students.find(s=>s.id===id) : null;
@@ -6640,7 +6738,262 @@ const App = {
   },
 
   // ---- SCHEDULE ----
+  // The Schedule screen holds two ways of working, because the app serves two
+  // shapes of business. A tutor or physiotherapist has the same people every
+  // week; a plumber or courier has whatever came in for tomorrow. Neither model
+  // can be expressed in the other, so the screen carries both and the toggle
+  // says which one you are looking at. Nothing about the weekly path changes.
+  // ---- DAY PLANNER -----------------------------------------------------
+  todayISO(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); },
+
+  jobsFor(dateISO){ return (state.jobs||[]).filter(j=>j.date===dateISO); },
+
+  renderDayPlanner(){
+    const s = document.getElementById('screen-schedule');
+    const date = state.planDate || this.todayISO();
+    state.planDate = date;
+    const jobs = this.jobsFor(date);
+    const plan = (state.dayPlan && state.dayPlan.date === date) ? state.dayPlan : null;
+    const placedIds = new Set(plan ? plan.stops.map(x=>x.job.id) : []);
+    const L = getLabels();
+
+    s.innerHTML = `
+      <div class="topbar">
+        <div class="topbar-inner">
+          <div>
+            <div class="logo">Route<span>Pal</span></div>
+            <div class="topbar-sub">${t('day_title')}</div>
+          </div>
+          <button class="btn btn-secondary" style="padding:8px 12px;font-size:13px"
+            onclick="App.planTheDay()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            ${t('day_plan_btn')}
+          </button>
+        </div>
+      </div>
+      ${this._modeTabsHtml()}
+
+      <div style="padding:0 16px 12px;display:flex;gap:8px;align-items:center">
+        <input type="date" id="plan-date" value="${esc(date)}" style="flex:1"
+               onchange="App.setPlanDate(this.value)">
+        <button class="chip chip-gray" style="border:none;cursor:pointer;padding:6px 10px;font-size:12px"
+          onclick="App.setPlanDate(App.todayISO())">${esc(t('day_today'))}</button>
+        <button class="chip chip-gray" style="border:none;cursor:pointer;padding:6px 10px;font-size:12px"
+          onclick="App.setPlanDate(App.shiftDate(1))">${esc(t('day_tomorrow'))}</button>
+      </div>
+
+      ${plan ? `
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-val">${plan.stops.length}<span></span></div>
+            <div class="stat-label">${esc(t('day_stops'))}</div></div>
+          <div class="stat-card"><div class="stat-val">${plan.km.toFixed(1)}<span>km</span></div>
+            <div class="stat-label">${esc(t('day_driving'))}</div></div>
+        </div>
+        ${plan.stops.length ? `<div style="padding:0 0 8px">${plan.stops.map((x,i)=>`
+          <div class="stop-item">
+            <div class="stop-num">${i+1}</div>
+            <div class="stop-info">
+              <div class="stop-name">${esc(x.job.name)}</div>
+              <div class="stop-addr">${esc(x.job.address||'')}</div>
+              <div class="stop-travel"><span class="stop-travel-row">🕐 ${esc(x.start)} – ${esc(x.end)}${
+                x.job.service ? ' · '+esc(subjectLabel(x.job.service)) : ''}</span></div>
+              <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:11px;padding:3px 9px;margin-top:6px"
+                onclick="App.openJobInMaps('${esc(x.job.id)}')">🗺️ Google Maps</button>
+            </div>
+          </div>`).join('')}</div>` : ''}
+        ${plan.unplanned.length ? `
+          <div style="margin:0 16px 12px;background:rgba(220,38,38,.07);border:1.5px solid rgba(220,38,38,.25);border-radius:12px;padding:12px">
+            <div style="font-weight:700;font-size:13px;color:#dc2626;margin-bottom:6px">${
+              tf('day_unplanned',{n:plan.unplanned.length})}</div>
+            <div style="font-size:12px;color:var(--text2)">${
+              plan.unplanned.map(j=>esc(j.name)).join(' · ')}</div>
+          </div>` : ''}
+      ` : ''}
+
+      <div style="padding:0 16px 8px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;font-weight:700;color:var(--text2)">${
+          tf('day_jobs_count',{n:jobs.length, date: this.prettyDate(date)})}</span>
+        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px"
+          onclick="App.openJobDrawer()">+ ${esc(t('day_add_job'))}</button>
+      </div>
+      <div style="padding:0 16px 24px">
+        ${jobs.length ? jobs.map(j=>`
+          <div class="card-sm" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:10px 12px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:14px">${esc(j.name)}${
+                placedIds.has(j.id)?'':` <span style="font-size:11px;color:var(--orange)">${esc(t('day_not_planned'))}</span>`}</div>
+              <div style="font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(j.address||'')}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">${
+                this.jobDurationLabel(j)}${j.window?` · ${esc(j.window.start)}–${esc(j.window.end)}`:''}</div>
+            </div>
+            <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:12px;padding:4px 9px"
+              onclick="App.openJobDrawer('${esc(j.id)}')">${esc(t('btn_edit'))}</button>
+            <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:12px;padding:4px 9px"
+              onclick="App.deleteJob('${esc(j.id)}')">✕</button>
+          </div>`).join('')
+        : `<div class="card-sm" style="text-align:center;color:var(--text2);font-size:13px;padding:18px">${
+            tf('day_no_jobs',{clients:L.clients.toLowerCase()})}</div>`}
+      </div>
+    `;
+  },
+
+  // Adding a job reuses the student drawer's shell rather than introducing a
+  // second one, but the fields are the ones a one-off job actually has: how
+  // long it might take, and the window the customer gave you.
+  openJobDrawer(id){
+    const j = id ? (state.jobs||[]).find(x=>x.id===id) : null;
+    state.editingJobId = j ? j.id : null;
+    const body = document.getElementById('drawer-student-body');
+    const title = document.getElementById('drawer-student-title');
+    const saveBtn = document.querySelector('#drawer-student .drawer-footer .btn-primary');
+    if(!body || !saveBtn) return;
+    if(title) title.textContent = j ? t('day_edit_job') : t('day_add_job');
+    saveBtn.setAttribute('onclick','App.saveJob()');
+
+    body.innerHTML = `
+      <div class="form-group"><label>${t('day_job_name')}</label>
+        <input type="text" id="jb-name" value="${esc(j?.name||'')}" placeholder="${esc(t('day_job_name_ph'))}"></div>
+      <div class="form-group"><label>${t('student_address_label')}</label>
+        <input type="text" id="jb-addr" value="${esc(j?.address||'')}" placeholder="${esc(t('form_address_placeholder'))}"></div>
+      <div class="form-group"><label>${getLabels().session}</label>
+        <select id="jb-service">${getSubjects().map(sub=>
+          `<option value="${esc(sub)}" ${j?.service===sub?'selected':''}>${esc(subjectLabel(sub))}</option>`).join('')}</select></div>
+      <div class="form-row">
+        <div class="form-group" style="margin:0"><label>${t('day_dur_min')}</label>
+          <input type="number" id="jb-dmin" min="5" max="600" step="5" value="${Number(j?.durationMin)||60}"></div>
+        <div class="form-group" style="margin:0"><label>${t('day_dur_max')}</label>
+          <input type="number" id="jb-dmax" min="0" max="600" step="5" value="${Number(j?.durationMax)||''}"
+                 placeholder="${esc(t('day_dur_max_ph'))}"></div>
+      </div>
+      <div class="form-group" style="margin-top:14px"><label>${t('day_window')}</label>
+        <div class="form-row">
+          <div class="form-group" style="margin:0"><input type="time" id="jb-wfrom" value="${esc(j?.window?.start||'')}"></div>
+          <div class="form-group" style="margin:0"><input type="time" id="jb-wto" value="${esc(j?.window?.end||'')}"></div>
+        </div>
+        <p style="font-size:12px;color:var(--text3);margin-top:4px">${esc(t('day_window_hint'))}</p>
+      </div>
+      <div class="form-group" style="margin-top:14px"><label>${t('student_notes_label')}</label>
+        <textarea id="jb-notes">${esc(j?.notes||'')}</textarea></div>
+    `;
+    document.getElementById('drawer-student-overlay')?.classList.add('open');
+  },
+
+  saveJob(){
+    const name = document.getElementById('jb-name')?.value?.trim();
+    if(!name){ Toast.show(t('toast_enter_fullname'),'error'); return; }
+    const addr = document.getElementById('jb-addr')?.value?.trim() || '';
+    const lo = Number(document.getElementById('jb-dmin')?.value) || 60;
+    const hiRaw = Number(document.getElementById('jb-dmax')?.value) || 0;
+    const wf = document.getElementById('jb-wfrom')?.value || '';
+    const wt = document.getElementById('jb-wto')?.value || '';
+    if(wf && wt && Scheduler.toMin(wt) <= Scheduler.toMin(wf)){
+      Toast.show(t('day_window_invalid'),'error'); return;
+    }
+    const job = {
+      id: state.editingJobId || ('j'+Date.now()),
+      date: state.planDate || this.todayISO(),
+      name, address: addr,
+      service: document.getElementById('jb-service')?.value || '',
+      durationMin: lo,
+      // A max below the min is not a range, it is a typo.
+      durationMax: hiRaw > lo ? hiRaw : 0,
+      window: (wf && wt) ? { start: wf, end: wt } : null,
+      notes: document.getElementById('jb-notes')?.value || '',
+      done: false,
+    };
+    const idx = (state.jobs||[]).findIndex(x=>x.id===job.id);
+    if(idx >= 0) state.jobs[idx] = { ...state.jobs[idx], ...job };
+    else (state.jobs = state.jobs||[]).push(job);
+    Storage.saveJobs(state.jobs);
+
+    // The plan was made for a different set of jobs, so it no longer describes
+    // this day. Showing it beside a changed list would be a lie.
+    state.dayPlan = null;
+    state.editingJobId = null;
+    if(addr) Router.geocode(addr).then(c=>{ if(c){ state.coords[job.id]=c; Storage.saveCoords(state.coords);} }).catch(()=>{});
+    this.closeStudentDrawer();
+    this.renderDayPlanner();
+  },
+
+  jobDurationLabel(j){
+    const lo = Number(j.durationMin)||Number(j.duration)||60;
+    const hi = Number(j.durationMax)||0;
+    return hi && hi>lo ? `${lo}–${hi}${t('unit_min')}` : `${lo}${t('unit_min')}`;
+  },
+
+  prettyDate(iso){
+    const d = new Date(iso+'T12:00:00');
+    return Number.isNaN(d.getTime()) ? iso
+      : `${DAYS_FULL[Scheduler.weekdayOf(iso)]||''} ${d.getDate()}/${d.getMonth()+1}`;
+  },
+
+  shiftDate(days){
+    const d = new Date((state.planDate||this.todayISO())+'T12:00:00');
+    d.setDate(d.getDate()+days);
+    return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  },
+
+  setPlanDate(iso){
+    if(!iso) return;
+    state.planDate = iso;
+    // A plan belongs to the date it was made for; showing yesterday's beside
+    // today's list would be worse than showing none.
+    if(state.dayPlan && state.dayPlan.date !== iso) state.dayPlan = null;
+    this.renderDayPlanner();
+  },
+
+  async planTheDay(){
+    const date = state.planDate || this.todayISO();
+    if(!this.jobsFor(date).length){ Toast.show(t('day_nothing_to_plan'),'info'); return; }
+    Toast.show(t('day_planning'),'info');
+    try{
+      const plan = await Scheduler.planDay(state.jobs, state.settings, state.coords, date);
+      state.dayPlan = plan;
+      this.renderDayPlanner();
+      if(plan.unplanned.length) Toast.show(tf('day_unplanned',{n:plan.unplanned.length}),'error',7000);
+      else Toast.show(tf('day_planned_ok',{n:plan.stops.length, km:plan.km.toFixed(1)}),'success');
+    }catch(e){
+      console.error('planDay failed', e);
+      Toast.show(tf('toast_scheduler_failed',{reason:e.message||'—'}),'error',9000);
+    }
+  },
+
+  openJobInMaps(jobId){
+    const j = (state.jobs||[]).find(x=>x.id===jobId);
+    if(!j) return;
+    const url = this.buildGoogleStopUrl(j.id, j.address);
+    if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
+    window.open(url,'_blank','noopener');
+  },
+
+  deleteJob(id){
+    const j = (state.jobs||[]).find(x=>x.id===id);
+    if(!j) return;
+    this.confirm(tf('day_delete_title',{name:j.name}), t('day_delete_text'), ()=>{
+      state.jobs = state.jobs.filter(x=>x.id!==id);
+      delete state.coords[id];
+      if(state.dayPlan) state.dayPlan = null;
+      Storage.saveJobs(state.jobs); Storage.saveCoords(state.coords);
+      this.renderDayPlanner();
+    });
+  },
+
+  setScheduleMode(mode){
+    state.scheduleMode = mode === 'day' ? 'day' : 'week';
+    this.renderSchedule();
+  },
+
+  _modeTabsHtml(){
+    const m = state.scheduleMode === 'day' ? 'day' : 'week';
+    const tab = (key, label) => `<button class="day-tab ${m===key?'active':''}" style="flex:1;text-align:center"
+      onclick="App.setScheduleMode('${key}')">${esc(label)}</button>`;
+    return `<div style="display:flex;gap:6px;padding:0 16px 12px">
+      ${tab('week', t('mode_week'))}${tab('day', t('mode_day'))}
+    </div>`;
+  },
+
   renderSchedule(){
+    if(state.scheduleMode === 'day') return this.renderDayPlanner();
     const s = document.getElementById('screen-schedule');
     // schedulerResult is session-only (not persisted), so on a fresh page load
     // recompute the unplaced list live from state.schedule/state.students instead
@@ -6666,6 +7019,7 @@ const App = {
           </div>
         </div>
       </div>
+      ${this._modeTabsHtml()}
       ${state.scheduleAttempts.length > 0 ? `
 <div style="padding:0 16px 8px">
   <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;letter-spacing:.5px">${t('schedule_random_placement_label')}</div>

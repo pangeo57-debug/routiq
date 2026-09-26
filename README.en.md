@@ -8,7 +8,8 @@ A scheduling and route-optimization app for private tutors and other mobile prof
 
 ## What it does
 
-- Automatically builds a weekly lesson schedule, respecting each student's availability and the tutor's working hours
+- Automatically builds a weekly schedule, respecting each client's availability and your working hours
+- **Or plans a single date** — for work that does not repeat: a plumber's five jobs tomorrow, a courier's twelve stops today. Same engine, one day in it
 - Optimizes visit order to minimize travel distance/time (real road data via OSRM/HERE, not straight-line distance)
 - Supports group lessons, student pairs, and combined time blocks — and suggests which two clients could share a session
 - Students can be free in several stretches of one day; the tutor can work a split shift
@@ -69,12 +70,12 @@ Nothing special needed — open `routiq.html` in a browser, or run a simple loca
 ### Testing
 
 ```bash
-npm test     # correctness — 165 tests
+npm test     # correctness — 175 tests
 npm run bench                    # quality, against published best-known solutions
 npm run bench -- --against HEAD~1  # this build vs another, identical inputs
 ```
 
-165 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
+175 tests, zero dependencies — just the built-in `node:test` runner (Node 18+).
 
 Because the app is a single HTML file, the tests load its real `<script>` into
 a Node `vm` sandbox with stubbed browser APIs (`test/harness.js`). They run
