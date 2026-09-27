@@ -835,3 +835,97 @@ describe('the house number the user typed is not thrown away', () => {
     assert.equal(keep('Γούναρη, Πάτρα', 'Γουναρη 58'), 'Γούναρη 58, Πάτρα');
   });
 });
+
+describe('a typed house number gets the endpoint that knows buildings', () => {
+  // HERE's autosuggest is built to complete partial text, not to pin a
+  // doorway, and very often answers at street level. Its geocode endpoint is
+  // the one that resolves to a building. When the text already contains a
+  // number, ask both.
+
+  test('what counts as a house number', () => {
+    const A = loadApp().App;
+    assert.equal(A._hasHouseNumber('Γούναρη 58'), true);
+    assert.equal(A._hasHouseNumber('Αγίου Ανδρέου 12α'), true);
+    assert.equal(A._hasHouseNumber('Γούναρη'), false);
+    assert.equal(A._hasHouseNumber('58'), false, 'a bare number names no street');
+    assert.equal(A._hasHouseNumber(''), false);
+  });
+
+  function stub(app) {
+    const calls = [];
+    app.App._searchHere = async (v) => { calls.push('autosuggest'); 
+      return [{ name: 'Γούναρη, Πάτρα', _matchText: 'Γούναρη, Πάτρα', lat: 1, lon: 1 }]; };
+    app.App._geocodeHereForSuggest = async (v) => { calls.push('geocode');
+      return [{ name: 'Γούναρη 58, Πάτρα', _matchText: 'Γούναρη 58, Πάτρα',
+                _precise: true, lat: 2, lon: 2 }]; };
+    app.App.hereAvailableOverride = true;
+    const drawn = [];
+    app.App._renderSuggestions = (boxId, shown) => drawn.push(shown);
+    const box = { style: {}, innerHTML: '', addEventListener() {}, querySelectorAll: () => [] };
+    app.ctx.document.getElementById = () => box;
+    app.setState({ students: [], jobs: [], coords: {},
+      settings: settings({ hereApiKey: 'own-key' }) });   // makes hereAvailable() true
+    return { calls, drawn };
+  }
+
+  test('with a number, both endpoints are asked and the precise one wins', async () => {
+    const app = loadApp();
+    const { calls, drawn } = stub(app);
+    app.App.onAddrInput('Γούναρη 58');
+    await new Promise(r => setTimeout(r, 400));
+    assert.ok(calls.includes('geocode'), `geocode should have been asked: ${calls}`);
+    assert.ok(calls.includes('autosuggest'));
+    const last = drawn[drawn.length - 1];
+    assert.equal(last[0].name, 'Γούναρη 58, Πάτρα', 'the building-level answer goes first');
+    assert.equal(last[0]._precise, true);
+  });
+
+  test('without a number, the extra request is not made', async () => {
+    const app = loadApp();
+    const { calls } = stub(app);
+    app.App.onAddrInput('Γούναρη');
+    await new Promise(r => setTimeout(r, 400));
+    assert.ok(!calls.includes('geocode'),
+      'a street-only query has no building to look for, and the request would be waste');
+  });
+
+  test('the same address from both endpoints is shown once', async () => {
+    const app = loadApp();
+    const { drawn } = stub(app);
+    app.App._searchHere = async () => ([{ name: 'Γούναρη 58, Πάτρα',
+      _matchText: 'Γούναρη 58, Πάτρα', lat: 1, lon: 1 }]);
+    app.App.onAddrInput('Γούναρη 58');
+    await new Promise(r => setTimeout(r, 400));
+    const last = drawn[drawn.length - 1];
+    assert.equal(last.length, 1, `duplicates should be dropped: ${JSON.stringify(last.map(r=>r.name))}`);
+  });
+
+  test('between two equally relevant answers, the precise one ranks first', async () => {
+    // Both name the same street and number, so the relevance score ties. What
+    // separates them is that one resolved to a building. A tie used to fall
+    // through to distance from home, which says nothing about precision.
+    const app = loadApp();
+    const { drawn } = stub(app);
+    app.App._searchHere = async () => ([{ name: 'Γούναρη 58, Ρίο',
+      _matchText: 'Γούναρη 58, Ρίο', lat: 38.30, lon: 21.78 }]);
+    app.App._geocodeHereForSuggest = async () => ([{ name: 'Γούναρη 58, Πάτρα',
+      _matchText: 'Γούναρη 58, Πάτρα', _precise: true, lat: 38.90, lon: 22.50 }]);
+    app.setState({ coords: { home: { lat: 38.246, lon: 21.734 } } });
+
+    app.App.onAddrInput('Γούναρη 58');
+    await new Promise(r => setTimeout(r, 400));
+    const last = drawn[drawn.length - 1];
+    assert.equal(last[0]._precise, true,
+      `the building-level answer must win the tie, got ${JSON.stringify(last.map(r=>r.name))}`);
+  });
+
+  test('one endpoint failing does not lose the other', async () => {
+    const app = loadApp();
+    const { drawn } = stub(app);
+    app.App._geocodeHereForSuggest = async () => { throw new Error('down'); };
+    app.App.onAddrInput('Γούναρη 58');
+    await new Promise(r => setTimeout(r, 400));
+    const last = drawn[drawn.length - 1];
+    assert.ok(last && last.length, 'autosuggest results must still be shown');
+  });
+});
