@@ -22,10 +22,21 @@ Two terminals, from the repository root:
     npm run dev        # the app          -> http://localhost:8080/routiq.html
     npm run dev:api    # the Worker       -> http://localhost:8787
 
-For the second one, first put your key where `wrangler dev` will find it:
+For the second one, the key goes where `wrangler dev` will find it:
 
     cp worker/.dev.vars.example worker/.dev.vars
-    # edit worker/.dev.vars and paste the key
+    # paste the key into worker/.dev.vars
+
+`.dev.vars` is in `.gitignore` and must stay there — it is the one file in
+this directory that holds a real secret.
+
+The key currently in use is the one that used to ship inside `routiq.html`.
+It was therefore public — on the deployed page, in the repository, and in the
+git history, where it still is and cannot be taken back. Keeping it is a
+deliberate choice, not an oversight: the proxy stops it leaking from here on,
+and moving to a fresh key is one `wrangler secret put` whenever you want it.
+If the HERE dashboard ever shows traffic you do not recognise, that is what it
+means, and rotating is the answer.
 
 Then point the app at it: set `API_BASE` in `routiq.html` to
 `http://localhost:8787`. `http://localhost:8080` is already in
@@ -48,16 +59,17 @@ Without the `Origin` header you get a 403. That is the point.
     npx wrangler kv namespace create RATE
     npx wrangler kv namespace create CACHE
     # paste the two ids into wrangler.toml
-    npx wrangler secret put HERE_API_KEY
+    npx wrangler secret put HERE_API_KEY      # the same key as in .dev.vars
     npx wrangler deploy
 
 Then set `API_BASE` in `routiq.html` to the URL it prints, and add your
 GitHub Pages origin to `ALLOWED_ORIGINS` in `wrangler.toml` if it is not
 already there.
 
-**Restrict the key at HERE as well.** The proxy stops it leaking; it does not
-stop a key that leaked earlier. Lock it to this Worker's domain in the HERE
-portal, and rotate it, since the old one was public for a while.
+**Restrict the key at HERE.** The proxy stops it leaking from here on; it
+cannot un-leak what already left. Lock it to this Worker's domain in the HERE
+portal — that is what makes a copied key useless to whoever copied it, and it
+is worth doing even though the key itself is staying.
 
 ## Sync (phase two)
 
