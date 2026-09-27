@@ -54,17 +54,39 @@ Without the `Origin` header you get a 403. That is the point.
 
 ## Deploying
 
+From the repository root:
+
+    npm run setup:api
+
+It signs you in (a browser window opens once), creates the two KV namespaces
+and the D1 database, writes their ids into `wrangler.toml`, applies the
+migration, uploads the key from `.dev.vars`, deploys, and offers to point
+`routiq.html` at the URL it got back.
+
+That is one command rather than seven, because every one of those steps
+otherwise ends with "copy this id into that file", and a mistyped id fails at
+runtime with an error that explains nothing.
+
+Re-running it is safe: anything that already exists is reused, and nothing is
+deleted. If it stops partway, fix what it complained about and run it again.
+
+    npm run check:api
+
+reports what is and is not set up, without changing anything.
+
+Afterwards, commit the changed `wrangler.toml` and `routiq.html`, and check
+that your GitHub Pages origin is in `ALLOWED_ORIGINS`.
+
+### By hand, if you prefer
+
     cd worker
     npx wrangler login
-    npx wrangler kv namespace create RATE
-    npx wrangler kv namespace create CACHE
-    # paste the two ids into wrangler.toml
-    npx wrangler secret put HERE_API_KEY      # the same key as in .dev.vars
+    npx wrangler kv namespace create RATE       # paste the id into wrangler.toml
+    npx wrangler kv namespace create CACHE      # and this one
+    npx wrangler d1 create routepal-sync        # and this one
+    npx wrangler d1 migrations apply routepal-sync --remote
+    npx wrangler secret put HERE_API_KEY
     npx wrangler deploy
-
-Then set `API_BASE` in `routiq.html` to the URL it prints, and add your
-GitHub Pages origin to `ALLOWED_ORIGINS` in `wrangler.toml` if it is not
-already there.
 
 **Restrict the key at HERE.** The proxy stops it leaking from here on; it
 cannot un-leak what already left. Lock it to this Worker's domain in the HERE

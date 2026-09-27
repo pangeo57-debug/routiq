@@ -12,7 +12,9 @@
     "bench": "node test/benchmark.js",
     "dev": "python3 -m http.server 8080",
     "dev:api": "cd worker && npx wrangler dev --port 8787",
-    "test:worker": "node --test worker/test/worker.test.js"
+    "test:worker": "node --test worker/test/worker.test.js",
+    "setup:api": "node worker/setup.mjs",
+    "check:api": "node worker/setup.mjs --check"
   },
   "engines": {
     "node": ">=18"
