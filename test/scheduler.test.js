@@ -2312,3 +2312,121 @@ describe('travel and time caches answer exactly what the slow path would', () =>
     assert.ok(Number.isNaN(S.toMin('nonsense')));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Saying why a gap is there
+// ---------------------------------------------------------------------------
+
+describe('a gap names the constraint that caused it', () => {
+  // The user's report was "it leaves huge gaps". Some of those gaps are
+  // unavoidable — but the screen said nothing about them, so an unavoidable
+  // gap and a broken scheduler looked identical. explainGap read av.start,
+  // the opening of a student's LARGEST free stretch, which since multi-window
+  // availability shipped is not necessarily the stretch the lesson sits in.
+
+  function day1(app, over = {}) {
+    const S = app.Scheduler;
+    const cfg = settings(Object.assign({ workDays: [1],
+      dayHours: { 1: { start: '15:00', end: '22:00' } } }, over));
+    const first = student('first', { days: [1], window: { start: '15:00', end: '22:00' } });
+    const split = student('split', { days: [1], window: { start: '15:00', end: '16:00' } });
+    // Free for an hour that is over before we could arrive, then again at 20:00.
+    split.availability[1] = { on: true, start: '15:00', end: '16:00',
+      windows: [[S.toMin('15:00'), S.toMin('16:00')], [S.toMin('20:00'), S.toMin('22:00')]] };
+    const sts = [first, split];
+    app.setState({ students: sts, settings: cfg,
+      coords: { home: { lat: 38.240, lon: 21.730 },
+        first: { lat: 38.241, lon: 21.731 }, split: { lat: 38.242, lon: 21.732 } },
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return { cfg, sts };
+  }
+
+  test('a wait caused by a later free stretch is attributed to it', () => {
+    const app = loadApp();
+    const { cfg, sts } = day1(app);
+    const why = app.Scheduler.explainGap(
+      slot('first', '15:00', '16:00', { address: 'addr-first' }),
+      slot('split', '20:00', '21:00', { address: 'addr-split' }), 1, sts, cfg);
+    assert.ok(why, 'a four-hour wait must not come back unexplained');
+    assert.equal(why.kind, 'availability');
+    assert.equal(why.name, 'split');
+    // 20:00, the start of the stretch the lesson actually sits in — not 15:00,
+    // the start of the one it does not.
+    assert.equal(why.from, '20:00');
+  });
+
+  test('no reason is reported when the lesson simply could have been earlier', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const { cfg, sts } = day1(app);
+    // Widen the first stretch so it CAN host the lesson right after the drive.
+    sts[1].availability[1].windows = [[S.toMin('15:00'), S.toMin('18:00')],
+                                      [S.toMin('20:00'), S.toMin('22:00')]];
+    const why = S.explainGap(
+      slot('first', '15:00', '16:00', { address: 'addr-first' }),
+      slot('split', '20:00', '21:00', { address: 'addr-split' }), 1, sts, cfg);
+    assert.equal(why, null,
+      'inventing a constraint that is not there would excuse a bad schedule');
+  });
+
+  test('a break the user reserved is named as the break', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const { cfg, sts } = day1(app, { blockedSlots: [{ day: 1, start: '16:00', end: '19:00' }] });
+    sts[1].availability[1].windows = [[S.toMin('15:00'), S.toMin('22:00')]];
+    const why = S.explainGap(
+      slot('first', '15:00', '16:00', { address: 'addr-first' }),
+      slot('split', '19:00', '20:00', { address: 'addr-split' }), 1, sts, cfg);
+    assert.ok(why, 'the reserved break is the reason and should be said');
+    assert.equal(why.kind, 'break');
+    assert.equal(why.end, '19:00');
+  });
+
+  test('clearing a break can land inside a busy hour, and the answer is the later one', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    // One pass is not enough here. Availability first says 17:00; the break
+    // then pushes to 17:10; and at 17:10 the half-hour lesson no longer fits
+    // before that stretch closes at 17:35, so the real answer is the 19:00
+    // stretch. A single pass would report the break — a constraint that has
+    // already stopped being the binding one.
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } },
+      blockedSlots: [{ day: 1, start: '16:00', end: '17:10' }] });
+    const first = student('first', { days: [1], window: { start: '15:00', end: '22:00' } });
+    const split = student('split', { days: [1], window: { start: '15:00', end: '22:00' },
+      lessonDuration: 30 });
+    split.availability[1] = { on: true, start: '19:00', end: '22:00',
+      windows: [[S.toMin('15:00'), S.toMin('15:30')],
+                [S.toMin('17:00'), S.toMin('17:35')],
+                [S.toMin('19:00'), S.toMin('22:00')]] };
+    const sts = [first, split];
+    app.setState({ students: sts, settings: cfg,
+      coords: { home: { lat: 38.240, lon: 21.730 },
+        first: { lat: 38.241, lon: 21.731 }, split: { lat: 38.242, lon: 21.732 } },
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+
+    const why = S.explainGap(
+      slot('first', '15:00', '16:00', { address: 'addr-first' }),
+      slot('split', '19:00', '19:30', { address: 'addr-split', duration: 30 }), 1, sts, cfg);
+    assert.ok(why);
+    assert.equal(why.kind, 'availability', `got ${JSON.stringify(why)}`);
+    assert.equal(why.from, '19:00');
+  });
+
+  test('a break and a free stretch that push each other resolve to the later one', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    // Clearing the break lands at 18:00, inside an hour the student is busy;
+    // their next stretch opens at 19:30. Reporting the break would name a
+    // constraint that is no longer the binding one.
+    const { cfg, sts } = day1(app, { blockedSlots: [{ day: 1, start: '16:00', end: '18:00' }] });
+    sts[1].availability[1].windows = [[S.toMin('15:00'), S.toMin('15:30')],
+                                      [S.toMin('19:30'), S.toMin('22:00')]];
+    const why = S.explainGap(
+      slot('first', '15:00', '16:00', { address: 'addr-first' }),
+      slot('split', '19:30', '20:30', { address: 'addr-split' }), 1, sts, cfg);
+    assert.ok(why);
+    assert.equal(why.kind, 'availability');
+    assert.equal(why.from, '19:30');
+  });
+});
