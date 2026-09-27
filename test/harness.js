@@ -102,6 +102,13 @@ function loadApp(opts = {}) {
       clear: () => { for (const k in storage) delete storage[k]; },
     },
     fetch: opts.fetch || (async () => ({ ok: false, json: async () => ({}) })),
+    // Real WebCrypto and base64: sync encrypts on the device, and a stubbed
+    // cipher would prove nothing about whether the real one round-trips.
+    crypto: require('node:crypto').webcrypto,
+    TextEncoder, TextDecoder,
+    btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+    Uint8Array, Buffer,
     Notification: undefined,
     // Real URL/URLSearchParams — the app builds navigation deep links with
     // them, and a stub would let a broken link pass. The object-URL helpers
@@ -131,7 +138,7 @@ function loadApp(opts = {}) {
     'I18N','PROFESSION_VALUES','SUBJECTS','COLORS','DAYS','DAYS_FULL','esc','t','tf',
     'curLang','normalizeSearchText','getProfessions','getLabels','subjectLabel',
     'getHereKey','schedProgress','_schedFrame','Toast',
-    'API_BASE','lookupMode','hereAvailable','apiUrl'];
+    'API_BASE','lookupMode','hereAvailable','apiUrl','Sync'];
   const src = extractScript() +
     '\n;this.__exports = {' +
     EXPORTS.map(n => `${n}: (typeof ${n} === 'undefined' ? undefined : ${n})`).join(',') +

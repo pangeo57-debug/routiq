@@ -18,6 +18,8 @@
  * and nothing else.
  */
 
+import * as Sync from './sync.js';
+
 const HERE_HOSTS = {
   geocode:     'https://geocode.search.hereapi.com/v1/geocode',
   autosuggest: 'https://autosuggest.search.hereapi.com/v1/autosuggest',
@@ -213,6 +215,31 @@ async function handle(request, env, ctx) {
         headers: { 'Content-Type': 'application/json; charset=utf-8',
           'X-Cache': out.cached ? 'hit' : 'miss', ...stripPrivate(cors) } });
     }
+  }
+
+  // ---- Sync ---------------------------------------------------------------
+  // The server never sees anything readable here: the blob is encrypted on the
+  // device with a key derived from a code that does not leave it.
+  if (group === 'sync') {
+    if (!env.DB) return json({ error: 'sync not configured' }, 503, cors);
+    if (request.method !== 'POST') return json({ error: 'POST only' }, 405, cors);
+
+    const raw = await request.text();
+    if (raw.length > Sync.LIMITS.blobBytesMax + 4096)
+      return json({ error: 'body too large' }, 413, cors);
+    let body;
+    try { body = JSON.parse(raw); }
+    catch { return json({ error: 'body is not JSON' }, 400, cors); }
+
+    const now = Date.now();
+    const ops = { create: Sync.createSpace, pull: Sync.pull, push: Sync.push, delete: Sync.deleteSpace };
+    const op = ops[action];
+    if (!op) return json({ error: 'not found' }, 404, cors);
+
+    const out = (action === 'pull' || action === 'delete')
+      ? await op(env.DB, body)
+      : await op(env.DB, body, now);
+    return json(out.body || { error: out.error }, out.status, cors);
   }
 
   // ---- OpenStreetMap ------------------------------------------------------

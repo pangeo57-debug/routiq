@@ -6,7 +6,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { loadApp, student, settings } = require('./harness');
+const { loadApp, student, settings, slot } = require('./harness');
 
 /**
  * Drive App.saveStudent by stubbing the form fields it reads. Returns the app
@@ -610,5 +610,110 @@ describe('the API key is not in the page any more', () => {
     const connect = csp[1].match(/connect-src([^;]+)/)[1];
     assert.ok(connect.includes('workers.dev'),
       `the Worker origin must be allowed, or every call is blocked: ${connect}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sync: the server must never be able to read any of it
+// ---------------------------------------------------------------------------
+
+describe('what leaves the device is unreadable', () => {
+  test('a snapshot round-trips through encryption', async () => {
+    const app = loadApp();
+    const code = app.Sync.randomCode();
+    const data = { students: [student('Νίκος', { name: 'Νίκος Παπαδόπουλος' })],
+      schedule: { 1: [slot('Νίκος', '17:00', '18:00')] }, coords: { home: { lat: 38.2, lon: 21.7 } } };
+    const blob = await app.Sync.encrypt(code, data);
+    const back = await app.Sync.decrypt(code, blob);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(back)), JSON.parse(JSON.stringify(data)));
+  });
+
+  test('the blob contains no name, address or code', async () => {
+    const app = loadApp();
+    const code = app.Sync.randomCode();
+    const blob = await app.Sync.encrypt(code, {
+      students: [student('s1', { name: 'Νίκος Παπαδόπουλος', address: 'Γούναρη 58, Πάτρα' })] });
+    assert.ok(!blob.includes('Παπαδόπουλος'), 'a name must not be readable in the blob');
+    assert.ok(!blob.includes('Γούναρη'), 'nor an address');
+    assert.ok(!blob.includes(code), 'nor the code itself');
+    // And the same data twice must not produce the same ciphertext, or the
+    // server learns when nothing changed — and worse, AES-GCM breaks if a
+    // nonce is ever reused with one key.
+    const again = await app.Sync.encrypt(code, {
+      students: [student('s1', { name: 'Νίκος Παπαδόπουλος', address: 'Γούναρη 58, Πάτρα' })] });
+    assert.notEqual(blob, again, 'each encryption must use a fresh nonce');
+  });
+
+  test('the wrong code cannot read it, and does not return rubbish', async () => {
+    const app = loadApp();
+    const good = app.Sync.randomCode();
+    const wrong = app.Sync.randomCode();
+    const blob = await app.Sync.encrypt(good, { students: [] });
+    await assert.rejects(() => app.Sync.decrypt(wrong, blob),
+      'AES-GCM authenticates, so a wrong key must throw rather than decrypt to nonsense');
+  });
+
+  test('a tampered blob is refused', async () => {
+    const app = loadApp();
+    const code = app.Sync.randomCode();
+    const blob = await app.Sync.encrypt(code, { students: [] });
+    // Flip one character of the ciphertext.
+    const i = blob.length - 5;
+    const flipped = blob.slice(0, i) + (blob[i] === 'A' ? 'B' : 'A') + blob.slice(i + 1);
+    await assert.rejects(() => app.Sync.decrypt(code, flipped));
+  });
+
+  test('what proves we know the code is a hash, not the code', async () => {
+    const app = loadApp();
+    const code = app.Sync.randomCode();
+    const h = await app.Sync.authHash(code);
+    assert.match(h, /^[a-f0-9]{64}$/);
+    assert.ok(!h.includes(code.slice(0, 6)), 'the hash must not carry the code in it');
+    assert.equal(h, await app.Sync.authHash(code), 'and it must be stable');
+    assert.notEqual(h, await app.Sync.authHash(app.Sync.randomCode()));
+  });
+
+  test('the key is derived from the secret half, so the id alone is useless', async () => {
+    const app = loadApp();
+    const S = app.Sync;
+    const a = S.randomCode();
+    // Same space id, different secret: a blob from one must not open with the
+    // other, or publishing the id would be publishing the data.
+    const b = S.spaceIdOf(a) + S.randomCode().slice(S.ID_LEN);
+    const blob = await S.encrypt(a, { students: [] });
+    await assert.rejects(() => S.decrypt(b, blob));
+  });
+});
+
+describe('the pairing code', () => {
+  test('is long enough, and avoids characters people confuse', () => {
+    const app = loadApp();
+    const S = app.Sync;
+    for (let i = 0; i < 50; i++) {
+      const c = S.randomCode();
+      assert.equal(c.length, S.ID_LEN + S.SECRET_LEN);
+      assert.ok(!/[O0I1L]/.test(c), `read aloud and mistyped: ${c}`);
+    }
+    // 31 symbols over 24 characters is far past guessing.
+    assert.ok(Math.log2(31) * 24 > 100, 'the code must not be brute-forceable');
+  });
+
+  test('reads back whatever the user typed, dashes or not', () => {
+    const app = loadApp();
+    const S = app.Sync;
+    const code = S.randomCode();
+    assert.equal(S.parse(S.format(code)), code);
+    assert.equal(S.parse(code.toLowerCase()), code);
+    assert.equal(S.parse('  ' + S.format(code) + '  '), code);
+    assert.equal(S.parse(code.slice(0, 10)), null, 'a short code is refused, not padded');
+    assert.equal(S.parse(''), null);
+    assert.equal(S.parse(null), null);
+  });
+
+  test('two codes are never the same', () => {
+    const app = loadApp();
+    const seen = new Set();
+    for (let i = 0; i < 200; i++) seen.add(app.Sync.randomCode());
+    assert.equal(seen.size, 200);
   });
 });

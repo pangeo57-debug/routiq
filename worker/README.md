@@ -59,6 +59,39 @@ already there.
 stop a key that leaked earlier. Lock it to this Worker's domain in the HERE
 portal, and rotate it, since the old one was public for a while.
 
+## Sync (phase two)
+
+One person's data as a single encrypted blob, with one device allowed to
+write it.
+
+**The server cannot read any of it.** The blob is encrypted on the device with
+a key derived from a 24-character code that never leaves it. What is stored
+here is ciphertext, its size, and when it changed. Names, addresses and
+schedules are unreadable to the server, to Cloudflare, and to anyone who ever
+gets hold of the database.
+
+The price, said out loud in the app before anything is sent: **lose the code
+and the copy on the server is gone.** For a backup of data that also lives on
+the device, that is an honest trade rather than a nasty surprise.
+
+Three rules, each with tests that were watched failing:
+
+- **A write must be based on the current version.** If it is not, somebody
+  wrote in between, and this write would erase them — the server hands back
+  the newer copy instead of taking the older one.
+- **Only the primary device writes.** A second device reads. It can take over,
+  but only by saying so, so a phone left in a drawer cannot quietly overwrite
+  the laptop that has been doing the real work.
+- **A wrong code and a missing space give the same answer,** or the endpoint
+  tells you which space ids are real.
+
+The stored credential is a hash of what the client sends, which is itself a
+hash of the code — so the database is not a usable credential if it leaks.
+
+    npx wrangler d1 create routepal-sync
+    # paste the id into wrangler.toml
+    npx wrangler d1 migrations apply routepal-sync --remote
+
 ## Routes
 
 | Route | Method | Upstream |
@@ -70,6 +103,10 @@ portal, and rotate it, since the old one was public for a while.
 | `/here/matrix` | POST | HERE matrix routing |
 | `/osm/search` | GET | Nominatim search |
 | `/osm/reverse` | GET | Nominatim reverse |
+| `/sync/create` | POST | D1 |
+| `/sync/pull` | POST | D1 |
+| `/sync/push` | POST | D1 |
+| `/sync/delete` | POST | D1 |
 
 Every route rebuilds its upstream URL from an allowlist of parameters. A proxy
 that forwards whatever it is given is an open relay wearing a different hat.
@@ -91,6 +128,6 @@ misconfigured limiter must not take the whole proxy down with it.
 
     npm run test:worker
 
-25 tests, no network and no Cloudflare account needed — the Worker is plain ES
+44 tests, no network and no Cloudflare account needed — the Worker is plain ES
 modules with a stubbed `env`. They are all about the two ways this can fail
 badly: leaking the key, and being an open relay.

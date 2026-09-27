@@ -24,3 +24,12 @@ preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
 
 # The HERE key is a SECRET, never a var:
 #   npx wrangler secret put HERE_API_KEY
+
+# Sync storage. D1 rather than KV: a device must read back what it just wrote,
+# and KV is eventually consistent.
+#   npx wrangler d1 create routepal-sync
+#   npx wrangler d1 migrations apply routepal-sync --remote
+[[d1_databases]]
+binding = "DB"
+database_name = "routepal-sync"
+database_id = "PUT_YOUR_D1_ID_HERE"
