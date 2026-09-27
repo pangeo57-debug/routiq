@@ -17,7 +17,7 @@
      cannot set response headers, so protection against being framed is simply
      not available here. Listing it anyway would only log a warning and suggest
      a defence that is not there. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://*.workers.dev https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://*.workers.dev https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#f7f6f3">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,9 +27,34 @@
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>RoutePal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!--
+  Fonts are served from this site, not from Google.
+
+  A Google Fonts <link> sends every visitor's IP address to Google before a
+  single pixel is drawn. A German court (Munich, January 2022) held that to be
+  a GDPR violation on its own, and it needs no consent banner to fix — it
+  needs the files to be here. They are, in fonts/.
+
+  Both are variable fonts, so all four weights of each come from ONE file:
+  three files in total, about 82KB, and after the first visit none of them are
+  fetched again.
+
+  Found while doing this: DM Sans has no Greek subset at all. Greek body text
+  has always fallen back to a system font — the app was loading a webfont from
+  Google for text it could not render. The unicode-range below says so
+  explicitly instead of leaving it to chance.
+-->
+<style>
+  @font-face { font-family:'Syne'; font-style:normal; font-weight:400 800; font-display:swap;
+    src:url('fonts/syne-latin.woff2') format('woff2');
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215; }
+  @font-face { font-family:'Syne'; font-style:normal; font-weight:400 800; font-display:swap;
+    src:url('fonts/syne-greek.woff2') format('woff2');
+    unicode-range:U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF; }
+  @font-face { font-family:'DM Sans'; font-style:normal; font-weight:100 1000; font-display:swap;
+    src:url('fonts/dmsans-latin.woff2') format('woff2');
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215; }
+</style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
       crossorigin="anonymous"/>

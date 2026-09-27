@@ -796,3 +796,53 @@ describe('the blob does not announce how much work you have', () => {
     assert.equal(back.students[0].id, 'old');
   });
 });
+
+describe('nothing is fetched from Google before a page is drawn', () => {
+  // A Google Fonts <link> sends every visitor's IP address to Google before a
+  // single pixel appears. A German court (Munich, January 2022) held that to
+  // be a GDPR violation on its own. It takes no consent banner to fix — it
+  // takes hosting the files.
+  const fs = require('fs');
+  const { APP_FILE } = require('./harness');
+
+  test('no Google font links remain in the page', () => {
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    assert.ok(!/fonts\.googleapis\.com/.test(src), 'no stylesheet from Google');
+    assert.ok(!/fonts\.gstatic\.com/.test(src), 'and nothing preconnecting to it');
+  });
+
+  test('the CSP forbids it, so it cannot creep back in unnoticed', () => {
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const csp = src.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+    const fontSrc = csp.match(/font-src([^;]+)/)[1];
+    assert.ok(!/gstatic|googleapis/.test(fontSrc),
+      `a font from Google must be blocked by policy, not just absent: ${fontSrc}`);
+    assert.ok(/'self'/.test(fontSrc));
+    const styleSrc = csp.match(/style-src([^;]+)/)[1];
+    assert.ok(!/googleapis/.test(styleSrc), `style-src still allows Google: ${styleSrc}`);
+  });
+
+  test('the font files the page asks for are actually in the repository', () => {
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const path = require('path');
+    const root = path.dirname(APP_FILE);
+    const refs = [...src.matchAll(/url\('(fonts\/[^']+)'\)/g)].map(m => m[1]);
+    assert.ok(refs.length >= 3, `expected the font files to be referenced, found ${refs.length}`);
+    for (const ref of refs) {
+      const f = path.join(root, ref);
+      assert.ok(fs.existsSync(f), `${ref} is referenced but missing — the page would fall back silently`);
+      assert.ok(fs.statSync(f).size > 1000, `${ref} is too small to be a real font file`);
+    }
+  });
+
+  test('Greek text is declared to come from a font that has Greek', () => {
+    // DM Sans has no Greek subset at all, so Greek body text falls back to a
+    // system font. That was already true; the unicode-range now says so
+    // rather than leaving it to chance.
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const faces = [...src.matchAll(/@font-face\s*\{([^}]+)\}/g)].map(m => m[1]);
+    const greek = faces.filter(f => /U\+0370-0377/.test(f));
+    assert.equal(greek.length, 1, 'exactly one face should claim the Greek range');
+    assert.ok(/Syne/.test(greek[0]), 'and it is Syne, the one that actually has Greek');
+  });
+});
