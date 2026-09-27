@@ -717,3 +717,82 @@ describe('the pairing code', () => {
     assert.equal(seen.size, 200);
   });
 });
+
+describe('the blob does not announce how much work you have', () => {
+  // Ciphertext is as long as what went in, so an unpadded blob tells anyone
+  // who can see its size — including the server — roughly how many clients
+  // you have. Padding turns a number into a very coarse band.
+
+  test('the size moves in steps, not with every client', async () => {
+    // Padding bounds the leak to a 16KB band; it does not remove it. A very
+    // large roster still occupies more bands than a small one, and saying
+    // otherwise would be claiming a guarantee the code does not give.
+    const app = loadApp();
+    const S = app.Sync;
+    const code = S.randomCode();
+    const sizes = [];
+    for (const n of [0, 1, 5, 20]) {
+      const blob = await S.encrypt(code, { students: Array.from({ length: n },
+        (_, i) => student('s' + i, { name: 'Μαθητής ' + i })) });
+      sizes.push(blob.length);
+    }
+    assert.equal(new Set(sizes).size, 1,
+      `rosters this size must be indistinguishable: ${sizes.join(', ')}`);
+
+    // 40 clients tips into the next band. That is the honest limit of this:
+    // one step of resolution, not none.
+    const bigger = await S.encrypt(code, { students: Array.from({ length: 40 },
+      (_, i) => student('s' + i, { name: 'Μαθητής ' + i })) });
+    assert.ok(bigger.length > sizes[0], 'a much larger roster does move up a band');
+    const rawBig = S._unb64(bigger);
+    assert.equal((rawBig.length - 12 - 16) % S.PAD_STEP, 0,
+      'and it lands on a step boundary, not on its own byte count');
+
+    // And the ciphertext is always a whole number of steps, so what leaks is
+    // the band rather than the byte count.
+    const raw = S._unb64(await S.encrypt(code, { students: [student('a')] }));
+    assert.equal((raw.length - 12 - 16) % S.PAD_STEP, 0,
+      'the plaintext must be padded to a whole number of steps');
+  });
+
+  test('padding is removed exactly, whatever the length', async () => {
+    const app = loadApp();
+    const code = app.Sync.randomCode();
+    for (const n of [0, 1, 7, 100, 1000]) {
+      const data = { students: Array.from({ length: n }, (_, i) => student('s' + i)) };
+      const back = await app.Sync.decrypt(code, await app.Sync.encrypt(code, data));
+      assert.equal(back.students.length, n, `round trip failed at ${n} clients`);
+    }
+  });
+
+  test('a roster too large for one step still round-trips', async () => {
+    const app = loadApp();
+    const code = app.Sync.randomCode();
+    const big = { students: Array.from({ length: 400 }, (_, i) =>
+      student('s' + i, { name: 'Πολύ μακρύ όνομα μαθητή ' + i, notes: 'x'.repeat(200) })) };
+    const blob = await app.Sync.encrypt(code, big);
+    assert.ok(blob.length > app.Sync.PAD_STEP, 'this fixture should exceed one step');
+    const back = await app.Sync.decrypt(code, blob);
+    assert.equal(back.students.length, 400);
+    assert.equal(back.students[399].name, big.students[399].name);
+  });
+
+  test('a blob written before padding existed still opens', async () => {
+    // Anyone syncing already has one of these. Truncating it to junk on the
+    // first read after an update would lose their data.
+    const app = loadApp();
+    const S = app.Sync;
+    const code = S.randomCode();
+    // Encrypt WITHOUT the length header, the way the previous version did.
+    const iv = app.ctx.crypto.getRandomValues(new Uint8Array(12));
+    const key = await S._key(code);
+    const plain = new TextEncoder().encode(JSON.stringify({ students: [student('old')] }));
+    const ct = await app.ctx.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain);
+    const packed = new Uint8Array(iv.length + ct.byteLength);
+    packed.set(iv, 0); packed.set(new Uint8Array(ct), iv.length);
+
+    const back = await S.decrypt(code, S._b64(packed));
+    assert.equal(back.students.length, 1);
+    assert.equal(back.students[0].id, 'old');
+  });
+});

@@ -247,7 +247,8 @@ async function handle(request, env, ctx) {
     catch { return json({ error: 'body is not JSON' }, 400, cors); }
 
     const now = Date.now();
-    const ops = { create: Sync.createSpace, pull: Sync.pull, push: Sync.push, delete: Sync.deleteSpace };
+    const ops = { create: Sync.createSpace, pull: Sync.pull, push: Sync.push,
+                  rotate: Sync.rotate, delete: Sync.deleteSpace };
     const op = ops[action];
     if (!op) return json({ error: 'not found' }, 404, cors);
 

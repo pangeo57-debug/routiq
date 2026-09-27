@@ -33,6 +33,15 @@ function fakeDB() {
             const [space_id, auth_hash, primary_device, updated_at, created_at] = args;
             rows.set(space_id, { space_id, auth_hash, blob: null, version: 0,
               primary_device, updated_at, created_at, bytes: 0 });
+          } else if (/^\s*UPDATE spaces SET auth_hash/.test(sql)) {
+            // Rotation writes the credential AND the blob, so it binds a
+            // different set of columns. Dispatching on the statement rather
+            // than on the argument count: a fake that guesses will quietly
+            // mis-assign and report a bug that is only in the fake.
+            const [auth_hash, blob, version, primary_device, updated_at, bytes, space_id, baseVersion] = args;
+            const r = rows.get(space_id);
+            if (r && r.version === baseVersion)
+              Object.assign(r, { auth_hash, blob, version, primary_device, updated_at, bytes });
           } else if (/^\s*UPDATE spaces/.test(sql)) {
             const [blob, version, primary_device, updated_at, bytes, space_id, baseVersion] = args;
             const r = rows.get(space_id);
@@ -286,5 +295,110 @@ describe('SQL injection', () => {
     assert.equal(res.status, 200, 'it is legitimate content, just unpleasant text');
     assert.equal(db._rows.size, 1);
     assert.equal(db._rows.get(ID).blob, nasty, 'stored verbatim, executed never');
+  });
+});
+
+describe('a device that is already up to date downloads nothing', () => {
+  // Opening the app five times a day used to download the whole roster five
+  // times to be told it already had it — pointless on a phone's data
+  // allowance and pointless for the database.
+
+  test('the same version sends no blob', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1,
+      blob: 'a-large-blob', baseVersion: 0 }, 2000);
+
+    const res = await S.pull(db, { spaceId: ID, authHash: SECRET, knownVersion: 1 });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.unchanged, true);
+    assert.equal(res.body.blob, undefined, 'nothing to send means send nothing');
+    assert.equal(res.body.version, 1, 'but the version is still reported');
+  });
+
+  test('an older version gets the data', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1, blob: 'v1', baseVersion: 0 }, 2000);
+    const res = await S.pull(db, { spaceId: ID, authHash: SECRET, knownVersion: 0 });
+    assert.equal(res.body.unchanged, false);
+    assert.equal(res.body.blob, 'v1');
+  });
+
+  test('asking without a version still gets the data', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1, blob: 'v1', baseVersion: 0 }, 2000);
+    const res = await S.pull(db, { spaceId: ID, authHash: SECRET });
+    assert.equal(res.body.blob, 'v1', 'a first sync knows no version and must not be starved');
+  });
+
+  test('the shortcut is behind the code, like everything else', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    const res = await S.pull(db, { spaceId: ID, authHash: OTHER, knownVersion: 0 });
+    assert.equal(res.status, 404, 'a wrong code must not learn the version either');
+  });
+});
+
+describe('changing the code locks out every other device', () => {
+  const NEW = 'c'.repeat(64);
+
+  test('the old code stops working and the new one works', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1, blob: 'old', baseVersion: 0 }, 2000);
+
+    const res = await S.rotate(db, { spaceId: ID, authHash: SECRET, newAuthHash: NEW,
+      blob: 'reencrypted', deviceId: DEV1, baseVersion: 1 }, 3000);
+    assert.equal(res.status, 200);
+
+    assert.equal((await S.pull(db, { spaceId: ID, authHash: SECRET })).status, 404,
+      'the old code must be worthless the moment it is rotated');
+    const withNew = await S.pull(db, { spaceId: ID, authHash: NEW });
+    assert.equal(withNew.status, 200);
+    assert.equal(withNew.body.blob, 'reencrypted');
+  });
+
+  test('the credential and the data change together', async () => {
+    // Changing one without the other leaves a blob nobody can read.
+    const db = fakeDB();
+    await newSpace(db);
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1, blob: 'old', baseVersion: 0 }, 2000);
+    await S.rotate(db, { spaceId: ID, authHash: SECRET, newAuthHash: NEW,
+      blob: 'reencrypted', deviceId: DEV1, baseVersion: 1 }, 3000);
+    const row = db._rows.get(ID);
+    assert.equal(row.blob, 'reencrypted');
+    assert.equal(row.auth_hash, await S.sha256Hex(NEW));
+    assert.equal(row.version, 2, 'and it counts as a write, so stale devices notice');
+  });
+
+  test('rotating requires the current code', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    const res = await S.rotate(db, { spaceId: ID, authHash: OTHER, newAuthHash: NEW,
+      blob: 'theirs', deviceId: DEV2, baseVersion: 0 }, 3000);
+    assert.equal(res.status, 404);
+    assert.equal(db._rows.get(ID).auth_hash, await S.sha256Hex(SECRET), 'unchanged');
+  });
+
+  test('rotating cannot trample a newer copy either', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1, blob: 'newer', baseVersion: 0 }, 2000);
+    const res = await S.rotate(db, { spaceId: ID, authHash: SECRET, newAuthHash: NEW,
+      blob: 'stale', deviceId: DEV1, baseVersion: 0 }, 3000);
+    assert.equal(res.status, 409);
+    assert.equal(db._rows.get(ID).blob, 'newer');
+  });
+
+  test('a rotation without a blob is refused', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    const res = await S.rotate(db, { spaceId: ID, authHash: SECRET, newAuthHash: NEW,
+      deviceId: DEV1, baseVersion: 0 }, 3000);
+    assert.equal(res.status, 400);
+    assert.equal(db._rows.get(ID).auth_hash, await S.sha256Hex(SECRET),
+      'the credential must not change on its own');
   });
 });

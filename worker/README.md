@@ -97,6 +97,11 @@ Three rules, each with tests that were watched failing:
 - **A wrong code and a missing space give the same answer,** or the endpoint
   tells you which space ids are real.
 
+A pull may send its `knownVersion`. If it matches, the server answers
+`unchanged` and sends no blob at all — opening the app five times a day should
+not download the whole roster five times. The version only ever goes up, and
+goes up on every write, so "same version" cannot mean "different data".
+
 The stored credential is a hash of what the client sends, which is itself a
 hash of the code — so the database is not a usable credential if it leaks.
 
@@ -118,6 +123,7 @@ hash of the code — so the database is not a usable credential if it leaks.
 | `/sync/create` | POST | D1 |
 | `/sync/pull` | POST | D1 |
 | `/sync/push` | POST | D1 |
+| `/sync/rotate` | POST | D1 |
 | `/sync/delete` | POST | D1 |
 
 Every route rebuilds its upstream URL from an allowlist of parameters. A proxy
@@ -153,10 +159,17 @@ page.
   impossible.
 - **Whoever has the code has the data.** There is no second factor. The code
   is 24 characters from a 31-symbol alphabet — far past guessing — but it can
-  be shared, screenshotted or shoulder-surfed like any password.
-- **Size and timing are visible.** The server cannot read a blob, but it knows
-  how large it is and when it changed. Roughly: how many clients you have, and
-  when you last worked on the schedule.
+  be shared, screenshotted or shoulder-surfed like any password. What there
+  IS, is a way to take access back: `/sync/rotate` changes the code and
+  re-encrypts in one statement, and every other device is locked out the
+  moment it lands. Changing the credential without the data would leave a blob
+  nobody can read, so the two move together or not at all.
+- **Timing is visible.** The server knows when a blob changed — roughly, when
+  you last worked on the schedule. Nothing hides that from it.
+- **Size is visible in bands.** Ciphertext is as long as what goes in, so the
+  blob is padded to a 16KB step before encryption. Rosters from empty to
+  twenty are byte-for-byte identical; a much larger one moves up a band. That
+  is one step of resolution, not none.
 - **A lost code is lost data.** By design, and the app says so before anything
   is sent.
 
@@ -164,6 +177,6 @@ page.
 
     npm run test:worker
 
-52 tests, no network and no Cloudflare account needed — the Worker is plain ES
+65 tests, no network and no Cloudflare account needed — the Worker is plain ES
 modules with a stubbed `env`. They are all about the two ways this can fail
 badly: leaking the key, and being an open relay.

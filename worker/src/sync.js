@@ -85,15 +85,26 @@ async function createSpace(db, body, now) {
 }
 
 async function pull(db, body) {
-  const { spaceId, authHash } = body || {};
+  const { spaceId, authHash, knownVersion } = body || {};
   if (!validateSpaceId(spaceId)) return badRequest('bad spaceId');
   const row = await db.prepare('SELECT * FROM spaces WHERE space_id = ?').bind(spaceId).first();
   // The same answer whether the space does not exist or the code is wrong —
   // otherwise this endpoint tells you which ids are real.
   if (!row || !(await checkAuth(row, authHash))) return { error: 'not found', status: 404 };
 
+  // Nothing new? Then say so and send nothing. A device that opens the app
+  // five times a day used to download the entire roster five times to be told
+  // it already had it — pointless on a phone's data allowance, and pointless
+  // for the database. The version IS the cache key: it only ever goes up, and
+  // it goes up on every write, so "same version" cannot mean "different data".
+  if (Number.isInteger(knownVersion) && knownVersion === row.version) {
+    return { status: 200, body: {
+      spaceId, version: row.version, unchanged: true,
+      primaryDevice: row.primary_device, updatedAt: row.updated_at } };
+  }
+
   return { status: 200, body: {
-    spaceId, version: row.version, blob: row.blob,
+    spaceId, version: row.version, blob: row.blob, unchanged: false,
     primaryDevice: row.primary_device, updatedAt: row.updated_at } };
 }
 
@@ -133,6 +144,46 @@ async function push(db, body, now) {
   return { status: 200, body: { spaceId, version, primaryDevice: deviceId } };
 }
 
+/**
+ * Change the code.
+ *
+ * The honest answer to "whoever has the code has the data" is not a second
+ * password nobody will use — it is being able to take access back. The caller
+ * proves it knows the current code, and hands over a new credential together
+ * with the data re-encrypted under the new key. Every other device is locked
+ * out at that moment, because its key no longer opens anything.
+ *
+ * Both halves in one statement: a rotation that changed the credential but
+ * not the blob would leave data nobody can read.
+ */
+async function rotate(db, body, now) {
+  const { spaceId, authHash, newAuthHash, blob, deviceId, baseVersion } = body || {};
+  if (!validateSpaceId(spaceId)) return badRequest('bad spaceId');
+  if (!validateAuthHash(newAuthHash)) return badRequest('bad newAuthHash');
+  if (!validateDeviceId(deviceId)) return badRequest('bad deviceId');
+  if (typeof blob !== 'string' || !blob) return badRequest('blob must be a non-empty string');
+  if (blob.length > LIMITS.blobBytesMax) return { error: 'blob too large', status: 413 };
+  if (!Number.isInteger(baseVersion) || baseVersion < 0) return badRequest('bad baseVersion');
+
+  const row = await db.prepare('SELECT * FROM spaces WHERE space_id = ?').bind(spaceId).first();
+  if (!row || !(await checkAuth(row, authHash))) return { error: 'not found', status: 404 };
+  // Rotating on top of somebody else's newer data would destroy it, exactly
+  // as an ordinary push would.
+  if (row.version !== baseVersion) {
+    return { error: 'version conflict', status: 409,
+      body: { version: row.version, blob: row.blob, updatedAt: row.updated_at } };
+  }
+
+  const version = row.version + 1;
+  await db.prepare(
+    `UPDATE spaces SET auth_hash = ?, blob = ?, version = ?, primary_device = ?, updated_at = ?, bytes = ?
+     WHERE space_id = ? AND version = ?`)
+    .bind(await sha256Hex(newAuthHash), blob, version, deviceId, now, blob.length, spaceId, baseVersion)
+    .run();
+
+  return { status: 200, body: { spaceId, version, primaryDevice: deviceId, rotated: true } };
+}
+
 async function deleteSpace(db, body) {
   const { spaceId, authHash } = body || {};
   if (!validateSpaceId(spaceId)) return badRequest('bad spaceId');
@@ -142,5 +193,5 @@ async function deleteSpace(db, body) {
   return { status: 200, body: { deleted: true } };
 }
 
-export { createSpace, pull, push, deleteSpace, sha256Hex, safeEqual,
+export { createSpace, pull, push, rotate, deleteSpace, sha256Hex, safeEqual,
          validateSpaceId, validateAuthHash, validateDeviceId, LIMITS };
