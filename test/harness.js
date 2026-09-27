@@ -130,7 +130,8 @@ function loadApp(opts = {}) {
   const EXPORTS = ['Scheduler','App','Router','Storage','state','defaultSettings',
     'I18N','PROFESSION_VALUES','SUBJECTS','COLORS','DAYS','DAYS_FULL','esc','t','tf',
     'curLang','normalizeSearchText','getProfessions','getLabels','subjectLabel',
-    'getHereKey','schedProgress','_schedFrame','Toast'];
+    'getHereKey','schedProgress','_schedFrame','Toast',
+    'API_BASE','lookupMode','hereAvailable','apiUrl'];
   const src = extractScript() +
     '\n;this.__exports = {' +
     EXPORTS.map(n => `${n}: (typeof ${n} === 'undefined' ? undefined : ${n})`).join(',') +

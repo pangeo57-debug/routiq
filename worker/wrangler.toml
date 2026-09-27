@@ -1,0 +1,26 @@
+name = "routepal-api"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# Origins allowed to call this Worker. Anything else is refused — with no
+# allowlist configured the Worker refuses everything rather than defaulting to
+# "*", which would hand the API key's quota to whoever found the URL.
+[vars]
+ALLOWED_ORIGINS = "https://pangeo57-debug.github.io,http://localhost:8080,http://127.0.0.1:8080"
+CONTACT_UA = "RoutePal/1.0 (+https://github.com/pangeo57-debug/routiq)"
+
+# Rate-limit counters. Short-lived keys only.
+[[kv_namespaces]]
+binding = "RATE"
+id = "PUT_YOUR_KV_ID_HERE"
+preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
+
+# Geocoding answers. Addresses do not move, so these are cached for a month —
+# it keeps us well inside Nominatim's usage policy and off HERE's meter.
+[[kv_namespaces]]
+binding = "CACHE"
+id = "PUT_YOUR_KV_ID_HERE"
+preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
+
+# The HERE key is a SECRET, never a var:
+#   npx wrangler secret put HERE_API_KEY

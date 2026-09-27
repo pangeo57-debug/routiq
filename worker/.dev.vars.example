@@ -1,0 +1,2 @@
+# Copy to .dev.vars for `wrangler dev`. NEVER commit the real file.
+HERE_API_KEY=your-here-key-here

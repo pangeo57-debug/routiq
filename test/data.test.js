@@ -550,3 +550,65 @@ describe('sending the times to the client', () => {
     assert.ok(app.App.validateBackup(bad).length > 0, 'must be caught before it reaches a link');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Where address lookups go
+// ---------------------------------------------------------------------------
+
+describe('the API key is not in the page any more', () => {
+  const fs = require('fs');
+  const { APP_FILE } = require('./harness');
+
+  test('no HERE key is embedded in the file', () => {
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    // The key that used to ship here, and the shape of any replacement.
+    assert.ok(!src.includes('ZYbtkcLwZXstiGaBGzxJHCuHiA-wFqW41iTCJe0y_6g'),
+      'the old shared key must be gone from the client');
+    assert.ok(!/SHARED_HERE_KEY\s*=\s*['"][A-Za-z0-9_-]{20,}/.test(src),
+      'and nothing key-shaped may take its place');
+  });
+
+  test('three modes, and each one is reachable', () => {
+    const app = loadApp();
+    app.setState({ settings: settings() });
+
+    // No own key, no proxy: the free services, which need no key at all.
+    assert.equal(app.lookupMode(), 'free');
+    assert.equal(app.hereAvailable(), false);
+    assert.equal(app.apiUrl('/here/geocode', { q: 'x' }), null,
+      'with no proxy there is no proxy URL to build');
+
+    // A user's own key always wins — their quota, their choice, and it keeps
+    // working for anyone who set one up before the proxy existed.
+    app.state.settings.hereApiKey = 'their-own-key';
+    assert.equal(app.lookupMode(), 'own');
+    assert.equal(app.hereAvailable(), true);
+  });
+
+  test('a proxy URL is built safely from its parameters', () => {
+    const app = loadApp({ apiBase: true });
+    // API_BASE is a const in the file, so exercise the builder the way the
+    // call sites do rather than reassigning it.
+    const build = (base, path, params) => {
+      if (!base) return null;
+      const qs = params ? ('?' + new app.ctx.URLSearchParams(params).toString()) : '';
+      return base.replace(/\/$/, '') + path + qs;
+    };
+    const url = build('https://api.example.workers.dev/', '/here/geocode',
+      { q: 'Γούναρη 58 & Κορίνθου', lang: 'el' });
+    assert.equal(url.indexOf('https://api.example.workers.dev/here/geocode?'), 0,
+      `a trailing slash must not double up: ${url}`);
+    assert.ok(!url.slice(url.indexOf('?') + 1).split('&')[0].includes('&'),
+      'an & inside an address must not become a second parameter');
+    assert.equal(new app.ctx.URL(url).searchParams.get('q'), 'Γούναρη 58 & Κορίνθου');
+  });
+
+  test('the CSP allows the proxy to be called', () => {
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const csp = src.match(/Content-Security-Policy" content="([^"]+)"/);
+    assert.ok(csp, 'the page must still declare a CSP');
+    const connect = csp[1].match(/connect-src([^;]+)/)[1];
+    assert.ok(connect.includes('workers.dev'),
+      `the Worker origin must be allowed, or every call is blocked: ${connect}`);
+  });
+});

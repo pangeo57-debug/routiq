@@ -17,7 +17,7 @@
      cannot set response headers, so protection against being framed is simply
      not available here. Listing it anyway would only log a warning and suggest
      a defence that is not there. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://*.workers.dev https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#f7f6f3">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -4525,16 +4525,35 @@ const Scheduler = {
   }
 };
 
-// TEMPORARY: a shared HERE API key, embedded directly in this public,
-// client-side file — visible to anyone who opens dev tools or views source.
-// Every user of the app currently shares this one key's free quota, and
-// anyone could technically copy it and use it elsewhere. This is a known,
-// deliberate trade-off to give every user better geocoding accuracy without
-// each of them having to sign up for their own key — NOT a real secret.
-// Remove this once the backend proxy phase lands (roadmap item), which will
-// hold the key server-side instead. A user's own key, entered in Settings,
-// always takes priority over this one (see getHereKey()).
-const SHARED_HERE_KEY = 'ZYbtkcLwZXstiGaBGzxJHCuHiA-wFqW41iTCJe0y_6g';
+// The shared HERE API key used to sit here, in a public file, where anyone
+// could read it out of the page and spend the quota. It now lives as a secret
+// inside the Worker in worker/ — see worker/README.md — and the browser never
+// sees it.
+//
+// Set this to the deployed Worker's URL. Empty is a valid, working state: the
+// app falls back to Nominatim and OSRM, which need no key at all. It is less
+// accurate, not broken, so a missing or unreachable proxy degrades the app
+// rather than stopping it.
+const API_BASE = '';
+
+/** Is HERE reachable at all — through the user's own key or through the proxy? */
+function hereAvailable(){ return lookupMode() !== 'free'; }
+
+/** How address lookups should be made right now. */
+function lookupMode(){
+  // A user's own key always wins: their quota, their choice, and it keeps
+  // working for anyone who set one up before the proxy existed.
+  if(state.settings && state.settings.hereApiKey) return 'own';
+  if(API_BASE) return 'proxy';
+  return 'free';
+}
+
+/** The URL for a proxied call, or null when there is no proxy to call. */
+function apiUrl(path, params){
+  if(!API_BASE) return null;
+  const qs = params ? ('?' + new URLSearchParams(params).toString()) : '';
+  return API_BASE.replace(/\/$/, '') + path + qs;
+}
 
 // Cloudflare Web Analytics token. Empty = analytics fully disabled (no script
 // loaded, no requests made) — that is the default and the safe state.
@@ -4545,8 +4564,11 @@ const SHARED_HERE_KEY = 'ZYbtkcLwZXstiGaBGzxJHCuHiA-wFqW41iTCJe0y_6g';
 // required under GDPR — but that guarantee only holds as long as nothing
 // identifying is ever passed to it. Do not extend this to send custom data.
 const ANALYTICS_TOKEN = '';
+// The user's OWN key, or empty. Empty no longer means "fall back to a shared
+// key in this file" — it means the request goes through the proxy, or to the
+// free services if there is no proxy.
 function getHereKey(){
-  return (state.settings && state.settings.hereApiKey) || SHARED_HERE_KEY;
+  return (state.settings && state.settings.hereApiKey) || '';
 }
 
 // ============================================================
@@ -4638,7 +4660,12 @@ const Router = {
     if(!address) return null;
     const tryQuery = async (q)=>{
       try{
-        const url = `https://geocode.search.hereapi.com/v1/geocode?q=${encodeURIComponent(q)}&limit=1&lang=${this._geoLang()}&apiKey=${key}`;
+        // With the user's own key, straight to HERE. Without one, through the
+        // proxy, which holds the shared key and adds it upstream.
+        const url = key
+          ? `https://geocode.search.hereapi.com/v1/geocode?q=${encodeURIComponent(q)}&limit=1&lang=${this._geoLang()}&apiKey=${key}`
+          : apiUrl('/here/geocode', { q, limit: '1', lang: this._geoLang() });
+        if(!url) return null;
         const r = await this._fetch(url);
         if(!r.ok) return null;
         const d = await r.json();
@@ -4698,7 +4725,10 @@ const Router = {
       routingMode:'fast', transportMode:'car',
       matrixAttributes:['travelTimes','distances']
     };
-    const url = `https://matrix.router.hereapi.com/v8/matrix?async=false&apiKey=${encodeURIComponent(apiKey)}`;
+    const url = apiKey
+      ? `https://matrix.router.hereapi.com/v8/matrix?async=false&apiKey=${encodeURIComponent(apiKey)}`
+      : apiUrl('/here/matrix');
+    if(!url) throw new Error('no HERE route configured');
     const resp = await this._fetch(url, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -5460,10 +5490,10 @@ const App = {
       const homeItem = toGeocode.find(x=>x.id==='home');
       const rest = toGeocode.filter(x=>x.id!=='home');
       if(homeItem){
-        const c = hereKey ? await Router.geocodeHere(homeItem.addr, hereKey) : await Router.geocode(homeItem.addr);
+        const c = hereAvailable() ? await Router.geocodeHere(homeItem.addr, hereKey) : await Router.geocode(homeItem.addr);
         if(c){ state.coords['home']=c; updated=true; } else failed++;
       }
-      if(hereKey){
+      if(hereAvailable()){
         // HERE's per-key rate limits are generous enough for a batch like
         // this — no artificial throttling needed.
         const results = await Promise.allSettled(rest.map(({id,addr})=>Router.geocodeHere(addr,hereKey).then(c=>({id,c}))));
@@ -5507,7 +5537,7 @@ const App = {
       const matCoords = allIds.map(id=>state.coords[id]).filter(Boolean);
       const validIds = allIds.filter(id=>state.coords[id]);
       if(matCoords.length >= 2){
-        if(hereKey){
+        if(hereAvailable()){
           // Peak: weekdays 17:00
           const depPeak = new Date(); depPeak.setHours(17,0,0,0);
           const matPeak = await Router.getHereMatrix(matCoords, hereKey, depPeak.toISOString());
@@ -6395,7 +6425,7 @@ const App = {
     const hereKey = getHereKey();
     this._addrTimer = setTimeout(async ()=>{
       try{
-        let results = hereKey ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
+        let results = hereAvailable() ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
         const b = document.getElementById(boxId);
         if(!b) return;
         // Both providers can return "fuzzy" matches — typo-corrected or
@@ -6519,7 +6549,11 @@ const App = {
   async _searchHere(val, key){
     const home = (state.coords && state.coords['home']) || {lat:38.2466, lon:21.7346};
     const q = encodeURIComponent(val.trim());
-    const url = `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${home.lat},${home.lon}&limit=8&lang=${Router._geoLang()}&apiKey=${key}`;
+    const url = key
+      ? `https://autosuggest.search.hereapi.com/v1/autosuggest?q=${q}&at=${home.lat},${home.lon}&limit=8&lang=${Router._geoLang()}&apiKey=${key}`
+      : apiUrl('/here/autosuggest', { q: decodeURIComponent(q), at: `${home.lat},${home.lon}`,
+                                      limit: '8', lang: Router._geoLang() });
+    if(!url) return;
     const r = await Router._fetch(url);
     if(!r.ok) throw new Error(`HERE Autosuggest ${r.status}`);
     const d = await r.json();
@@ -6650,8 +6684,11 @@ const App = {
   // Returns the full display string, or null on failure.
   async _reverseGeocode(lat, lon){
     const hereKey = getHereKey();
-    if(hereKey){
-      const url = `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=${Router._geoLang()}&apiKey=${hereKey}`;
+    if(hereAvailable()){
+      const url = hereKey
+        ? `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${lat},${lon}&lang=${Router._geoLang()}&apiKey=${hereKey}`
+        : apiUrl('/here/revgeocode', { at: `${lat},${lon}`, lang: Router._geoLang() });
+      if(!url) throw new Error('no reverse geocoder configured');
       const r = await Router._fetch(url);
       if(!r.ok) throw new Error(`HERE reverse ${r.status}`);
       const d = await r.json();
@@ -8319,9 +8356,10 @@ const App = {
       // without traffic) than the ones the schedule was actually built from —
       // two different answers for the same journey.
       const hereKey = getHereKey();
-      const geo = (addr)=> hereKey ? Router.geocodeHere(addr, hereKey) : Router.geocode(addr);
-      // Nominatim's public server requires ~1 req/sec; HERE has no such limit.
-      const geoPause = hereKey ? 0 : 1100;
+      const geo = (addr)=> hereAvailable() ? Router.geocodeHere(addr, hereKey) : Router.geocode(addr);
+      // Nominatim's public server requires ~1 req/sec. HERE has no such limit,
+      // and neither does the proxy — it caches and paces on its own side.
+      const geoPause = hereAvailable() ? 0 : 1100;
 
       if(!state.coords['home']){
         const c = await geo(state.settings.homeAddress);
