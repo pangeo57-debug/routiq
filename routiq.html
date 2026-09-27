@@ -6593,7 +6593,16 @@ const App = {
         if(results && results.length && needleWords.length){
           results.forEach(res=>{
             const hay = normalizeSearchText([res._matchText, res.name, res.poiName].filter(Boolean).join(' '));
-            res._score = needleWords.reduce((n,w)=> n + (hay.includes(w) ? 1 : 0), 0);
+            // A number must match as a whole token. As a substring, "58"
+            // scores a point against the postcode 26558 — so a result on the
+            // wrong street outranks the right one because its postcode
+            // happens to contain the digits.
+            res._score = needleWords.reduce((n,w)=>{
+              const hit = /^\d+$/.test(w)
+                ? new RegExp('(^|[^0-9])' + w + '([^0-9]|$)').test(hay)
+                : hay.includes(w);
+              return n + (hit ? 1 : 0);
+            }, 0);
           });
           const anyMatched = results.some(res=>res._score>0);
           if(anyMatched) results = results.filter(res=>res._score>0);
@@ -6807,13 +6816,50 @@ const App = {
     });
   },
 
+  /**
+   * The house number the user typed, if the chosen result dropped it.
+   *
+   * Greek house numbers are sparsely mapped: Nominatim usually knows the
+   * street and not the building, and HERE's autosuggest often answers at
+   * street level too. Both then return an address with no number in it — and
+   * saving that verbatim silently deletes the "58" the user typed, leaving
+   * "Γούναρη, Πάτρα" and a coordinate somewhere along the street.
+   *
+   * The number is kept, on the street it was typed against. The coordinate is
+   * still the provider's (we have nothing better), but the address the user
+   * reads, sends to a client and navigates to is the one they meant.
+   */
+  _keepTypedNumber(chosen, typed){
+    const t = String(typed || '').trim();
+    if(!t) return chosen;
+    // "Γούναρη 58" → street "Γούναρη", number "58". Only a number that FOLLOWS
+    // a word: "58 Γούναρη" is not how addresses are written here, and a lone
+    // number is not an address at all.
+    // (?![0-9]) rather than \b: \b is an ASCII word boundary, so a Greek
+    // suffix letter is not a word character and "12α" was being cut to "12".
+    const m = t.match(/^(.*?[^\s\d])\s+(\d+[α-ωΑ-Ωa-zA-Z]?)(?![0-9])/);
+    if(!m) return chosen;
+    const street = normalizeSearchText(m[1]).trim(), number = m[2];
+    const got = normalizeSearchText(chosen);
+    // Already there? Then the provider knew the building and nothing is needed.
+    if(new RegExp('(^|[^0-9])' + number.toLowerCase() + '([^0-9]|$)').test(got)) return chosen;
+    // Only if this really is the street that was typed — otherwise we would be
+    // stapling a number onto somewhere else entirely.
+    if(!street || !got.includes(street)) return chosen;
+    const parts = chosen.split(',');
+    parts[0] = parts[0].trim() + ' ' + number;
+    return parts.join(',');
+  },
+
   selectAddr(name, lat, lon, boxId='addr-suggest'){
     const coord = {lat:parseFloat(lat), lon:parseFloat(lon)};
     // The name is already built in the fixed street/number/area/city/postal-
     // code order (_formatAddressOrdered) — saved as-is, not truncated to the
     // first 3 comma-parts like before, which would have silently dropped the
     // postal code off the end.
-    const short = name.trim();
+    const typedIn = { 'ob-addr-suggest':'ob-addr', 'set-home-suggest':'set-home' }[boxId] || 'st-addr';
+    const typed = document.getElementById(typedIn)?.value || '';
+    const short = this._keepTypedNumber(name.trim(), typed);
     if(boxId==='ob-addr-suggest'){
       const inp = document.getElementById('ob-addr');
       if(inp) inp.value = short;

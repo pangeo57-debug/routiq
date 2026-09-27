@@ -783,3 +783,55 @@ describe('address suggestions', () => {
     assert.notEqual(box.style.display, 'none');
   });
 });
+
+describe('the house number the user typed is not thrown away', () => {
+  // Greek house numbers are sparsely mapped. Nominatim usually knows the
+  // street and not the building, and HERE's autosuggest often answers at
+  // street level too — so both hand back an address with no number in it.
+  // Saving that verbatim silently deleted the "58" the user had typed.
+
+  const keep = (chosen, typed) => loadApp().App._keepTypedNumber(chosen, typed);
+
+  test('a number the provider dropped is put back', () => {
+    assert.equal(keep('Γούναρη, Πάτρα, 26221', 'Γούναρη 58, Πάτρα'),
+      'Γούναρη 58, Πάτρα, 26221');
+  });
+
+  test('a number the provider already knew is left alone', () => {
+    assert.equal(keep('Γούναρη 58, Πάτρα', 'Γούναρη 58, Πάτρα'), 'Γούναρη 58, Πάτρα');
+    assert.equal(keep('Γούναρη 58, Πάτρα, 26558', 'Γούναρη 58'), 'Γούναρη 58, Πάτρα, 26558');
+  });
+
+  test('a postcode containing the digits is not mistaken for the number', () => {
+    // The street has no number; the postcode 26558 merely contains "58".
+    // Checked as a substring, that looks like the number is already present
+    // and the real one is quietly dropped.
+    assert.equal(keep('Γούναρη, Πάτρα, 26558', 'Γούναρη 58'), 'Γούναρη 58, Πάτρα, 26558');
+    assert.equal(keep('Κανακάρη, Πάτρα, 26221', 'Κανακάρη 22'), 'Κανακάρη 22, Πάτρα, 26221');
+  });
+
+  test('a number is never stapled onto a different street', () => {
+    // Typing one street and picking another is a correction, not a mistake to
+    // undo — the number belongs to the street that was abandoned.
+    assert.equal(keep('Κορίνθου, Πάτρα', 'Γούναρη 58, Πάτρα'), 'Κορίνθου, Πάτρα');
+  });
+
+  test('Greek and Latin suffix letters survive', () => {
+    // \b is an ASCII word boundary, so a Greek suffix letter is not a word
+    // character and "12α" was being cut down to "12".
+    assert.equal(keep('Αγίου Ανδρέου, Πάτρα', 'Αγίου Ανδρέου 12α'), 'Αγίου Ανδρέου 12α, Πάτρα');
+    assert.equal(keep('Ερμού, Αθήνα', 'Ερμού 5Β'), 'Ερμού 5Β, Αθήνα');
+  });
+
+  test('nothing is invented when there is no number to keep', () => {
+    assert.equal(keep('Γούναρη, Πάτρα', 'Γούναρη'), 'Γούναρη, Πάτρα');
+    assert.equal(keep('Γούναρη, Πάτρα', ''), 'Γούναρη, Πάτρα');
+    assert.equal(keep('Γούναρη, Πάτρα', '58'), 'Γούναρη, Πάτρα',
+      'a bare number is not an address and names no street');
+    assert.equal(keep('Γούναρη, Πάτρα', '   '), 'Γούναρη, Πάτρα');
+  });
+
+  test('accents in what was typed do not stop the match', () => {
+    assert.equal(keep('Γούναρη, Πάτρα', 'Γουναρη 58'), 'Γούναρη 58, Πάτρα');
+  });
+});
