@@ -193,5 +193,48 @@ async function deleteSpace(db, body) {
   return { status: 200, body: { deleted: true } };
 }
 
-export { createSpace, pull, push, rotate, deleteSpace, sha256Hex, safeEqual,
+/** Twelve months of nobody touching it. Stated in the privacy policy. */
+const RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Delete spaces nobody has touched for a year.
+ *
+ * A retention period written only in a policy is a promise with nothing
+ * keeping it. This is the part that keeps it.
+ *
+ * Two deliberate restraints:
+ *
+ *  - A batch limit. A single run that deleted a hundred thousand rows because
+ *    of a clock problem is not a cleanup, it is an incident. It is capped, and
+ *    it runs daily, so a genuine backlog drains over days instead of
+ *    disappearing in one irreversible sweep.
+ *  - A floor on updated_at. A row with a missing or absurd timestamp is left
+ *    alone rather than treated as ancient: the failure mode of "0 means 1970
+ *    means delete it" is losing data that was fine.
+ *
+ * Nobody can be warned first — the service holds no email address, by design.
+ * That is exactly why the period is long and the local copy stays untouched:
+ * the device keeps its own data whatever happens here.
+ */
+async function purgeStale(db, now, opts) {
+  const o = opts || {};
+  const maxAge = Number.isFinite(o.maxAgeMs) ? o.maxAgeMs : RETENTION_MS;
+  const limit = Number.isInteger(o.limit) ? o.limit : 500;
+  const cutoff = now - maxAge;
+  // Nothing before 2020 can be a real updated_at from this service.
+  const floor = Date.UTC(2020, 0, 1);
+  if (!Number.isFinite(cutoff) || cutoff <= floor) return { deleted: 0, skipped: 'cutoff out of range' };
+
+  const { results } = await db.prepare(
+    'SELECT space_id FROM spaces WHERE updated_at > ? AND updated_at < ? ORDER BY updated_at LIMIT ?')
+    .bind(floor, cutoff, limit).all();
+  const ids = (results || []).map(r => r.space_id);
+  for (const id of ids) {
+    await db.prepare('DELETE FROM spaces WHERE space_id = ? AND updated_at < ?')
+      .bind(id, cutoff).run();
+  }
+  return { deleted: ids.length, cutoff };
+}
+
+export { createSpace, pull, push, rotate, deleteSpace, purgeStale, RETENTION_MS, sha256Hex, safeEqual,
          validateSpaceId, validateAuthHash, validateDeviceId, LIMITS };

@@ -149,6 +149,21 @@ to be exact, the answer is a Durable Object, not a cleverer version of this.
 With no KV binding the limiter is skipped rather than failing closed: a
 misconfigured limiter must not take the whole proxy down with it.
 
+## Retention
+
+Twelve months untouched and a space is deleted — the period stated in
+PRIVACY.md, kept by a daily cron trigger rather than by the sentence alone.
+Any push or rotation resets the clock.
+
+Nobody can be warned first: the service holds no email address, by design.
+That is why the period is long and why the device's own copy is never touched
+— the server holds a backup, not the original.
+
+Two restraints in the code, both tested: deletes run in bounded batches, so a
+clock problem cannot sweep the database in one irreversible pass, and a row
+with a missing or absurd `updated_at` is left alone rather than treated as
+ancient. "0 means 1970 means delete it" loses data that was fine.
+
 ## What this does not defend against
 
 Said plainly, because a security section that lists only wins is a marketing
@@ -177,6 +192,6 @@ page.
 
     npm run test:worker
 
-65 tests, no network and no Cloudflare account needed — the Worker is plain ES
+71 tests, no network and no Cloudflare account needed — the Worker is plain ES
 modules with a stubbed `env`. They are all about the two ways this can fail
 badly: leaking the key, and being an open relay.

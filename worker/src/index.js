@@ -289,6 +289,20 @@ function stripPrivate(h) {
 }
 
 export default {
+  /**
+   * The daily retention run. Twelve months untouched and a space is deleted —
+   * the promise the privacy policy makes, kept by something that runs.
+   */
+  async scheduled(event, env, ctx) {
+    if (!env.DB) return;
+    try {
+      const res = await Sync.purgeStale(env.DB, Date.now());
+      if (res.deleted) console.log(`retention: deleted ${res.deleted} space(s)`);
+    } catch (err) {
+      console.error('retention run failed', err && err.message);
+    }
+  },
+
   async fetch(request, env, ctx) {
     try {
       return await handle(request, env, ctx);

@@ -28,6 +28,18 @@ function fakeDB() {
           if (/FROM spaces WHERE space_id/.test(sql)) return rows.get(args[0]) || null;
           return null;
         },
+        async all() {
+          if (/SELECT space_id FROM spaces WHERE updated_at/.test(sql)) {
+            const [floor, cutoff, limit] = args;
+            const hits = [...rows.values()]
+              .filter(r => r.updated_at > floor && r.updated_at < cutoff)
+              .sort((a, b) => a.updated_at - b.updated_at)
+              .slice(0, limit)
+              .map(r => ({ space_id: r.space_id }));
+            return { results: hits };
+          }
+          return { results: [] };
+        },
         async run() {
           if (/^\s*INSERT INTO spaces/.test(sql)) {
             const [space_id, auth_hash, primary_device, updated_at, created_at] = args;
@@ -49,6 +61,12 @@ function fakeDB() {
             // or the fake would accept writes the real database refuses.
             if (r && r.version === baseVersion)
               Object.assign(r, { blob, version, primary_device, updated_at, bytes });
+          } else if (/^\s*DELETE FROM spaces WHERE space_id = \? AND updated_at/.test(sql)) {
+            // The retention delete re-checks the age in its own WHERE clause,
+            // so the fake must too — otherwise it would delete rows the real
+            // database would leave alone.
+            const r = rows.get(args[0]);
+            if (r && r.updated_at < args[1]) rows.delete(args[0]);
           } else if (/^\s*DELETE FROM spaces/.test(sql)) {
             rows.delete(args[0]);
           }
@@ -400,5 +418,75 @@ describe('changing the code locks out every other device', () => {
     assert.equal(res.status, 400);
     assert.equal(db._rows.get(ID).auth_hash, await S.sha256Hex(SECRET),
       'the credential must not change on its own');
+  });
+});
+
+describe('spaces nobody has touched for a year are deleted', () => {
+  // A retention period written only in a policy is a promise with nothing
+  // keeping it. These are about the promise being kept, and about it not
+  // taking anything else with it.
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.UTC(2026, 8, 27);
+
+  async function spaceAged(db, id, ageDays) {
+    await S.createSpace(db, { spaceId: id, authHash: SECRET, deviceId: DEV1 }, NOW - ageDays * DAY);
+    return db._rows.get(id);
+  }
+
+  test('an untouched space goes, a recent one stays', async () => {
+    const db = fakeDB();
+    await spaceAged(db, 'oldoldold123', 400);
+    await spaceAged(db, 'recentaaa123', 30);
+    await spaceAged(db, 'justunder123', 364);
+
+    const res = await S.purgeStale(db, NOW);
+    assert.equal(res.deleted, 1);
+    assert.equal(db._rows.has('oldoldold123'), false);
+    assert.equal(db._rows.has('recentaaa123'), true);
+    assert.equal(db._rows.has('justunder123'), true, 'a day short of a year is not a year');
+  });
+
+  test('using the space resets the clock', async () => {
+    const db = fakeDB();
+    await spaceAged(db, 'abcdefgh1234', 400);
+    // One push today is enough to keep it.
+    await S.push(db, { spaceId: 'abcdefgh1234', authHash: SECRET, deviceId: DEV1,
+      blob: 'still-in-use', baseVersion: 0 }, NOW);
+    const res = await S.purgeStale(db, NOW);
+    assert.equal(res.deleted, 0);
+    assert.equal(db._rows.get('abcdefgh1234').blob, 'still-in-use');
+  });
+
+  test('a run is bounded, so a backlog drains instead of vanishing at once', async () => {
+    const db = fakeDB();
+    for (let i = 0; i < 12; i++) await spaceAged(db, 'old' + String(i).padStart(9, '0'), 500);
+    const res = await S.purgeStale(db, NOW, { limit: 5 });
+    assert.equal(res.deleted, 5);
+    assert.equal(db._rows.size, 7, 'the rest wait for the next run');
+  });
+
+  test('a row with a nonsense timestamp is left alone, not treated as ancient', async () => {
+    // "0 means 1970 means delete it" loses data that was fine.
+    const db = fakeDB();
+    await spaceAged(db, 'abcdefgh1234', 10);
+    db._rows.get('abcdefgh1234').updated_at = 0;
+    const res = await S.purgeStale(db, NOW);
+    assert.equal(res.deleted, 0);
+    assert.equal(db._rows.size, 1);
+  });
+
+  test('a clock far in the past deletes nothing at all', async () => {
+    // If `now` ever came back wrong, the cutoff would sweep everything.
+    const db = fakeDB();
+    await spaceAged(db, 'abcdefgh1234', 400);
+    const res = await S.purgeStale(db, 1000);
+    assert.equal(res.deleted, 0);
+    assert.ok(res.skipped, 'and it says why rather than silently doing nothing');
+    assert.equal(db._rows.size, 1);
+  });
+
+  test('the period is the one the policy states', () => {
+    assert.equal(S.RETENTION_MS, 365 * 24 * 60 * 60 * 1000);
   });
 });

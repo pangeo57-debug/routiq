@@ -33,3 +33,9 @@ preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
 binding = "DB"
 database_name = "routepal-sync"
 database_id = "PUT_YOUR_D1_ID_HERE"
+
+# Retention. Twelve months untouched and a space is deleted — see PRIVACY.md.
+# Runs daily and deletes in bounded batches, so a backlog drains over days
+# rather than vanishing in one irreversible sweep.
+[triggers]
+crons = ["17 3 * * *"]
