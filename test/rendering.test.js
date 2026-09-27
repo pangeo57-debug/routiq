@@ -563,3 +563,59 @@ describe('what the page is allowed to load and talk to', () => {
       'frame-ancestors is inert in a meta tag and must not be listed');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Adding a break by hand
+// ---------------------------------------------------------------------------
+
+describe('inserting a break respects every stretch, not just the widest', () => {
+  // The check read av.end, so a student free 15:00-17:00 and again
+  // 19:00-22:00 had an av.end of 22:00 and the lesson could be pushed into
+  // the hour they had said they were busy without anything objecting.
+
+  function world(app) {
+    const S = app.Scheduler;
+    const a = student('a', { days: [1], window: { start: '15:00', end: '22:00' } });
+    const busy = student('busy', { days: [1], window: { start: '15:00', end: '17:00' } });
+    busy.availability[1] = { on: true, start: '19:00', end: '22:00',
+      windows: [[S.toMin('15:00'), S.toMin('17:00')], [S.toMin('19:00'), S.toMin('22:00')]] };
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ students: [a, busy], settings: cfg,
+      coords: { home: { lat: 38.240, lon: 21.730 }, a: { lat: 38.241, lon: 21.731 },
+                busy: { lat: 38.242, lon: 21.732 } },
+      schedule: { 1: [slot('a', '15:00', '16:00', { address: 'addr-a' }),
+                      slot('busy', '16:05', '17:00', { address: 'addr-busy', duration: 55 })] },
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return cfg;
+  }
+
+  test('a break that would push a lesson into a busy hour is refused', () => {
+    const app = loadApp();
+    world(app);
+    const toasts = [];
+    app.Toast.show = (msg) => toasts.push(msg);
+    const before = JSON.stringify(app.state.schedule);
+
+    // 60 minutes after the first lesson moves 'busy' to 17:05-18:00 — inside
+    // the stretch they said they cannot do.
+    app.App.addBreakAfter(1, '16:00', 60);
+
+    assert.equal(JSON.stringify(app.state.schedule), before,
+      'the lesson must not move into an hour the student is not free');
+    assert.ok(toasts.length > 0, 'and the user must be told why');
+    assert.deepStrictEqual(Array.from(app.state.settings.blockedSlots || []), [],
+      'a refused break must not be saved either');
+  });
+
+  test('a break that still lands inside a free stretch is accepted', () => {
+    const app = loadApp();
+    world(app);
+    app.Toast.show = () => {};
+    // 180 minutes ends the break at 19:00; one minute of driving plus the
+    // two-minute margin puts the lesson at 19:03, inside the evening stretch.
+    app.App.addBreakAfter(1, '16:00', 180);
+    const moved = app.state.schedule[1].find(s => s.studentId === 'busy');
+    assert.equal(moved.start, '19:03', `got ${moved.start}`);
+    assert.equal((app.state.settings.blockedSlots || []).length, 1);
+  });
+});

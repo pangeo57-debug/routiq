@@ -2430,3 +2430,75 @@ describe('a gap names the constraint that caused it', () => {
     assert.equal(why.from, '19:30');
   });
 });
+
+// ---------------------------------------------------------------------------
+// The shared layout primitives
+// ---------------------------------------------------------------------------
+
+describe('one answer to "where may this lesson go"', () => {
+  // Five functions used to lay out a day, each with its own copy of these
+  // steps, and they drifted: rebuildDay pinned the first lesson to the opening
+  // of the working day and rejected every arrangement whose first student was
+  // not free yet — switching the optimizer off for a month — while
+  // relayoutDay, doing the same job, had it right the whole time.
+
+  test('occupantIds names everyone a shared session ties up', () => {
+    const S = loadApp().Scheduler;
+    assert.deepStrictEqual(Array.from(S.occupantIds(slot('solo', '15:00', '16:00'))), ['solo']);
+    assert.deepStrictEqual(
+      Array.from(S.occupantIds(slot('a', '15:00', '16:00', { pairedStudentId: 'b' }))), ['a', 'b']);
+    assert.deepStrictEqual(
+      Array.from(S.occupantIds(slot('a', '15:00', '16:00',
+        { groupMemberIds: ['a', 'b', 'c'], pairedStudentId: 'b' }))), ['a', 'b', 'c'],
+      'a group lists its own members rather than the pair field');
+  });
+
+  test('a slot naming somebody who is not on the roster is left alone', () => {
+    const S = loadApp().Scheduler;
+    const byId = { a: student('a') };
+    assert.equal(S.occupantsOf(slot('a', '15:00', '16:00', { pairedStudentId: 'ghost' }), byId), null,
+      'guessing at a missing occupant is how a partner gets booked when busy');
+    assert.equal(S.occupantsOf(slot('a', '15:00', '16:00'), byId).length, 1);
+  });
+
+  test('earliestLegal alternates between free stretches and breaks', () => {
+    const S = loadApp().Scheduler;
+    const m = (t) => S.toMin(t);
+    // Free 15:00-15:30 and 17:00-17:35; a break until 17:10. Snapping into the
+    // second stretch lands at 17:00, inside the break; clearing the break
+    // lands at 17:10, where a 30-minute lesson no longer fits before 17:35.
+    const wins = [[m('15:00'), m('15:30')], [m('17:00'), m('17:35')], [m('19:00'), m('22:00')]];
+    const breaks = [{ start: m('16:00'), end: m('17:10') }];
+    assert.equal(S.earliestLegal(wins, breaks, m('16:02'), 30), m('19:00'),
+      'one pass of either check answers 17:00 or 17:10, and both are wrong');
+    // With a shorter lesson the second stretch does work, after the break.
+    assert.equal(S.earliestLegal(wins, breaks, m('16:02'), 20), m('17:10'));
+    // Nothing left in the day.
+    assert.equal(S.earliestLegal(wins, breaks, m('21:50'), 30), null);
+  });
+
+  test('usableWindows drops stretches too short to hold the lesson', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const st = student('a', { days: [1], window: { start: '15:00', end: '22:00' } });
+    st.availability[1] = { on: true, start: '19:00', end: '22:00',
+      windows: [[S.toMin('15:00'), S.toMin('15:20')], [S.toMin('19:00'), S.toMin('22:00')]] };
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    app.setState({ students: [st], settings: cfg });
+
+    assert.equal(S.usableWindows([st], 1, 20, cfg).wins.length, 2, 'both hold 20 minutes');
+    assert.equal(S.usableWindows([st], 1, 60, cfg).wins.length, 1, 'only the evening holds an hour');
+    assert.equal(S.usableWindows([st], 1, 600, cfg), null, 'nothing holds ten hours');
+  });
+
+  test('breaksOn reads only the day asked for', () => {
+    const S = loadApp().Scheduler;
+    const cfg = settings({ blockedSlots: [
+      { day: 1, start: '16:00', end: '17:00' }, { day: 2, start: '18:00', end: '19:00' }] });
+    // Compared as JSON: objects built inside the vm sandbox carry ITS Object
+    // prototype, so deepStrictEqual fails on identity even when every field
+    // matches. This is written up in LESSONS.md and still caught me out.
+    assert.equal(JSON.stringify(S.breaksOn(1, cfg)), JSON.stringify([{ start: 960, end: 1020 }]));
+    assert.equal(S.breaksOn(3, cfg).length, 0);
+  });
+});

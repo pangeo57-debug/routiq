@@ -2541,11 +2541,9 @@ const Scheduler = {
         // member's hours alone put shared sessions in slots the partner could
         // not attend — B free from 17:00 was being booked at 16:05, and no
         // later pass caught it because enforceConstraints skips group slots.
-        const ids = (slot.groupMemberIds && slot.groupMemberIds.length)
-          ? slot.groupMemberIds
-          : [slot.studentId, slot.pairedStudentId].filter(Boolean);
-        const occupants = ids.map(id=>students.find(s=>s.id===id)).filter(Boolean);
-        if(occupants.length !== ids.length) return null;
+        const byId = Object.fromEntries(students.map(s=>[s.id,s]));
+        const occupants = Scheduler.occupantsOf(slot, byId);
+        if(!occupants) return null;
         const student=occupants[0];
         const av=student.availability&&student.availability[day];
         if(!av||!av.on) return null;
@@ -2950,6 +2948,74 @@ const Scheduler = {
     return i === windows.length - 1 ? this.endFlex() : 0;
   },
 
+  // ---- ONE PLACE FOR "WHERE MAY THIS LESSON GO" ------------------------
+  //
+  // Five functions used to lay out a day, each with its own copy of these
+  // three steps. They drifted, as copies do: rebuildDay pinned the first
+  // lesson to the opening of the working day and so rejected every
+  // arrangement whose first student was not free yet, which switched the
+  // optimizer off entirely for a month — while relayoutDay, doing the same
+  // job twelve lines away, had it right the whole time.
+  //
+  // Whatever else is true of these three, every caller now gets the SAME
+  // answer, and a fix lands everywhere at once.
+
+  /**
+   * Everybody a slot actually ties up. A paired or group block is filed under
+   * one member's id, so reading slot.studentId alone silently ignores whether
+   * the others are free — which is exactly how a student free from 17:00 was
+   * booked at 16:05.
+   */
+  occupantIds(sl){
+    return (sl.groupMemberIds && sl.groupMemberIds.length)
+      ? sl.groupMemberIds.slice()
+      : [sl.studentId, sl.pairedStudentId].filter(Boolean);
+  },
+  occupantsOf(sl, byId){
+    const ids = this.occupantIds(sl);
+    const out = ids.map(id => byId[id]).filter(Boolean);
+    // A slot naming someone who is not in the roster is not something to
+    // guess about: the caller must leave that slot alone.
+    return out.length === ids.length ? out : null;
+  },
+
+  /**
+   * The stretches everyone in the slot shares on this day, keeping only those
+   * long enough to hold `dur`. Returns null when none can.
+   */
+  usableWindows(occupants, day, dur, settings){
+    const all = this.commonWindows(occupants, day, settings);
+    const wins = all.filter((w, i) => w[1] + this.windowFlex(all, i) - w[0] >= dur);
+    return wins.length ? { all, wins } : null;
+  },
+
+  /**
+   * The earliest moment at or after `notBefore` when a lesson of `dur` sits
+   * inside ONE free stretch and outside every break.
+   *
+   * The alternation is the point: clearing a break can land inside an hour
+   * someone is busy, and snapping into a free stretch can land inside a break.
+   * A single pass of either check is wrong, and was, in more than one copy.
+   */
+  earliestLegal(wins, breaks, notBefore, dur){
+    let t = notBefore;
+    for(let guard = 0; guard < breaks.length + wins.length + 2; guard++){
+      const snapped = this.earliestFit(wins, t, dur);
+      if(snapped === null) return null;
+      t = snapped;
+      const hit = breaks.find(b => t < b.end && t + dur > b.start);
+      if(!hit) return t;
+      t = hit.end;
+    }
+    return null;
+  },
+
+  /** The user's reserved breaks on a day, in minutes. */
+  breaksOn(day, settings){
+    return (settings.blockedSlots || []).filter(b => b.day === day)
+      .map(b => ({ start: this.toMin(b.start), end: this.toMin(b.end) }));
+  },
+
   // Does a lesson from s to e fit inside ONE free stretch?
   fitsAvailability(student, day, s, e, flex){
     const wins = this.availWindows(student, day);
@@ -3260,12 +3326,9 @@ const Scheduler = {
     // Every student who occupies a slot, not just the one whose id is on it: a
     // group/paired block is stored under the leader's id, so checking only
     // sl.studentId silently ignored whether the OTHER member is actually free.
-    const occupantsOf=(sl)=>{
-      const ids = sl.groupMemberIds && sl.groupMemberIds.length
-        ? sl.groupMemberIds.slice()
-        : [sl.studentId, sl.pairedStudentId].filter(Boolean);
-      return ids.map(id=>sm[id]).filter(Boolean);
-    };
+    // The reporter checks whoever it can identify and stays quiet about ids it
+    // cannot — unlike the layout passes, which refuse to touch such a slot.
+    const occupantsOf=(sl)=> this.occupantIds(sl).map(id=>sm[id]).filter(Boolean);
 
     for(const d of settings.workDays){
       const slots=(schedule[d]||[]).slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
@@ -3465,19 +3528,15 @@ const Scheduler = {
     const dh = settings.dayHours && settings.dayHours[day];
     if(!dh) return null;
     const dayStart = this.toMin(dh.start), dayEnd = this.toMin(dh.end)+this.endFlex();
-    const breaks = (settings.blockedSlots||[]).filter(b=>b.day===day)
-      .map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)}));
+    const breaks = this.breaksOn(day, settings);
 
     const out = []; let prev = null;
     for(const sl of slots){
       const dur = this.toMin(sl.end) - this.toMin(sl.start);
-      const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
-        ? sl.groupMemberIds
-        : [sl.studentId, sl.pairedStudentId].filter(Boolean);
-      // Every stretch shared by everyone in this slot. A student busy in the
-      // middle of the day has two of them and either will do.
-      const occupants = ids.map(id=>sm[id]).filter(Boolean);
-      if(occupants.length !== ids.length) return null;
+      const occupants = this.occupantsOf(sl, sm);
+      if(!occupants) return null;
+      // Clipped to the working day before the length filter, so a stretch that
+      // only fits by running outside the user's hours is not offered.
       const clipped = this.commonWindows(occupants, day, settings)
         .map(w=>[Math.max(w[0],dayStart), Math.min(w[1],dayEnd)]);
       const wins = clipped.filter((w,i)=>w[1]+this.windowFlex(clipped,i)-w[0] >= dur);
@@ -3491,17 +3550,9 @@ const Scheduler = {
                               this.toMin(prev.end)) + margin;
         earliest = Math.max(earliest, this.toMin(prev.end) + need);
       }
-      // Alternate between the two: landing after a break can fall in a gap of
-      // the student's availability, and snapping into a stretch can land in a
-      // break. Loop until both hold.
-      for(let guard=0; guard<breaks.length+wins.length+2; guard++){
-        const snapped = this.earliestFit(wins, earliest, dur);
-        if(snapped === null) return null;
-        earliest = snapped;
-        const hit = breaks.find(b => earliest < b.end && earliest+dur > b.start);
-        if(!hit) break;
-        earliest = hit.end;
-      }
+      const legal = this.earliestLegal(wins, breaks, earliest, dur);
+      if(legal === null) return null;
+      earliest = legal;
       if(!clipped.some((w,i)=>earliest>=w[0] && earliest+dur<=w[1]+this.windowFlex(clipped,i))) return null;
       if(earliest+dur > latest || earliest+dur > dayEnd) return null;
       const laid = {...sl, start:this.toTime(earliest), end:this.toTime(earliest+dur)};
@@ -3620,9 +3671,7 @@ const Scheduler = {
     const dh = settings.dayHours && settings.dayHours[day];
     if(dh && this.toMin(dh.start) > bound){ bound = this.toMin(dh.start); reason = {kind:'dayStart'}; }
 
-    const ids = (next.groupMemberIds && next.groupMemberIds.length)
-      ? next.groupMemberIds
-      : [next.studentId, next.pairedStudentId].filter(Boolean);
+    const ids = this.occupantIds(next);
     const dur = this.toMin(next.end) - start;
 
     // Windows and breaks push each other: clearing a break can land inside an
@@ -3752,27 +3801,19 @@ const Scheduler = {
       const slots = (schedule[d] || []).slice()
         .sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
       if(!slots.length) continue;
-      const breaks = (settings.blockedSlots||[]).filter(b=>b.day===d)
-        .map(b=>({start:this.toMin(b.start), end:this.toMin(b.end)}));
+      const breaks = this.breaksOn(d, settings);
 
       let prev = null;
       for(const sl of slots){
         const s0 = this.toMin(sl.start), dur = this.toMin(sl.end) - s0;
 
-        // Earliest this slot may start, per the people actually in it — a
-        // group/paired block is filed under one id, so checking only
-        // sl.studentId would move it before the other member is free.
-        const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
-          ? sl.groupMemberIds
-          : [sl.studentId, sl.pairedStudentId].filter(Boolean);
-        // Every stretch shared by everyone in this slot. A student busy in the
-        // middle of the day has two of them and either will do. No stretch that
-        // can hold the lesson means leave it exactly where it is.
-        const occupants = ids.map(id=>sm[id]).filter(Boolean);
-        if(!ids.length || occupants.length !== ids.length){ prev = sl; continue; }
-        const all = this.commonWindows(occupants, d, settings);
-        const wins = all.filter((w,i)=>w[1]+this.windowFlex(all,i)-w[0] >= dur);
-        if(!wins.length){ prev = sl; continue; }
+        // Earliest this slot may start, per the people actually in it. No
+        // stretch that can hold the lesson means leave it exactly where it is.
+        const occupants = this.occupantsOf(sl, sm);
+        if(!occupants || !occupants.length){ prev = sl; continue; }
+        const usable = this.usableWindows(occupants, d, dur, settings);
+        if(!usable){ prev = sl; continue; }
+        const wins = usable.wins;
         let earliest = Math.max(dayStart, wins[0][0]);
 
         if(prev){
@@ -3785,17 +3826,9 @@ const Scheduler = {
           earliest = Math.max(earliest, this.toMin(prev.end) + need);
         }
 
-        // Land inside one free stretch AND outside every break. Either can push
-        // into the other, so alternate until both hold.
-        let ok = false;
-        for(let guard=0; guard<breaks.length+wins.length+2; guard++){
-          const snapped = this.earliestFit(wins, earliest, dur);
-          if(snapped === null) break;
-          earliest = snapped;
-          const hit = breaks.find(b => earliest < b.end && earliest+dur > b.start);
-          if(!hit){ ok = true; break; }
-          earliest = hit.end;
-        }
+        const legal = this.earliestLegal(wins, breaks, earliest, dur);
+        const ok = legal !== null;
+        if(ok) earliest = legal;
 
         if(ok && earliest < s0 && !this.isBlocked(earliest, earliest+dur, d, settings)){
           sl.start = this.toTime(earliest);
@@ -7737,12 +7770,13 @@ const App = {
       const need = prev.studentId === sl.studentId ? 0
         : Scheduler.travelEstMin(prev.studentId, prev.address, sl.studentId, sl.address, day) + margin;
       const start = Math.max(Scheduler.toMin(sl.start), prevEnd + need), end = start + dur;
-      const ids = (sl.groupMemberIds && sl.groupMemberIds.length)
-        ? sl.groupMemberIds : [sl.studentId, sl.pairedStudentId].filter(Boolean);
-      for(const id of ids){
+      for(const id of Scheduler.occupantIds(sl)){
         const st = state.students.find(s=>s.id===id);
         const av = st && st.availability && st.availability[day];
-        if(!av || !av.on || end > Scheduler.toMin(av.end)+Scheduler.endFlex()){
+        // fitsAvailability, not av.end: a student free 15:00-17:00 and again
+        // 19:00-22:00 has av.end of 22:00, so pushing their lesson into the
+        // hour they said they are busy passed this check unnoticed.
+        if(!av || !av.on || !Scheduler.fitsAvailability(st, day, start, end)){
           Toast.show(tf('toast_break_no_room',{name: st?st.name:''}),'error'); return;
         }
       }
