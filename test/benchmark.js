@@ -34,7 +34,33 @@ const { auditSchedule } = require('./invariants');
 const Solomon = require('./solomon');
 
 const SEED = 12345;          // every run is reproducible
-const INSTANCES = ['C101', 'R101', 'RC101'];
+// The three-instance default keeps `npm run bench` usable as a quick check.
+// `--all` runs Solomon's complete 56-instance set, and `--class C1` (or R2,
+// RC1, …) one family. Three instances is enough to catch a regression; it is
+// not enough to claim a number, because the classes differ on purpose —
+// C is clustered, R uniform, RC mixed, series 1 has a short horizon and many
+// routes, series 2 a long horizon and few.
+const QUICK = ['C101', 'R101', 'RC101'];
+const ALL = [
+  ...Array.from({ length: 9 }, (_, i) => 'C10' + (i + 1)),
+  ...Array.from({ length: 8 }, (_, i) => 'C20' + (i + 1)),
+  ...Array.from({ length: 12 }, (_, i) => 'R1' + String(i + 1).padStart(2, '0')),
+  ...Array.from({ length: 11 }, (_, i) => 'R2' + String(i + 1).padStart(2, '0')),
+  ...Array.from({ length: 8 }, (_, i) => 'RC10' + (i + 1)),
+  ...Array.from({ length: 8 }, (_, i) => 'RC20' + (i + 1)),
+];
+const classOf = (name) => name.replace(/[0-9]+$/, '') + (Number(name.match(/[0-9]+$/)[0]) >= 200 ? '' : '');
+function chosenInstances(argv) {
+  if (argv.includes('--all')) return ALL;
+  const ci = argv.indexOf('--class');
+  if (ci >= 0 && argv[ci + 1]) {
+    const want = argv[ci + 1].toUpperCase();
+    const hit = ALL.filter(n => n.startsWith(want));
+    if (!hit.length) throw new Error(`no instances match --class ${want}`);
+    return hit;
+  }
+  return QUICK;
+}
 
 // ---------------------------------------------------------------------------
 
@@ -83,7 +109,7 @@ function optimalTour(points, home, d) {
 
 // ---------------------------------------------------------------------------
 
-async function solomonRun(name, maxRoutes) {
+async function solomonRun(name, maxRoutes, budgets) {
   const inst = Solomon.parseInstance(name);
   const best = Solomon.parseSolution(name);
 
@@ -106,7 +132,7 @@ async function solomonRun(name, maxRoutes) {
     travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
 
   const { schedule, ms } = await runPipeline(app, sts, cfg, coords,
-    { attempts: 2, alns: 20000, lns: 8000 });
+    budgets || { attempts: 2, alns: 20000, lns: 8000 });
 
   const scored = Solomon.scheduleCost(inst, schedule, days);
   return { name, served: app.Scheduler.countTotal(schedule), total: inst.n - 1,
@@ -147,9 +173,13 @@ async function ownRun() {
     km, opt, idle, exact, violations: auditSchedule(S, schedule, sts, cfg).length, ms };
 }
 
-async function collect() {
+async function collect(names, budgets) {
   const solomon = [];
-  for (const name of INSTANCES) solomon.push(await solomonRun(name, 25));
+  for (const name of names) {
+    process.stderr.write(`  ${name} ...\r`);
+    solomon.push(await solomonRun(name, 25, budgets));
+  }
+  process.stderr.write('           \r');
   return { solomon, own: await ownRun() };
 }
 
@@ -169,6 +199,46 @@ function report(res) {
   }
   const over = res.solomon.reduce((a, r) => a + r.overCapacity, 0);
   console.log('  ' + '-'.repeat(70));
+
+  // With the whole set, per-instance rows are unreadable and, worse,
+  // cherry-pickable. The class averages are the honest summary: the six
+  // families differ by design, and a method can be good at one and poor at
+  // another. Gap is averaged per instance, not computed from summed distance,
+  // so a long instance cannot drown out a short one.
+  if (res.solomon.length > 6) {
+    const fam = (n) => n.replace(/[0-9]+$/, '') + (Number(n.match(/[0-9]+$/)[0]) >= 200 ? '2' : '1');
+    const groups = {};
+    for (const r of res.solomon) (groups[fam(r.name)] = groups[fam(r.name)] || []).push(r);
+    console.log('\n  By class (gap averaged per instance)\n');
+    console.log('  class    n   served     mean gap   median   worst    routes vs best');
+    console.log('  ' + '-'.repeat(70));
+    const all = [];
+    for (const k of Object.keys(groups).sort()) {
+      const g = groups[k];
+      const gaps = g.map(r => ((r.cost / r.bestCost) - 1) * 100).sort((x, y) => x - y);
+      all.push(...gaps);
+      const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      const med = gaps[Math.floor(gaps.length / 2)];
+      const servedPct = g.reduce((a, r) => a + r.served / r.total, 0) / g.length * 100;
+      const rt = g.reduce((a, r) => a + r.routes, 0), rb = g.reduce((a, r) => a + r.bestRoutes, 0);
+      console.log('  ' + k.padEnd(8) + String(g.length).padEnd(4) +
+        `${servedPct.toFixed(1)}%`.padEnd(11) +
+        `+${mean.toFixed(1)}%`.padEnd(11) + `+${med.toFixed(1)}%`.padEnd(9) +
+        `+${gaps[gaps.length - 1].toFixed(1)}%`.padEnd(9) + `${rt} vs ${rb}`);
+    }
+    all.sort((x, y) => x - y);
+    const mean = all.reduce((a, b) => a + b, 0) / all.length;
+    console.log('  ' + '-'.repeat(70));
+    console.log('  ' + 'ALL'.padEnd(8) + String(all.length).padEnd(4) + ''.padEnd(11) +
+      `+${mean.toFixed(1)}%`.padEnd(11) + `+${all[Math.floor(all.length / 2)].toFixed(1)}%`.padEnd(9) +
+      `+${all[all.length - 1].toFixed(1)}%`);
+    if (res.wide) {
+      console.log(`\n  Reduced search budget for the sweep (ALNS ${res.budgets.alns / 1000}s, ` +
+        `LNS ${res.budgets.lns / 1000}s vs 20s/8s for the three-instance run).`);
+      console.log('  These numbers are a handicapped run and must not be compared');
+      console.log('  against figures produced at the full budget.');
+    }
+  }
   console.log('\n  Read this honestly. Solomon\'s objective is to minimise the number of');
   console.log('  vehicles first and distance second, and to respect a load capacity.');
   console.log('  RoutePal minimises neither vehicle count nor load — it has no concept');
@@ -210,7 +280,17 @@ function compare(a, b) {
 (async () => {
   const idx = process.argv.indexOf('--against');
   const asJson = process.argv.includes('--json');
-  const res = await collect();
+  const names = chosenInstances(process.argv);
+  // A sweep of all 56 at the full per-instance budget takes the best part of
+  // an hour. Scale the search down so a whole-set run is something you will
+  // actually do — and say so in the output, because a smaller budget is a
+  // real handicap and the numbers must not be compared across budgets.
+  const wide = names.length > 6;
+  const budgets = wide ? { attempts: 2, alns: 6000, lns: 2500 }
+                       : { attempts: 2, alns: 20000, lns: 8000 };
+  const res = await collect(names, budgets);
+  res.budgets = budgets;
+  res.wide = wide;
 
   // In --json mode this process is a sub-run feeding the comparison above it:
   // anything but JSON on stdout and the parent cannot read the result.
@@ -222,8 +302,10 @@ function compare(a, b) {
     const tmp = path.join(os.tmpdir(), `routiq-${ref.replace(/[^\w]/g, '_')}.html`);
     fs.writeFileSync(tmp, execSync(`git show ${ref}:routiq.html`, { maxBuffer: 64 * 1024 * 1024 }));
     console.log(`Re-running against ${ref} …\n`);
-    const out = execSync(`ROUTIQ_APP_FILE=${tmp} node ${__filename} --json`,
-      { maxBuffer: 16 * 1024 * 1024 }).toString();
+    const sameSet = process.argv.slice(2)
+      .filter(x => x !== '--against' && x !== ref).join(' ');
+    const out = execSync(`ROUTIQ_APP_FILE=${tmp} node ${__filename} --json ${sameSet}`,
+      { maxBuffer: 16 * 1024 * 1024, timeout: 60 * 60 * 1000 }).toString();
     compare(res, JSON.parse(out));
   }
   process.exit(bad ? 1 : 0);

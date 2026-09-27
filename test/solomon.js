@@ -62,8 +62,12 @@ const dist = (inst, a, b) =>
  * Two deliberate choices, both making the problem HARDER for us than the
  * benchmark requires, so that no result can be an artefact of a loophole:
  *
- *  - Every time window is shortened by 15 minutes at the end, because the
- *    scheduler allows a lesson to overrun its window by that much.
+ *  - Every time window is shortened by the scheduler's end-of-day tolerance,
+ *    so a lesson cannot buy itself room the benchmark does not allow. That
+ *    tolerance used to be a hard-coded 15 minutes here as well as in the app;
+ *    it is now a setting that defaults to zero, and copying the old number
+ *    into this file would have gone on shortening every window for an overrun
+ *    that no longer happens.
  *  - Day 6 is skipped. The optimizer charges a penalty for Saturday work and
  *    treats it as off-peak traffic; neither belongs in this comparison.
  */
@@ -76,6 +80,7 @@ function toRoutePal(inst, { student, settings }, maxRoutes) {
   const dayHours = {};
   for (const d of days) dayHours[d] = { start: '00:00', end: hhmm(horizon) };
   const cfg = settings({ workDays: days, dayHours, travelMargin: 0, homeAddress: 'depot' });
+  const flex = Number(cfg.endFlexMin) || 0;
 
   // Coordinates carry no distance here — the matrix does — but ALNS builds its
   // destroy/repair neighbourhoods from geometry, so it needs real ones.
@@ -87,7 +92,7 @@ function toRoutePal(inst, { student, settings }, maxRoutes) {
     const [ready, due] = inst.tw[node];
     const service = inst.service(node);
     const st = student('n' + node, { days, lessonsPerWeek: 1, lessonDuration: service,
-      window: { start: hhmm(ready), end: hhmm(Math.max(ready + service, due + service - 15)) } });
+      window: { start: hhmm(ready), end: hhmm(Math.max(ready + service, due + service - flex)) } });
     sts.push(st); ids.push(st.id);
     coords[st.id] = place(inst.coord[node]);
   }
