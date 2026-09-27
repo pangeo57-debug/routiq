@@ -619,3 +619,61 @@ describe('inserting a break respects every stretch, not just the widest', () => 
     assert.equal((app.state.settings.blockedSlots || []).length, 1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Warning before the server copy expires
+// ---------------------------------------------------------------------------
+
+describe('the app warns before the backup expires, since nothing else can', () => {
+  // There is no email address to warn anyone with — the service holds none,
+  // deliberately. The only warning that can exist is inside the app, and it
+  // has to appear early enough to be acted on.
+
+  const DAY = 24 * 60 * 60 * 1000;
+
+  function withSync(app, daysAgo) {
+    const cfg = settings();
+    if (daysAgo != null) cfg.sync = { code: 'A'.repeat(24), version: 1, primary: true,
+      lastPush: Date.now() - daysAgo * DAY };
+    app.setState({ students: [], schedule: {}, settings: cfg, coords: {} });
+    return cfg;
+  }
+
+  test('nothing is said while the copy is fresh', () => {
+    const app = loadApp();
+    withSync(app, 3);
+    assert.equal(app.App.syncStaleDays(), 3);
+    assert.ok(app.App.syncStaleDays() < app.App.SYNC_STALE_DAYS);
+  });
+
+  test('the warning appears well before the year is up', () => {
+    const app = loadApp();
+    withSync(app, 90);
+    assert.ok(app.App.syncStaleDays() >= app.App.SYNC_STALE_DAYS,
+      'ninety days idle must be worth saying');
+    // And with plenty of time left to act on it.
+    assert.ok(app.App.SYNC_EXPIRY_DAYS - app.App.syncStaleDays() > 180,
+      'a warning that arrives with days to spare is not a warning');
+  });
+
+  test('the threshold leaves most of the year to act', () => {
+    const app = loadApp();
+    assert.ok(app.App.SYNC_STALE_DAYS < app.App.SYNC_EXPIRY_DAYS / 4,
+      'warn in the first quarter of the period, not at the end');
+  });
+
+  test('sync switched off says nothing at all', () => {
+    const app = loadApp();
+    withSync(app, null);
+    assert.equal(app.App.syncStaleDays(), null,
+      'someone who never turned sync on has no copy to lose');
+  });
+
+  test('a copy that has never been sent is not reported as stale', () => {
+    const app = loadApp();
+    const cfg = settings();
+    cfg.sync = { code: 'A'.repeat(24), version: 0, primary: true, lastPush: null };
+    app.setState({ students: [], schedule: {}, settings: cfg, coords: {} });
+    assert.equal(app.App.syncStaleDays(), null);
+  });
+});
