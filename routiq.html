@@ -1651,7 +1651,23 @@ const DEMO_STUDENTS = [
 // SCHEDULER
 // ============================================================
 const Scheduler = {
-  toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m },
+  // Parsing "17:00" came to 22% of the scheduler's CPU: the search re-reads the
+  // same few hundred strings millions of times. Pure function, tiny key space
+  // (one entry per distinct time string), so a plain memo is safe — there is
+  // nothing to invalidate.
+  _minCache: Object.create(null),
+  toMin(t){
+    const hit = Scheduler._minCache[t];
+    if(hit !== undefined) return hit;
+    const [h,m] = String(t).split(':').map(Number);
+    const v = h*60+m;
+    // A malformed string is cached too, and deliberately: it yields NaN either
+    // way, so the guard that used to sit here changed nothing and no test
+    // could tell it was gone. The map has a null prototype, so a key like
+    // "__proto__" is an ordinary entry rather than a booby trap.
+    Scheduler._minCache[t] = v;
+    return v;
+  },
   minToTime(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0') },
   toTime(m){ return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}` },
 
@@ -1667,6 +1683,18 @@ const Scheduler = {
   // itself is truthy, so the fallback never triggers, and NaN then silently
   // propagates through every downstream distance/time calculation. Use this
   // wherever a raw coordinate is read, instead of a plain `||`.
+  // coordIds.indexOf() ran a linear scan of every id on every single lookup.
+  // The map is built once per matrix and hangs off the matrix itself, so it
+  // dies with it — a rebuilt matrix cannot be served a stale index.
+  _matIndex(mat){
+    if(!mat._ix){
+      const ix = Object.create(null);
+      mat.coordIds.forEach((id, i) => { ix[id] = i; });
+      Object.defineProperty(mat, '_ix', { value: ix, enumerable: false });
+    }
+    return mat._ix;
+  },
+
   validCoord(c){
     return !!c && Number.isFinite(c.lat) && Number.isFinite(c.lon);
   },
@@ -1708,13 +1736,47 @@ const Scheduler = {
   // Estimated travel minutes between two slots/addresses using geocoords.
   // `atMin` is when the journey STARTS (minutes past midnight); omit it and the
   // peak matrix is used, as before.
+  // A scheduling run asks for the same journeys over and over — two million
+  // times in a seven-second search on a 24-client roster, against a few
+  // hundred distinct pairs. haversineKm alone was 40% of the CPU.
+  //
+  // The cache is opened and closed around ONE run rather than living on the
+  // Scheduler, because within a run the coordinates and the travel matrices
+  // cannot change. That removes the entire question of invalidation, which is
+  // where a cache like this would otherwise quietly start returning distances
+  // to where somebody used to live.
+  _travel: null,
+  beginTravelCache(){ this._travel = { min: new Map(), km: new Map(), depth: (this._travel ? this._travel.depth : 0) + 1 }; },
+  endTravelCache(){ this._travel = null; },
+  _travelKey(fromId, fromAddr, toId, toAddr, day, atMin){
+    // The matrix chosen depends on the day and on which side of rush hour the
+    // journey starts, so both belong in the key — otherwise a morning lookup
+    // would answer an evening one.
+    const bucket = (atMin == null) ? 'x'
+      : (atMin >= Scheduler.PEAK_FROM && atMin < Scheduler.PEAK_TO ? 'p' : 'o');
+    return (fromId || fromAddr) + '>' + (toId || toAddr) + '|' + day + bucket;
+  },
+
   travelEstMin(fromId, fromAddr, toId, toAddr, day, atMin){
+    const tc = Scheduler._travel;
+    let key;
+    if(tc){
+      key = Scheduler._travelKey(fromId, fromAddr, toId, toAddr, day, atMin);
+      const hit = tc.min.get(key);
+      if(hit !== undefined) return hit;
+    }
+    const v = Scheduler._travelEstMinUncached(fromId, fromAddr, toId, toAddr, day, atMin);
+    if(tc) tc.min.set(key, v);
+    return v;
+  },
+
+  _travelEstMinUncached(fromId, fromAddr, toId, toAddr, day, atMin){
     if(typeof state!=='undefined'){
       const mat = Scheduler.matrixFor(day, atMin);
       if(mat){
-        const ia = mat.coordIds.indexOf(fromId);
-        const ib = mat.coordIds.indexOf(toId);
-        if(ia>=0 && ib>=0 && mat.durations[ia] && mat.durations[ia][ib]!=null)
+        const ix = Scheduler._matIndex(mat);
+        const ia = ix[fromId], ib = ix[toId];
+        if(ia!=null && ib!=null && mat.durations[ia] && mat.durations[ia][ib]!=null)
           return Math.max(1, Math.round(mat.durations[ia][ib]/60));
       }
     }
@@ -1755,12 +1817,25 @@ const Scheduler = {
   // for nearest-neighbor ordering, instead of raw Euclidean distance — otherwise
   // the whole optimization pass is chasing a metric that doesn't match the roads.
   travelEstKm(fromId, fromAddr, toId, toAddr, day, atMin){
+    const tc = Scheduler._travel;
+    let key;
+    if(tc){
+      key = Scheduler._travelKey(fromId, fromAddr, toId, toAddr, day, atMin);
+      const hit = tc.km.get(key);
+      if(hit !== undefined) return hit;
+    }
+    const v = Scheduler._travelEstKmUncached(fromId, fromAddr, toId, toAddr, day, atMin);
+    if(tc) tc.km.set(key, v);
+    return v;
+  },
+
+  _travelEstKmUncached(fromId, fromAddr, toId, toAddr, day, atMin){
     if(typeof state!=='undefined'){
       const mat = Scheduler.matrixFor(day, atMin);
       if(mat && mat.distances){
-        const ia = mat.coordIds.indexOf(fromId);
-        const ib = mat.coordIds.indexOf(toId);
-        if(ia>=0 && ib>=0 && mat.distances[ia] && mat.distances[ia][ib]!=null)
+        const ix = Scheduler._matIndex(mat);
+        const ia = ix[fromId], ib = ix[toId];
+        if(ia!=null && ib!=null && mat.distances[ia] && mat.distances[ia][ib]!=null)
           return mat.distances[ia][ib]/1000;
       }
     }
@@ -1934,6 +2009,14 @@ const Scheduler = {
 
   // Phase 1: constraint-satisfaction backtracking, dynamic travel buffer
   scheduleAll(students, settings, backtrackMs=20000, repairMs=8000){
+    // The cache is opened here and closed in the finally below, so it cannot
+    // outlive the run that owns it.
+    Scheduler.beginTravelCache();
+    try{ return Scheduler._scheduleAll(students, settings, backtrackMs, repairMs); }
+    finally{ Scheduler.endTravelCache(); }
+  },
+
+  _scheduleAll(students, settings, backtrackMs=20000, repairMs=8000){
     const schedule = {};
     settings.workDays.forEach(d => schedule[d] = []);
 

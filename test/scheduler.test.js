@@ -2199,3 +2199,116 @@ describe('the optimizer uses the same travel times as everything else', () => {
     assert.equal(S.travelEstMin('a', 'addr-a', 'b', 'addr-b', 1), 60, 'no time given: assume the worst');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Caching the things the search asks for two million times
+// ---------------------------------------------------------------------------
+
+describe('travel and time caches answer exactly what the slow path would', () => {
+  // A cache that is merely fast is worthless; these check it is also the same.
+  // Measured first: a 24-client search made 2,000,000 travelEstMin calls
+  // against a few hundred distinct journeys, and haversineKm alone was 40% of
+  // the scheduler's CPU.
+
+  function world(withMatrix) {
+    const app = loadApp();
+    const sts = Array.from({ length: 8 }, (_, i) => student('s' + i));
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5, 6] });
+    const coords = cityCoords(sts);
+    const ids = ['home', ...sts.map(s => s.id)];
+    // ASYMMETRIC on purpose: real road matrices are (one-way streets), and a
+    // symmetric fixture cannot tell a cache that ignores direction from one
+    // that respects it.
+    const mk = (mult) => ({ coordIds: ids,
+      durations: ids.map((_, a) => ids.map((__, b) => (a === b ? 0 : (a * 3 + b) * 60 * mult))),
+      distances: ids.map((_, a) => ids.map((__, b) => (a === b ? 0 : (a * 3 + b) * 100 * mult))) });
+    app.setState({ students: sts, settings: cfg, coords,
+      travelMatrixPeak: withMatrix ? mk(2) : null,
+      travelMatrixOffPeak: withMatrix ? mk(1) : null, travelMatrix: null });
+    return { app, sts, cfg, coords, ids };
+  }
+
+  for (const withMatrix of [false, true]) {
+    test(`same answers ${withMatrix ? 'with' : 'without'} a travel matrix`, () => {
+      const { app, sts, ids } = world(withMatrix);
+      const S = app.Scheduler;
+      // Every combination that changes which matrix is consulted: day (Saturday
+      // is special), and either side of rush hour, plus no time at all.
+      const times = [null, S.toMin('09:00'), S.toMin('15:59'), S.toMin('16:00'),
+                     S.toMin('19:59'), S.toMin('20:00'), S.toMin('23:00')];
+      const names = [...ids, 'never-seen-before'];
+      const cases = [];
+      for (const a of names) for (const b of names)
+        for (const d of [1, 5, 6]) for (const t of times)
+          cases.push([a, 'addr-' + a, b, 'addr-' + b, d, t]);
+
+      const slow = cases.map(c => [S._travelEstMinUncached(...c), S._travelEstKmUncached(...c)]);
+      S.beginTravelCache();
+      try {
+        // Twice over, so a second hit is checked as well as the first fill.
+        for (let pass = 0; pass < 2; pass++) {
+          cases.forEach((c, i) => {
+            assert.equal(S.travelEstMin(...c), slow[i][0],
+              `minutes differ for ${JSON.stringify(c)} on pass ${pass}`);
+            assert.equal(S.travelEstKm(...c), slow[i][1],
+              `km differ for ${JSON.stringify(c)} on pass ${pass}`);
+          });
+        }
+      } finally { S.endTravelCache(); }
+      assert.ok(cases.length > 500, `worth checking: ${cases.length} combinations`);
+    });
+  }
+
+  test('the cache does not outlive the run that opened it', () => {
+    const { app } = world(false);
+    const S = app.Scheduler;
+    S.beginTravelCache();
+    S.travelEstMin('s1', 'addr-s1', 's2', 'addr-s2', 1, 600);
+    S.endTravelCache();
+    assert.equal(S._travel, null,
+      'a cache that survives the run would answer with distances to where someone used to live');
+  });
+
+  test('moving a client during a run is not served from a stale entry', () => {
+    // The guarantee is structural — the cache is opened and closed around one
+    // run, and coordinates cannot change inside one. This pins that down: with
+    // no cache open, a coordinate change is visible immediately.
+    const { app } = world(false);
+    const S = app.Scheduler;
+    const near = S.travelEstKm('home', 'h', 's1', 'addr-s1', 1);
+    app.state.coords.s1 = { lat: 39.5, lon: 22.5 };
+    const far = S.travelEstKm('home', 'h', 's1', 'addr-s1', 1);
+    assert.ok(far > near * 5, `${near.toFixed(1)} -> ${far.toFixed(1)} km must be seen`);
+  });
+
+  test('a rebuilt matrix cannot be served the old index', () => {
+    const { app, ids } = world(true);
+    const S = app.Scheduler;
+    const first = S.travelEstMin('s1', 'a', 's2', 'b', 1, S.toMin('17:00'));
+    // A fresh matrix with the ids in a DIFFERENT ORDER, and values that depend
+    // on position — so an index built for the old matrix reads the wrong cell
+    // and returns the wrong number rather than coincidentally the right one.
+    const rev = ids.slice().reverse();
+    app.state.travelMatrixPeak = { coordIds: rev,
+      durations: rev.map((_, a) => rev.map((__, b) => (a === b ? 0 : (a * 3 + b) * 60))),
+      distances: rev.map((_, a) => rev.map((__, b) => (a === b ? 0 : (a * 3 + b) * 100))) };
+    const ia = rev.indexOf('s1'), ib = rev.indexOf('s2');
+    const want = (ia * 3 + ib);
+    assert.equal(S.travelEstMin('s1', 'a', 's2', 'b', 1, S.toMin('17:00')), want,
+      'the new matrix must be read with its own index');
+    assert.notEqual(first, want, 'the fixture should have made these distinguishable');
+  });
+
+  test('parsing a time is memoized without changing what it returns', () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    for (const [txt, want] of [['00:00', 0], ['09:05', 545], ['17:30', 1050], ['23:59', 1439]]) {
+      assert.equal(S.toMin(txt), want);
+      assert.equal(S.toMin(txt), want, 'and again, from the memo');
+    }
+    // Malformed input must go on behaving exactly as it did, not be remembered
+    // as a real answer.
+    assert.ok(Number.isNaN(S.toMin('nonsense')));
+    assert.ok(Number.isNaN(S.toMin('nonsense')));
+  });
+});
