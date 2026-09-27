@@ -6234,7 +6234,7 @@ const App = {
         <label>${t('student_address_label')}</label>
         <div style="display:flex;gap:6px">
           <input type="text" id="st-addr" placeholder="${t('form_address_placeholder')}" value="${esc(st?.address||'')}" autocomplete="off" style="flex:1"
-            oninput="App.onAddrInput(this.value)" onblur="setTimeout(()=>App.hideAddrSuggest(),200)">
+            oninput="App.onAddrInput(this.value)" onkeydown="App.onAddrKey(event)" onblur="setTimeout(()=>App.hideAddrSuggest(),200)">
           <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('st-addr')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </button>
@@ -6509,6 +6509,35 @@ const App = {
   _addrTimer: null,
   _addrPendingCoord: null,
 
+  /**
+   * Addresses already in the app, matched locally.
+   *
+   * Someone with twenty clients has them in three or four neighbourhoods, and
+   * types the same streets over and over. Those answers are already on the
+   * device, already geocoded and already correct — waiting half a second for
+   * a server to say what we know is pure latency. These appear instantly, on
+   * the first keystroke, before any request is made.
+   */
+  _knownAddresses(val){
+    const needle = normalizeSearchText(val.trim());
+    if(!needle) return [];
+    const seen = new Set(), out = [];
+    const consider = (address, label, id) => {
+      if(!address) return;
+      const key = normalizeSearchText(address);
+      if(seen.has(key)) return;
+      if(!key.includes(needle)) return;
+      const c = state.coords && state.coords[id];
+      seen.add(key);
+      out.push({ name: address, _known: true, _label: label,
+                 lat: c && c.lat, lon: c && c.lon });
+    };
+    consider(state.settings.homeAddress, t('settings_home_address'), 'home');
+    for(const st of state.students) consider(st.address, st.name, st.id);
+    for(const j of (state.jobs || [])) consider(j.address, j.name, j.id);
+    return out.slice(0, 4);
+  },
+
   onAddrInput(val, boxId='addr-suggest'){
     if(boxId==='addr-suggest') this._addrPendingCoord = null;
     else if(boxId==='set-home-suggest') this._homeAddrPendingCoord = null;
@@ -6516,13 +6545,26 @@ const App = {
     clearTimeout(this._addrTimer);
     const box = document.getElementById(boxId);
     if(!box) return;
-    if(val.length < 3){ box.style.display='none'; return; }
+    if(val.length < 2){ box.style.display='none'; return; }
     box.style.display='block';
-    box.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_searching')}</div>`;
+
+    // Show what we already know while the network is still being asked. On a
+    // street the user has visited before, this is the whole answer and the
+    // request that follows never changes it.
+    const known = this._knownAddresses(val);
+    if(known.length) this._renderSuggestions(boxId, known, val);
+    else box.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_searching')}</div>`;
+
+    // Responses can arrive out of order: type "Γούναρη", then "Γούναρη 58",
+    // and if the first request is the slower one it lands last and replaces
+    // the right answers with older ones. Each request carries a number and
+    // only the newest may draw.
+    const seq = (this._addrSeq = (this._addrSeq || 0) + 1);
     const hereKey = getHereKey();
     this._addrTimer = setTimeout(async ()=>{
       try{
         let results = hereAvailable() ? await this._searchHere(val, hereKey) : await this._searchNominatim(val);
+        if(seq !== this._addrSeq) return;
         const b = document.getElementById(boxId);
         if(!b) return;
         // Both providers can return "fuzzy" matches — typo-corrected or
@@ -6579,13 +6621,39 @@ const App = {
         // strings. A place name containing a quote character (real addresses
         // do: "Ο Καφές" etc.) would silently corrupt an inline handler
         // string, breaking the attribute (and the tap) with no visible error.
-        b._suggestResults = shown;
-        b.innerHTML = shown.map((res, i)=>{
+        this._renderSuggestions(boxId, shown, val);
+      }catch(e){
+        if(seq !== this._addrSeq) return;
+        console.warn('Address search failed:', e);
+        const b = document.getElementById(boxId);
+        if(b) b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--red)">${t('search_error')}</div>`;
+      }
+    }, 220);
+  },
+
+  /**
+   * Draw a list of suggestions. One implementation for both sources: the
+   * addresses already on the device and the ones a server sent back. Two
+   * renderers would drift, and the local list is the one shown first.
+   */
+  _renderSuggestions(boxId, shown, val){
+    const b = document.getElementById(boxId);
+    if(!b) return;
+    b.style.display = 'block';
+    b._suggestResults = shown;
+    b._activeIdx = -1;
+    {
+      b.innerHTML = shown.map((res, i)=>{
           // Named places (shops, cafes, landmarks — e.g. searching "Starbucks" instead of
           // a street address) show their actual name as the headline, with the full
           // address as context underneath, instead of a raw address fragment.
           const short = res.poiName || res.name.split(',').slice(0,3).join(',');
-          const distTag = res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '';
+          // A known address says whose it is instead of how far it is: "you
+          // already go here, for Νίκος" is the useful fact, and it needs no
+          // network to know.
+          const distTag = res._known
+            ? `<span style="color:var(--purple,#7c3aed);font-weight:600">${esc(res._label||'')}</span> · `
+            : (res._distKm!=null ? `<span style="color:var(--green);font-weight:600">${res._distKm<1?Math.round(res._distKm*1000)+t('unit_meter'):res._distKm.toFixed(1)+t('unit_km')}</span> · ` : '');
           return `<div class="addr-suggest-item" data-idx="${i}" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4">
             <div style="font-weight:500;color:var(--text)">${esc(short)}</div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${distTag}${esc(res.name)}</div>
@@ -6622,12 +6690,44 @@ const App = {
             App.selectAddr(res.name, res.lat, res.lon, boxId);
           });
         }
-      }catch(e){
-        console.warn('Address search failed:', e);
-        const b = document.getElementById(boxId);
-        if(b) b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--red)">${t('search_error')}</div>`;
-      }
-    }, 500);
+    }
+  },
+
+  /**
+   * Arrow keys and Enter, the way every search box works.
+   *
+   * Without this the list can only be tapped, which on a laptop means leaving
+   * the keyboard mid-address to reach for the mouse — the single thing that
+   * makes a suggestion list feel unlike the one people are used to.
+   */
+  onAddrKey(ev, boxId='addr-suggest'){
+    const b = document.getElementById(boxId);
+    const list = b && b._suggestResults;
+    if(!b || !list || !list.length || b.style.display === 'none') return;
+    const key = ev.key;
+    if(key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape') return;
+
+    if(key === 'Escape'){ b.style.display = 'none'; return; }
+    if(key === 'Enter'){
+      // Enter with nothing highlighted means "I typed it myself, take it" —
+      // hijacking that would overwrite what the user deliberately wrote.
+      if(b._activeIdx == null || b._activeIdx < 0) return;
+      ev.preventDefault();
+      const res = list[b._activeIdx];
+      if(res) App.selectAddr(res.name, res.lat, res.lon, boxId);
+      return;
+    }
+    ev.preventDefault();
+    const step = key === 'ArrowDown' ? 1 : -1;
+    const n = list.length;
+    // Wraps, so holding one arrow never dead-ends.
+    b._activeIdx = ((b._activeIdx == null ? -1 : b._activeIdx) + step + n + 1) % (n + 1) - 1;
+    if(b._activeIdx < 0) b._activeIdx = step === 1 ? 0 : n - 1;
+    [...b.querySelectorAll('.addr-suggest-item')].forEach((el, i)=>{
+      const on = i === b._activeIdx;
+      el.style.background = on ? 'var(--bg3)' : '';
+      if(on && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    });
   },
 
   // HERE Autosuggest — used when the user has set a HERE API key (Settings > Maps &
@@ -8619,7 +8719,7 @@ const App = {
           </label>
           <div style="display:flex;gap:6px">
             <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="${t('settings_home_placeholder')}" autocomplete="off" style="flex:1"
-              oninput="App.onAddrInput(this.value,'set-home-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('set-home-suggest'),200)">
+              oninput="App.onAddrInput(this.value,'set-home-suggest')" onkeydown="App.onAddrKey(event,'set-home-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('set-home-suggest'),200)">
             <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('set-home')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
             </button>
@@ -9571,7 +9671,7 @@ const App = {
             <div style="display:flex;gap:6px">
               <input id="ob-addr" type="text" placeholder="${t('form_address_placeholder')}" autocomplete="off"
                 style="flex:1;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
-                oninput="App.onAddrInput(this.value,'ob-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-addr-suggest'),200)">
+                oninput="App.onAddrInput(this.value,'ob-addr-suggest')" onkeydown="App.onAddrKey(event,'ob-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-addr-suggest'),200)">
               <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('ob-addr')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
               </button>

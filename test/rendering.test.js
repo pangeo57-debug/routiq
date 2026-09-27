@@ -677,3 +677,109 @@ describe('the app warns before the backup expires, since nothing else can', () =
     assert.equal(app.App.syncStaleDays(), null);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The address box, the way a search box is expected to behave
+// ---------------------------------------------------------------------------
+
+describe('address suggestions', () => {
+  function app3() {
+    const app = loadApp();
+    const cfg = settings({ homeAddress: 'Πλατεία Γεωργίου 1, Πάτρα' });
+    app.setState({
+      students: [
+        student('a', { name: 'Νίκος', address: 'Γούναρη 58, Πάτρα' }),
+        student('b', { name: 'Μαρία', address: 'Κορίνθου 210, Πάτρα' }),
+        student('c', { name: 'Έλενα', address: 'Γούναρη 58, Πάτρα' }),   // same building
+      ],
+      jobs: [{ id: 'j1', name: 'Διαρροή', address: 'Μαιζώνος 12, Πάτρα' }],
+      settings: cfg,
+      coords: { home: { lat: 38.246, lon: 21.734 }, a: { lat: 38.24, lon: 21.73 } },
+    });
+    return app;
+  }
+
+  test('an address already in the app is offered, with whose it is', () => {
+    const app = app3();
+    const hits = app.App._knownAddresses('Γούναρη');
+    assert.equal(hits.length, 1, 'the same address twice is one suggestion, not two');
+    assert.equal(hits[0].name, 'Γούναρη 58, Πάτρα');
+    assert.equal(hits[0]._known, true);
+    assert.ok(hits[0]._label, 'it should say whose address it is');
+    assert.equal(hits[0].lat, 38.24, 'and carry the coordinate we already resolved');
+  });
+
+  test('home and day-mode jobs count too', () => {
+    const app = app3();
+    assert.equal(app.App._knownAddresses('Πλατεία')[0].name, 'Πλατεία Γεωργίου 1, Πάτρα');
+    assert.equal(app.App._knownAddresses('Μαιζώνος')[0].name, 'Μαιζώνος 12, Πάτρα');
+  });
+
+  test('matching ignores accents and case, the way people type', () => {
+    const app = app3();
+    assert.equal(app.App._knownAddresses('γουναρη').length, 1);
+    assert.equal(app.App._knownAddresses('ΚΟΡΙΝΘΟΥ').length, 1);
+  });
+
+  test('nothing matching means nothing offered', () => {
+    const app = app3();
+    assert.deepStrictEqual(Array.from(app.App._knownAddresses('Ζαλόγγου')), []);
+    assert.deepStrictEqual(Array.from(app.App._knownAddresses('   ')), []);
+  });
+
+  test('a stale response cannot overwrite a newer one', async () => {
+    // Type "Γούναρη", wait long enough that the request actually goes out,
+    // then type more. If the first request is the slower one it lands last
+    // and replaces the right answers with older ones. The debounce alone does
+    // not prevent this — it only cancels requests that have not started yet.
+    const app = app3();
+    const drawn = [];
+    app.App._renderSuggestions = (boxId, shown) => drawn.push(shown.map(r => r.name));
+    const box = { style: {}, innerHTML: '', addEventListener() {}, querySelectorAll: () => [] };
+    app.ctx.document.getElementById = () => box;
+
+    let resolveSlow;
+    const slow = new Promise(r => { resolveSlow = r; });
+    app.App._searchNominatim = (v) =>
+      (v === 'Ζαλόγγου' ? slow : Promise.resolve([{ name: 'newer result' }]));
+
+    app.App.onAddrInput('Ζαλόγγου');
+    await new Promise(r => setTimeout(r, 300));      // the first request is now in flight
+    app.App.onAddrInput('Ζαλόγγου 12');
+    await new Promise(r => setTimeout(r, 300));      // the second has landed
+    resolveSlow([{ name: 'stale result' }]);          // the first finally answers
+    await new Promise(r => setTimeout(r, 150));
+
+    assert.ok(drawn.some(d => d.includes('newer result')), 'the newer answer should be drawn');
+    assert.ok(!drawn.some(d => d.includes('stale result')),
+      `the older answer must never be drawn: ${JSON.stringify(drawn)}`);
+  });
+
+  test('a known address is shown before any request is made', async () => {
+    const app = app3();
+    const drawn = [];
+    app.App._renderSuggestions = (boxId, shown) => drawn.push(shown.map(r => r.name));
+    const box = { style: {}, innerHTML: '', addEventListener() {}, querySelectorAll: () => [] };
+    app.ctx.document.getElementById = () => box;
+    let asked = false;
+    app.App._searchNominatim = () => { asked = true; return Promise.resolve([]); };
+
+    app.App.onAddrInput('Γούναρη');
+    // Synchronously, before the debounce has even elapsed.
+    assert.equal(asked, false, 'nothing should have been asked yet');
+    // JSON, not deepStrictEqual: arrays built inside the vm sandbox carry ITS
+    // Array prototype and fail on identity even when every value matches.
+    assert.equal(JSON.stringify(drawn), JSON.stringify([['Γούναρη 58, Πάτρα']]),
+      'the answer already on the device should be on screen immediately');
+  });
+
+  test('two characters are enough to start', () => {
+    // Three was the old minimum; a search box that ignores "Γο" feels broken.
+    const app = app3();
+    const box = { style: { display: '' }, innerHTML: '', addEventListener() {}, querySelectorAll: () => [] };
+    app.ctx.document.getElementById = () => box;
+    app.App._renderSuggestions = () => { box.style.display = 'block'; };
+    app.App.onAddrInput('Γο');
+    assert.notEqual(box.style.display, 'none');
+  });
+});
