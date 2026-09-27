@@ -125,7 +125,14 @@ that forwards whatever it is given is an open relay wearing a different hat.
 
 ## Limits
 
-60 requests a minute and 2000 a day, per IP.
+60 requests a minute and 2000 a day, per IP — and separately **5 space
+creations a day**. Creating is nothing like a lookup: it leaves a row behind,
+so under the general allowance alone one address could create 2000 spaces a
+day and fill the database with rows nobody will ever read. A person needs a
+handful of these in a lifetime.
+
+Running out of creations does not touch the allowance for ordinary lookups:
+someone who has made their spaces can still use the app.
 
 The counters live in KV, which is eventually consistent, and the update is a
 read-modify-write — so a simultaneous burst can overshoot slightly. That is
@@ -136,10 +143,27 @@ to be exact, the answer is a Durable Object, not a cleverer version of this.
 With no KV binding the limiter is skipped rather than failing closed: a
 misconfigured limiter must not take the whole proxy down with it.
 
+## What this does not defend against
+
+Said plainly, because a security section that lists only wins is a marketing
+page.
+
+- **The limits are per IP.** Anyone willing to rotate addresses gets a fresh
+  allowance each time. This raises the cost of abuse; it does not make it
+  impossible.
+- **Whoever has the code has the data.** There is no second factor. The code
+  is 24 characters from a 31-symbol alphabet — far past guessing — but it can
+  be shared, screenshotted or shoulder-surfed like any password.
+- **Size and timing are visible.** The server cannot read a blob, but it knows
+  how large it is and when it changed. Roughly: how many clients you have, and
+  when you last worked on the schedule.
+- **A lost code is lost data.** By design, and the app says so before anything
+  is sent.
+
 ## Tests
 
     npm run test:worker
 
-44 tests, no network and no Cloudflare account needed — the Worker is plain ES
+52 tests, no network and no Cloudflare account needed — the Worker is plain ES
 modules with a stubbed `env`. They are all about the two ways this can fail
 badly: leaking the key, and being an open relay.

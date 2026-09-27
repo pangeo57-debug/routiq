@@ -251,3 +251,44 @@ describe('upstream manners and caching', () => {
     assert.deepEqual(Object.keys(body), ['ok']);
   });
 });
+
+describe('creating a space has its own, much tighter budget', () => {
+  // Creating is nothing like a lookup: it leaves a row behind. Under the
+  // general allowance alone one address could create 2000 spaces a day and
+  // fill the database with rows nobody will ever read.
+  const create = () => new Request('https://api.test/sync/create', {
+    method: 'POST', body: JSON.stringify({ spaceId: 'abcdefgh1234',
+      authHash: 'a'.repeat(64), deviceId: 'dev1' }),
+    headers: { Origin: ORIGIN, 'CF-Connecting-IP': '9.9.9.9', 'Content-Type': 'application/json' },
+  });
+
+  function envWithDb() {
+    const env = makeEnv();
+    env.DB = { prepare() { let args = [];
+      const api = { bind(...a) { args = a; return api; }, async first() { return null; },
+        async run() { return { success: true }; } };
+      return api; } };
+    return env;
+  }
+
+  test('runs out long before the general allowance does', async () => {
+    const env = envWithDb();
+    stubFetch();
+    let last;
+    for (let i = 0; i < W.LIMITS.createsPerDay + 1; i++) last = await W.handle(create(), env, {});
+    assert.equal(last.status, 429);
+    const body = await last.json();
+    assert.equal(body.scope, 'creates');
+    assert.ok(W.LIMITS.createsPerDay < W.LIMITS.perDay / 10,
+      'the create budget must be far smaller, or it is not a budget');
+  });
+
+  test('and does not eat the allowance for ordinary lookups', async () => {
+    const env = envWithDb();
+    stubFetch();
+    for (let i = 0; i < W.LIMITS.createsPerDay + 1; i++) await W.handle(create(), env, {});
+    const lookup = await W.handle(new Request('https://api.test/here/geocode?q=a',
+      { headers: { Origin: ORIGIN, 'CF-Connecting-IP': '9.9.9.9' } }), env, {});
+    assert.equal(lookup.status, 200, 'someone who created spaces can still use the app');
+  });
+});

@@ -216,3 +216,75 @@ describe('limits and hygiene', () => {
     assert.equal(S.safeEqual(undefined, undefined), false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Attacks, run against the real code
+// ---------------------------------------------------------------------------
+
+describe('SQL injection', () => {
+  // Every query uses a prepared statement with ? and bind(), so a value can
+  // never become part of the statement. These run the actual payloads anyway:
+  // "we use prepared statements" is a claim until something tries.
+
+  const payloads = {
+    "the classic always-true": "' OR '1'='1",
+    "dropping the table": "'; DROP TABLE spaces; --",
+    "a comment that cuts the check off": "abcdefgh1234' --",
+    "a union to read other rows": "' UNION SELECT * FROM spaces --",
+    "a null byte": "abcdefgh123\u0000",
+    "a quote inside a valid-length id": "abcdefgh'234",
+  };
+
+  for (const [name, payload] of Object.entries(payloads)) {
+    test(`is refused: ${name}`, async () => {
+      const db = fakeDB();
+      await newSpace(db);
+      db._rows.get(ID).blob = 'THE-USERS-DATA';
+
+      const res = await S.pull(db, { spaceId: payload, authHash: 'b'.repeat(64) });
+      assert.ok(res.status >= 400, `${name} must not succeed`);
+      assert.ok(!JSON.stringify(res).includes('THE-USERS-DATA'),
+        `${name} leaked the blob`);
+      assert.equal(db._rows.size, 1, 'the table must still be there');
+      assert.equal(db._rows.get(ID).blob, 'THE-USERS-DATA', 'and the data untouched');
+    });
+  }
+
+  test('every value reaches the database as a parameter, never as SQL', async () => {
+    // Records the statement and its arguments separately: if a value ever
+    // ended up inside the statement text, it would show here.
+    const statements = [];
+    const rows = new Map();
+    const db = { prepare(sql) { let args = [];
+      const api = { bind(...a) { args = a; statements.push({ sql, args }); return api; },
+        async first() { return /FROM spaces WHERE space_id/.test(sql) ? (rows.get(args[0]) || null) : null; },
+        async run() {
+          if (/INSERT/.test(sql)) rows.set(args[0], { space_id: args[0], auth_hash: args[1],
+            blob: null, version: 0, primary_device: args[2], updated_at: args[3], created_at: args[4] });
+          return { success: true }; } };
+      return api; } };
+
+    await S.createSpace(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1 }, 1000);
+    await S.pull(db, { spaceId: ID, authHash: SECRET });
+    await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1, blob: "'; DROP TABLE spaces; --",
+      baseVersion: 0 }, 2000);
+
+    assert.ok(statements.length >= 3, 'the statements should have run');
+    for (const st of statements) {
+      assert.ok(st.sql.includes('?'), `a statement with no placeholder: ${st.sql}`);
+      assert.ok(!/DROP|UNION|--/.test(st.sql),
+        `attack text reached the statement itself: ${st.sql}`);
+    }
+  });
+
+  test('even a blob full of SQL is only ever data', async () => {
+    const db = fakeDB();
+    await newSpace(db);
+    const nasty = "'; DELETE FROM spaces WHERE 1=1; --";
+    const res = await S.push(db, { spaceId: ID, authHash: SECRET, deviceId: DEV1,
+      blob: nasty, baseVersion: 0 }, 2000);
+    assert.equal(res.status, 200, 'it is legitimate content, just unpleasant text');
+    assert.equal(db._rows.size, 1);
+    assert.equal(db._rows.get(ID).blob, nasty, 'stored verbatim, executed never');
+  });
+});

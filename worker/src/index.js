@@ -46,6 +46,11 @@ const ALLOWED_PARAMS = {
 const LIMITS = {
   perMinute: 60,        // a burst while geocoding a fresh roster
   perDay: 2000,         // one person cannot exhaust a shared quota
+  // Creating a space is nothing like a lookup: it makes a row that stays.
+  // Under the general allowance alone, one address could create 2000 spaces a
+  // day and fill the database with rows nobody will ever read. A person needs
+  // a handful of these in a lifetime.
+  createsPerDay: 5,
   matrixPointsMax: 120, // HERE's own matrix limit for the sync endpoint
   bodyBytesMax: 32 * 1024,
   qMaxLength: 300,
@@ -89,8 +94,17 @@ function json(body, status, headers) {
  * pretended away. If it ever needs to be exact, the answer is a Durable
  * Object, not a cleverer version of this.
  */
-async function rateLimit(env, clientId, now) {
+async function rateLimit(env, clientId, now, kind) {
   if (!env.RATE) return { ok: true, skipped: true };
+
+  // A separate, much tighter budget for anything that leaves a row behind.
+  if (kind === 'create') {
+    const key = `rl:c:${clientId}:${Math.floor(now / 86400000)}`;
+    const n = Number(await env.RATE.get(key)) || 0;
+    if (n >= LIMITS.createsPerDay) return { ok: false, scope: 'creates', retryAfter: 3600 };
+    await env.RATE.put(key, String(n + 1), { expirationTtl: 90000 });
+  }
+
   const minuteKey = `rl:m:${clientId}:${Math.floor(now / 60000)}`;
   const dayKey = `rl:d:${clientId}:${Math.floor(now / 86400000)}`;
 
@@ -170,7 +184,8 @@ async function handle(request, env, ctx) {
   }
 
   const clientId = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const limit = await rateLimit(env, clientId, Date.now());
+  const isCreate = url.pathname === '/sync/create';
+  const limit = await rateLimit(env, clientId, Date.now(), isCreate ? 'create' : 'lookup');
   if (!limit.ok) {
     return json({ error: 'rate limit reached', scope: limit.scope }, 429,
       { ...cors, 'Retry-After': String(limit.retryAfter) });
