@@ -2687,3 +2687,191 @@ describe('choosing who goes into a gap', () => {
     assert.equal(JSON.stringify(sched), snapshot, 'a refused offer must change nothing');
   });
 });
+
+// ---------------------------------------------------------------------------
+// A short second look at the other days, after a gap is filled by hand
+// ---------------------------------------------------------------------------
+
+describe('refining the rest of the week after a gap is filled', () => {
+  // Day 1 is the one the user just worked on. It is deliberately in a BAD
+  // order too, so that if it were not protected the refinement would happily
+  // "improve" it — which would be the app overruling the user a second after
+  // asking them.
+
+  function town() {
+    const app = loadApp({ seed: 7 });
+    const cfg = settings({ workDays: [1, 2, 3],
+      dayHours: Object.fromEntries([1, 2, 3].map(d => [d, { start: '15:00', end: '22:00' }])) });
+    const mk = (id, day) => student(id, { days: [day], window: { start: '17:00', end: '22:00' } });
+    const sts = [mk('a1', 1), mk('b1', 1), mk('c1', 1), mk('a2', 2), mk('b2', 2), mk('c2', 2)];
+    // In each day, a and c are neighbours out of town and b is next door to
+    // home: visiting a, b, c in that order crosses the city twice for nothing.
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    for (const d of ['1', '2']) {
+      coords['a' + d] = { lat: 38.300, lon: 21.790 };
+      coords['c' + d] = { lat: 38.302, lon: 21.792 };
+      coords['b' + d] = { lat: 38.241, lon: 21.731 };
+    }
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    // Times leave the real drive between them, so the starting point is a
+    // VALID schedule in a bad order rather than an impossible one — the audit
+    // below would otherwise blame the refinement for the fixture.
+    const day = (n) => [
+      slot('a' + n, '17:00', '18:00', { address: 'addr-a' + n }),
+      slot('b' + n, '18:35', '19:35', { address: 'addr-b' + n }),
+      slot('c' + n, '20:10', '21:10', { address: 'addr-c' + n }),
+    ];
+    return { app, cfg, sts, sched: { 1: day(1), 2: day(2), 3: [] } };
+  }
+  const km = (S, sch, d, cfg) => S.dayKm(sch[d].slice()
+    .sort((x, y) => S.toMin(x.start) - S.toMin(y.start)), d, cfg);
+
+  test('the other days improve', async () => {
+    const { app, cfg, sched } = town();
+    const S = app.Scheduler;
+    const before = km(S, sched, 2, cfg);
+    const r = await S.refineExcept(sched, app.state.students, cfg, 1, 2500);
+    assert.equal(r.adopted, true, `reason: ${r.reason}`);
+    assert.ok(km(S, sched, 2, cfg) < before * 0.8,
+      `the crossing on day 2 should go: ${before.toFixed(1)} -> ${km(S, sched, 2, cfg).toFixed(1)} km`);
+    assert.ok(r.changed > 0);
+  });
+
+  test('the day the user worked on is left exactly as they made it', async () => {
+    const { app, cfg, sched } = town();
+    const S = app.Scheduler;
+    const pinned = JSON.stringify(sched[1]);
+    await S.refineExcept(sched, app.state.students, cfg, 1, 2500);
+    assert.equal(JSON.stringify(sched[1]), pinned,
+      'day 1 was in a bad order too, and must not have been touched');
+  });
+
+  test('it keeps everyone placed and breaks no rule', async () => {
+    const { app, cfg, sts, sched } = town();
+    const S = app.Scheduler;
+    const placed = S.countTotal(sched);
+    await S.refineExcept(sched, sts, cfg, 1, 2500);
+    assert.equal(S.countTotal(sched), placed);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, sched, sts, cfg)), []);
+  });
+
+  test('a schedule already in good order comes back untouched', async () => {
+    const { app, cfg, sts, sched } = town();
+    const S = app.Scheduler;
+    // Put day 2 in the good order first.
+    sched[2] = [slot('b2', '17:00', '18:00', { address: 'addr-b2' }),
+                slot('a2', '18:30', '19:30', { address: 'addr-a2' }),
+                slot('c2', '19:33', '20:33', { address: 'addr-c2' })];
+    await S.refineExcept(sched, sts, cfg, 1, 1500);   // let it settle once
+    const settled = JSON.stringify(sched);
+    const r = await S.refineExcept(sched, sts, cfg, 1, 1500);
+    assert.equal(r.adopted, false);
+    assert.equal(JSON.stringify(sched), settled, 'a second pass over a settled week must change nothing');
+  });
+
+  test('if the user changes something while it thinks, their change wins', async () => {
+    // The passes yield to the browser, so a swap can happen mid-way. Adopting
+    // the result would silently undo it.
+    const { app, cfg, sts, sched } = town();
+    const S = app.Scheduler;
+    const pending = S.refineExcept(sched, sts, cfg, 1, 1500);
+    sched[2][0].start = '17:05';                        // the user edits while it runs
+    sched[2][0].end = '18:05';
+    const edited = JSON.stringify(sched);
+    const r = await pending;
+    assert.equal(r.adopted, false);
+    assert.match(r.reason, /meanwhile/);
+    assert.equal(JSON.stringify(sched), edited, 'the edit must survive');
+  });
+
+  test('a refinement that would lose someone is thrown away', async () => {
+    // None of the real passes makes a week worse, so a pass is forced to: it
+    // quietly drops a lesson. Placing fewer people is the one outcome worse
+    // than any gap, and verifySchedule does not notice a lesson that is
+    // simply absent — only the score comparison does.
+    const { app, cfg, sts, sched } = town();
+    const S = app.Scheduler;
+    S.tidyDays = (sch) => { sch[2].pop(); return { moves: 0 }; };
+    const before = JSON.stringify(sched);
+    const r = await S.refineExcept(sched, sts, cfg, 1, 1500);
+    assert.equal(r.adopted, false);
+    assert.equal(JSON.stringify(sched), before, 'nothing may change when the result is worse');
+  });
+
+  test('a refinement that would break a rule is thrown away', async () => {
+    // A pass is forced to move a lesson before its student is free. The
+    // number placed and the distance are unchanged, so only verifySchedule
+    // can see that anything is wrong.
+    const { app, cfg, sts, sched } = town();
+    const S = app.Scheduler;
+    S.tidyDays = (sch) => {
+      const l = sch[2].find(x => x.studentId === 'b2');
+      l.start = '15:00'; l.end = '16:00';               // b2 is free from 17:00
+      return { moves: 0 };
+    };
+    const before = JSON.stringify(sched);
+    const r = await S.refineExcept(sched, sts, cfg, 1, 1500);
+    assert.equal(r.adopted, false, `an invalid week was adopted: ${r.reason}`);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('with only one day there is nothing to refine', async () => {
+    const { app, sts, sched } = town();
+    const S = app.Scheduler;
+    const cfg1 = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const r = await S.refineExcept({ 1: sched[1] }, sts, cfg1, 1, 500);
+    assert.equal(r.adopted, false);
+    assert.equal(r.changed, 0);
+  });
+
+  test('choosing someone for a gap triggers the refinement, pinned to that day', async () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+    const sts = [
+      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+      student('short', { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+    ];
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 2000, lon: 21.7305 + i / 2000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      schedule: { 1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+                      slot('late', '19:00', '20:00', { address: 'addr-late' })], 2: [] },
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+
+    const calls = [];
+    S.refineExcept = async (...a) => { calls.push(a[3]); return { adopted: false, changed: 0 }; };
+    const cand = S.gapCandidates(app.state.schedule, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00'))[0];
+    app.state._gapFill = { day: 1, cands: [cand] };
+    app.App.applyGapFill(0);
+    await new Promise(r => setTimeout(r, 30));
+    assert.deepStrictEqual(calls, [1], 'the refinement must be told which day to leave alone');
+  });
+
+  test('it is not started while a full calculation is running', async () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+    const sts = [student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+                 student('late', { days: [1], window: { start: '19:00', end: '21:00' } }),
+                 student('short', { days: [1, 2], window: { start: '15:00', end: '21:00' } })];
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 2000, lon: 21.7305 + i / 2000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      schedule: { 1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+                      slot('late', '19:00', '20:00', { address: 'addr-late' })], 2: [] },
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    let called = false;
+    S.refineExcept = async () => { called = true; return { adopted: false }; };
+    const cand = S.gapCandidates(app.state.schedule, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00'))[0];
+    app.state._gapFill = { day: 1, cands: [cand] };
+    app.state._schedulingInProgress = true;
+    app.App.applyGapFill(0);
+    await new Promise(r => setTimeout(r, 30));
+    assert.equal(called, false, 'two things rewriting the schedule at once is how one is lost');
+  });
+});
