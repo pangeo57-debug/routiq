@@ -2502,3 +2502,188 @@ describe('one answer to "where may this lesson go"', () => {
     assert.equal(S.breaksOn(3, cfg).length, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Filling a gap by hand: "who fits here?"
+// ---------------------------------------------------------------------------
+
+describe('choosing who goes into a gap', () => {
+  // fillGaps closes a hole on its own when a move is a clear win. This is the
+  // other half: the user looks at a hole and asks who fits, then picks.
+
+  function world(extra = []) {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+    const sts = [
+      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+      student('mover', { days: [1, 2], window: { start: '15:00', end: '21:00' } }),   // placed on Tuesday
+      student('short', { days: [1, 2], window: { start: '15:00', end: '21:00' } }),   // has no lesson yet
+      ...extra,
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 2000, lon: 21.7305 + i / 2000 }; });
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    const sched = {
+      1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+          slot('late',  '19:00', '20:00', { address: 'addr-late' })],
+      2: [slot('mover', '15:00', '16:00', { address: 'addr-mover' })],
+    };
+    return { app, cfg, sts, sched };
+  }
+  const M = (t) => t;
+
+  test('offers both a lesson from another day and someone with none', () => {
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    const c = S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00'));
+    const byId = Object.fromEntries(Array.from(c).map(x => [x.studentId, x]));
+    assert.equal(byId.mover.kind, 'move');
+    assert.equal(byId.mover.fromDay, 2);
+    assert.equal(byId.short.kind, 'unplaced');
+    assert.equal(byId.short.fromDay, null);
+  });
+
+  test('someone with no lesson is listed before someone who would just be shuffled', () => {
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.equal(c[0].kind, 'unplaced', `got ${c.map(x => x.kind).join(', ')}`);
+  });
+
+  test('everything offered fits inside the gap and breaks no rule', () => {
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    const from = S.toMin('16:00'), to = S.toMin('19:00');
+    for (const c of Array.from(S.gapCandidates(sched, sts, cfg, 1, from, to))) {
+      assert.ok(S.toMin(c.start) >= from && S.toMin(c.end) <= to, `${c.name} sticks out of the gap`);
+      const trial = JSON.parse(JSON.stringify(sched));
+      assert.ok(S.applyGapCandidate(trial, sts, cfg, 1, c), `${c.name} was offered but cannot be applied`);
+      assert.deepStrictEqual(Array.from(auditSchedule(S, trial, sts, cfg)), [],
+        `${c.name} produced an invalid week`);
+    }
+  });
+
+  test('a student not free that day is not offered', () => {
+    const { app, cfg, sts, sched } = world([student('tue', { days: [2], window: { start: '15:00', end: '21:00' } })]);
+    sched[2].push(slot('tue', '16:10', '17:10', { address: 'addr-tue' }));
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.ok(!c.some(x => x.studentId === 'tue'), 'they only work Tuesdays');
+  });
+
+  test('a lesson longer than the gap is not offered', () => {
+    const { app, cfg, sts, sched } = world([student('long', { days: [1, 2], lessonDuration: 240,
+      window: { start: '15:00', end: '21:00' } })]);
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.ok(!c.some(x => x.studentId === 'long'));
+  });
+
+  test('someone already on that day is not offered a second lesson', () => {
+    const { app, cfg, sts, sched } = world();
+    sched[1].push(slot('short', '20:00', '20:30', { address: 'addr-short', duration: 30 }));
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.ok(!c.some(x => x.studentId === 'short'));
+  });
+
+  test('a shared session is never offered as a move', () => {
+    const { app, cfg, sts, sched } = world();
+    sched[2][0] = slot('mover', '15:00', '16:00', { address: 'addr-mover',
+      pairedStudentId: 'short', isGroup: true, groupMemberIds: ['mover', 'short'] });
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.ok(!c.some(x => x.kind === 'move'), 'a paired lesson cannot travel on one occupant');
+  });
+
+  test('someone in a pair or group is not offered a lesson on their own', () => {
+    // Placing one half of a pair alone leaves the other without their shared
+    // session, which is exactly what pairing exists to prevent.
+    const { app, cfg, sts, sched } = world([
+      student('half', { days: [1, 2], pairedWith: 'other', window: { start: '15:00', end: '21:00' } }),
+      student('other', { days: [1, 2], pairedWith: 'half', window: { start: '15:00', end: '21:00' } }),
+    ]);
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.ok(!c.some(x => x.studentId === 'half' || x.studentId === 'other'),
+      `a paired student was offered alone: ${c.map(x => x.studentId)}`);
+  });
+
+  test('among people with no lesson, the one who fits earliest is listed first', () => {
+    // 'late' is available only from 17:30; 'early' from 15:00. In the roster
+    // order 'late' comes first, so only an explicit sort puts 'early' on top.
+    const { app, cfg, sts, sched } = world([
+      student('latecomer', { days: [1, 2], window: { start: '17:30', end: '21:00' } }),
+      student('earlybird', { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+    ]);
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')))
+      .filter(x => x.kind === 'unplaced');
+    const times = c.map(x => S.toMin(x.start));
+    assert.ok(times.length >= 3);
+    assert.deepStrictEqual(times.slice(), times.slice().sort((a, b) => a - b),
+      `not in time order: ${c.map(x => x.studentId + '@' + x.start).join(', ')}`);
+  });
+
+  test('someone with no lesson stays above a move even when the move fits earlier', () => {
+    // Filling a hole with a person who had nothing beats shuffling a lesson
+    // that already existed — even if the shuffle would start sooner.
+    const { app, cfg, sts, sched } = world();
+    sts.find(x => x.id === 'short').availability[1] =
+      { on: true, start: '17:00', end: '21:00', windows: [[1020, 1260]] };
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:30')));
+    const kinds = c.map(x => x.kind);
+    assert.ok(kinds.includes('move') && kinds.includes('unplaced'), kinds.join(','));
+    assert.equal(c[0].kind, 'unplaced', `got ${c.map(x => x.kind + ':' + x.start).join(' ')}`);
+    const mv = c.find(x => x.kind === 'move'), un = c.find(x => x.kind === 'unplaced');
+    assert.ok(S.toMin(mv.start) < S.toMin(un.start), 'the fixture must make the move start earlier');
+  });
+
+  test('an empty answer is an empty list, not an error', () => {
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    // A gap of ten minutes: nothing fits.
+    const c = S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('16:10'));
+    assert.equal(c.length, 0);
+  });
+
+  test('applying moves the lesson and removes it from its old day', () => {
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')))
+      .find(x => x.studentId === 'mover');
+    const placedBefore = S.countTotal(sched);
+    assert.equal(S.applyGapCandidate(sched, sts, cfg, 1, c), true);
+    assert.ok(sched[1].some(x => x.studentId === 'mover'));
+    assert.ok(!sched[2].some(x => x.studentId === 'mover'), 'left its old day');
+    assert.equal(S.countTotal(sched), placedBefore, 'a move must not change how many are placed');
+  });
+
+  test('applying an unplaced student adds a lesson', () => {
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')))
+      .find(x => x.studentId === 'short');
+    const before = S.countTotal(sched);
+    assert.equal(S.applyGapCandidate(sched, sts, cfg, 1, c), true);
+    assert.equal(S.countTotal(sched), before + 1);
+  });
+
+  test('an offer that no longer fits is refused when applied', () => {
+    // The list was drawn a moment ago; the schedule may have changed since.
+    const { app, cfg, sts, sched } = world();
+    const S = app.Scheduler;
+    const c = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')))
+      .find(x => x.studentId === 'short');
+    // Someone else takes the gap first.
+    sched[1].push(slot('mover', c.start, c.end, { address: 'addr-mover' }));
+    sched[1].sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+    const snapshot = JSON.stringify(sched);
+    assert.equal(S.applyGapCandidate(sched, sts, cfg, 1, c), false);
+    assert.equal(JSON.stringify(sched), snapshot, 'a refused offer must change nothing');
+  });
+});
