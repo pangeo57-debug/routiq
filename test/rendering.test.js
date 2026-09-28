@@ -929,3 +929,17 @@ describe('a typed house number gets the endpoint that knows buildings', () => {
     assert.ok(last && last.length, 'autosuggest results must still be shown');
   });
 });
+
+describe('the client card shows every free stretch', () => {
+  test('two stretches on one day are both listed', () => {
+    const app = loadApp({ realRender: true });
+    const S = app.Scheduler;
+    const st = student('k', { name: 'Κατσαρός', days: [2] });
+    st.availability[2] = { on: true, start: '20:00', end: '22:00',
+      windows: [[S.toMin('16:00'), S.toMin('17:30')], [S.toMin('20:00'), S.toMin('22:00')]] };
+    app.setState({ students: [st], schedule: {}, settings: settings(), coords: {} });
+    const html = app.App.studentCard(st);
+    assert.ok(html.includes('16:00–17:30'), 'the earlier stretch must be on the card');
+    assert.ok(html.includes('20:00–22:00'));
+  });
+});
