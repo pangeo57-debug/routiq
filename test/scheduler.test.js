@@ -2875,3 +2875,215 @@ describe('refining the rest of the week after a gap is filled', () => {
     assert.equal(called, false, 'two things rewriting the schedule at once is how one is lost');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Gathering the days a change touched
+// ---------------------------------------------------------------------------
+
+describe('a change is judged, and left, gathered up', () => {
+  // Any move or swap leaves a hole: the lesson that left its day, or the day
+  // that had to be re-timed around a lesson of a different length. Until the
+  // day is gathered up again, a good change looks worse than it is.
+
+  function week(over = {}) {
+    const app = loadApp();
+    const cfg = settings(Object.assign({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } }, over.cfg || {}));
+    const mk = (id, days = [1, 2], from = '15:00') => student(id, { days, lessonDuration: 60,
+      window: { start: from, end: '22:00' } });
+    const sts = over.students || [mk('early', [1]), mk('late', [1], '17:00'),
+      mk('p', [2]), mk('mover', [1, 2]), mk('q', [2])];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 4000, lon: 21.7305 + i / 4000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return { app, cfg, sts };
+  }
+  const order = (S, sch, d) => (sch[d] || []).slice()
+    .sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+
+  // Day 1 has a hole (16:00 to 17:20). Day 2 is packed, with 'mover' in the
+  // middle. Moving 'mover' into day 1's hole leaves day 2 with a hole of its
+  // own until 'q' moves up — so the move only pays once day 2 is gathered.
+  const fixture = () => ({
+    1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+        slot('late', '17:20', '18:20', { address: 'addr-late' })],
+    2: [slot('p', '15:00', '16:00', { address: 'addr-p' }),
+        slot('mover', '16:05', '17:05', { address: 'addr-mover' }),
+        slot('q', '17:10', '18:10', { address: 'addr-q' })],
+  });
+
+  test('a move that only pays once the day it left is tidied is taken', () => {
+    const { app, cfg, sts } = week();
+    const S = app.Scheduler;
+    const sched = fixture();
+    const r = S.fillGaps(sched, sts, cfg);
+    assert.equal(r.moved.length, 1, 'the move is a win after gathering, and was refused before');
+    assert.equal(r.moved[0].name, 'mover');
+    assert.ok(sched[1].some(x => x.studentId === 'mover'));
+  });
+
+  test('and the day it left is closed up, not left with the hole', () => {
+    const { app, cfg, sts } = week();
+    const S = app.Scheduler;
+    const sched = fixture();
+    S.fillGaps(sched, sts, cfg);
+    const q = order(S, sched, 2).find(x => x.studentId === 'q');
+    assert.ok(S.toMin(q.start) < S.toMin('17:10'),
+      `q should have moved up into where mover was, but starts at ${q.start}`);
+  });
+
+  test('a candidate that is rejected leaves the real schedule untouched', () => {
+    // Gathering changes start and end in place. On a shallow copy that reaches
+    // the real lesson objects, so a REJECTED experiment used to move somebody.
+    //
+    // The candidate has to be LEGAL and then lose on cost, or it never reaches
+    // the gathering step and the test proves nothing: 'far' can reach Monday's
+    // gap, but Tuesday still has to be driven out to 'stay' next door to it,
+    // so the trip across the city is not worth a tidier Monday.
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+    const sts = [
+      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
+      student('far',   { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+      student('stay',  { days: [2], window: { start: '15:00', end: '21:00' } }),
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 }, early: { lat: 38.2405, lon: 21.7305 },
+      late: { lat: 38.241, lon: 21.731 }, far: { lat: 38.275, lon: 21.765 }, stay: { lat: 38.276, lon: 21.766 } };
+    app.setState({ coords, students: sts, settings: cfg,
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    const S = app.Scheduler;
+    const sched = { 1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+                        slot('late', '19:00', '20:00', { address: 'addr-late' })],
+                    2: [slot('far', '15:00', '16:00', { address: 'addr-far' }),
+                        slot('stay', '16:30', '17:30', { address: 'addr-stay' })] };
+    // Prove the premise: it IS legal, so the refusal comes from the price.
+    const legal = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
+    assert.ok(legal.some(c => c.studentId === 'far'), 'the fixture must make the move legal');
+
+    const before = JSON.stringify(sched);
+    const r = S.fillGaps(sched, sts, cfg);
+    assert.equal(r.moved.length, 0);
+    assert.equal(JSON.stringify(sched), before, 'a refused move must change nothing at all');
+  });
+
+  test('gatherDays touches only the days it is given', () => {
+    const { app, cfg, sts } = week();
+    const S = app.Scheduler;
+    const sched = {
+      1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+          slot('late', '19:00', '20:00', { address: 'addr-late' })],     // a hole, and NOT to be touched
+      2: [slot('p', '15:00', '16:00', { address: 'addr-p' }),
+          slot('q', '18:00', '19:00', { address: 'addr-q' })],           // a hole, to be closed
+    };
+    const day1 = JSON.stringify(sched[1]);
+    S.gatherDays(sched, sts, cfg, [2]);
+    assert.equal(JSON.stringify(sched[1]), day1, 'day 1 was not listed');
+    assert.ok(S.toMin(sched[2][1].start) < S.toMin('18:00'), 'day 2 was listed and should have been closed up');
+  });
+
+  test('days outside the working week are ignored rather than invented', () => {
+    const { app, cfg, sts } = week();
+    const r = app.Scheduler.gatherDays({ 1: [], 2: [] }, sts, cfg, [6, 7]);
+    assert.equal(r.moves, 0);
+  });
+
+  test('frozen lessons keep their order, and the free one still moves', () => {
+    // a and c live next to each other, far out; b lives next to home. Visiting
+    // a, b, c crosses the city twice. Unfrozen, the best fix trades a and b.
+    // With a and b frozen that trade is forbidden — the user swapped them, and
+    // putting them back would undo it — yet c is free, and can be lifted in
+    // between so the far pair sit together.
+    const { app, cfg } = week({ cfg: { workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } },
+      students: ['a', 'b', 'c'].map(id => student(id, { days: [1], window: { start: '17:00', end: '22:00' } })) });
+    const S = app.Scheduler;
+    const sts = app.state.students;
+    app.state.coords.a = { lat: 38.300, lon: 21.790 };
+    app.state.coords.c = { lat: 38.302, lon: 21.792 };
+    app.state.coords.b = { lat: 38.241, lon: 21.731 };
+    const mk = () => ({ 1: [slot('a', '17:00', '18:00', { address: 'addr-a' }),
+                            slot('b', '18:35', '19:35', { address: 'addr-b' }),
+                            slot('c', '20:10', '21:10', { address: 'addr-c' })] });
+    const ids = (sch) => order(S, sch, 1).map(x => x.studentId).join('');
+
+    const free = mk(); S.tidyDays(free, sts, cfg);
+    assert.ok(ids(free).indexOf('b') < ids(free).indexOf('a'),
+      `control: unfrozen, b and a trade places, got ${ids(free)}`);
+
+    const held = mk(); S.tidyDays(held, sts, cfg, new Set(['a', 'b']));
+    assert.ok(ids(held).indexOf('a') < ids(held).indexOf('b'),
+      `a and b are frozen and must stay in their order, got ${ids(held)}`);
+    // "acb" and "cab" are the same drive read backwards; either is right. What
+    // matters is that the two far-out addresses now sit side by side.
+    assert.equal(Math.abs(ids(held).indexOf('a') - ids(held).indexOf('c')), 1,
+      `c should have been lifted next to a, got ${ids(held)}`);
+  });
+
+  test('with a lesson frozen, another can be lifted to a better place', () => {
+    // 'd' is free only from 19:00 and is frozen in front of 'z'. An exchange
+    // can never put z ahead of d; lifting z and putting it down earlier can.
+    const { app, cfg } = week({ cfg: { workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } },
+      students: [student('x', { days: [1], window: { start: '15:00', end: '22:00' } }),
+                 student('d', { days: [1], window: { start: '19:00', end: '22:00' } }),
+                 student('z', { days: [1], window: { start: '15:00', end: '22:00' } })] });
+    const S = app.Scheduler;
+    const sts = app.state.students;
+    const sched = { 1: [slot('x', '15:00', '16:00', { address: 'addr-x' }),
+                        slot('d', '19:00', '20:00', { address: 'addr-d' }),
+                        slot('z', '20:03', '21:03', { address: 'addr-z' })] };
+    S.tidyDays(sched, sts, cfg, new Set(['x', 'd']));
+    const ids = order(S, sched, 1).map(x => x.studentId).join('');
+    assert.equal(ids, 'xzd', `z should have been lifted ahead of d, got ${ids}`);
+  });
+});
+
+describe('the hand swap and the hand move gather the days they touched', () => {
+  const mk = (id, from = '15:00') => student(id, { days: [1, 2], lessonDuration: 45,
+    window: { start: from, end: '22:00' } });
+
+  function world() {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } });
+    // 'd' is free only from 19:00.
+    const sts = [mk('x'), mk('y'), mk('d', '19:00'), mk('z')];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 4000, lon: 21.7305 + i / 4000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return { app, cfg, sts };
+  }
+  const s45 = (id, a, b) => slot(id, a, b, { address: 'addr-' + id, duration: 45 });
+  const ids = (S, sch, d) => sch[d].slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start))
+    .map(x => x.studentId).join('');
+
+  test('a swap that would leave a hole gets it closed, and the swap holds', () => {
+    const { app } = world();
+    const S = app.Scheduler;
+    app.state.schedule = { 1: [s45('x', '15:00', '15:45'), s45('y', '15:48', '16:33'),
+                               s45('d', '19:00', '19:45'), s45('z', '19:48', '20:33')], 2: [] };
+    // The user swaps y and d. That puts d (free only from 19:00) ahead of y and
+    // z, and leaves 15:45 to 19:00 empty with z stuck behind them.
+    app.App._performSlotSwap(1, 1, 1, 2);
+    const order = ids(S, app.state.schedule, 1);
+    assert.ok(order.indexOf('d') < order.indexOf('y'), `the swap must hold: d before y, got ${order}`);
+    assert.ok(order.indexOf('z') < order.indexOf('d'),
+      `z should have moved up into the hole ahead of d, got ${order}`);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, app.state.schedule, app.state.students, app.state.settings)), []);
+  });
+
+  test('moving a lesson to another day closes up the day it left', () => {
+    const { app } = world();
+    const S = app.Scheduler;
+    app.state.schedule = { 1: [], 2: [s45('x', '15:00', '15:45'), s45('y', '15:48', '16:33'),
+                                    s45('z', '16:36', '17:21')] };
+    // x leaves day 2 for day 1, leaving a hole at the very front of day 2.
+    app.App._performSlotMoveToDay(2, app.state.schedule[2][0], 1);
+    const day2 = app.state.schedule[2].slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+    assert.equal(day2.length, 2);
+    assert.equal(day2[0].start, '15:00', `y should have moved up to the start of the day, got ${day2[0].start}`);
+    assert.ok(app.state.schedule[1].some(x => x.studentId === 'x'), 'and x arrived on day 1');
+  });
+});

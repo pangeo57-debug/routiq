@@ -3726,7 +3726,12 @@ const Scheduler = {
   // where exchanges could not reach the same arrangement. Not kept — doubling
   // the candidates for a gain nothing can demonstrate is how untestable code
   // accumulates.
-  tidyDays(schedule, students, settings){
+  tidyDays(schedule, students, settings, frozen){
+    // `frozen` is a Set of student ids whose lessons must keep their place in
+    // the order. After a hand swap the two people swapped are frozen: the point
+    // of a swap is that they trade places, and a tidy-up that quietly put them
+    // back would undo it. Everyone else stays free to move.
+    const isFrozen = (sl) => !!(frozen && frozen.has(sl.studentId));
     let moves = 0, kmSaved = 0, idleSaved = 0;
     for(const day of (settings.workDays||[])){
       let slots = (schedule[day]||[]).slice()
@@ -3742,12 +3747,37 @@ const Scheduler = {
           for(let j=i+1;j<slots.length;j++){
             // Never reorder a student's own back-to-back block apart.
             if(slots[i].studentId === slots[j].studentId) continue;
+            if(isFrozen(slots[i]) || isFrozen(slots[j])) continue;
             const trial = slots.slice();
             [trial[i], trial[j]] = [trial[j], trial[i]];
             const laid = this.relayoutDay(trial, day, students, settings);
             if(!laid) continue;
             const c = this.dayCost(laid, day, settings);
             if(c < cost - 0.05){ slots = laid; cost = c; moves++; improved = true; }
+          }
+        }
+        // Moving ONE lesson to another place in the order, rather than trading
+        // two. Only when something is frozen, and that is the point: with two
+        // lessons pinned, an exchange cannot reach the arrangement that closes
+        // the hole — someone free all day sits behind a frozen lesson that
+        // cannot start until 20:00, and the only way to put them ahead of it is
+        // to lift them and put them down earlier. Without frozen lessons the
+        // exchanges already reach the same places, and measured relocation
+        // moves were worth about 1% for double the work, so the ordinary
+        // pipeline does not pay for them.
+        if(frozen && frozen.size){
+          for(let i=0;i<slots.length;i++){
+            if(isFrozen(slots[i])) continue;
+            for(let j=0;j<slots.length;j++){
+              if(j===i) continue;
+              const trial = slots.slice();
+              const [moved] = trial.splice(i,1);
+              trial.splice(j,0,moved);
+              const laid = this.relayoutDay(trial, day, students, settings);
+              if(!laid) continue;
+              const c = this.dayCost(laid, day, settings);
+              if(c < cost - 0.05){ slots = laid; cost = c; moves++; improved = true; i = -1; break; }
+            }
           }
         }
         if(!improved) break;
@@ -3757,6 +3787,33 @@ const Scheduler = {
       idleSaved += idle0 - this.dayIdle(slots, day, settings);
     }
     return { moves, kmSaved, idleSaved };
+  },
+
+  /**
+   * Close the holes a change has just left, on the days it touched.
+   *
+   * Any move or swap leaves a hole behind: the lesson that left its day, or
+   * the day that had to be re-timed around a lesson of a different length.
+   * Until the day is gathered up again, the change looks worse than it is —
+   * and that is not cosmetic. fillGaps used to price a candidate move BEFORE
+   * gathering the day it came from, so a move that saved 7 km-equivalents
+   * once Tuesday was tidied looked like it cost 2, and was refused. Measured:
+   * a quarter of the gaps left at the end of a run were fillable by exactly
+   * such a move.
+   *
+   * One place for it, so the hand swap, the hand move, the automatic gap
+   * fill and the refinement all gather the same way.
+   *
+   * `frozen`: student ids that must keep their place in the order (see
+   * tidyDays). Only the listed days are touched.
+   */
+  gatherDays(schedule, students, settings, days, frozen){
+    const only = (days || []).map(Number).filter(d => (settings.workDays || []).includes(d));
+    if(!only.length) return { moves: 0, kmSaved: 0, idleSaved: 0 };
+    const cfg = { ...settings, workDays: only };
+    const tidied = this.tidyDays(schedule, students, cfg, frozen);
+    this.compactDays(schedule, students, cfg);
+    return tidied;
   },
 
   compactDays(schedule, students, settings){
@@ -3905,17 +3962,34 @@ const Scheduler = {
             for(let t = gap.from; t + dur <= gap.to; t += 5){
               const trial = {};
               for(const d of settings.workDays) trial[d] = (schedule[d] || []).slice();
-              trial[other] = trial[other].filter(x => x !== cand);
+              // The two days that get gathered are COPIED down to the lesson
+              // objects. gatherDays -> compactDays changes start and end in
+              // place, and a shallow copy of the array shares those objects
+              // with the real schedule: a candidate that was then REJECTED had
+              // already moved somebody's lesson in the real week.
+              trial[other] = trial[other].filter(x => x !== cand).map(x => ({ ...x }));
+              trial[day] = trial[day].map(x => ({ ...x }));
               trial[day] = trial[day]
                 .concat([{ ...cand, start: this.toTime(t), end: this.toTime(t + dur) }])
                 .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
               const introduced = this.verifySchedule(trial, students, settings)
                 .filter(x => !before.has(x));
               if(introduced.length) continue;
+              // The first legal start is the one to price. Later starts in the
+              // same gap only leave more of it empty.
+              //
+              // Priced AFTER gathering the two days it touches. Judged as it
+              // stood, the day the lesson left still has a hole where it was,
+              // so a move that pays off once that day is tidied looked like a
+              // loss and was refused.
+              this.gatherDays(trial, students, settings, [other, day]);
+              // Gathering only makes legal moves, but this is cheap and the
+              // alternative is trusting it.
+              if(this.verifySchedule(trial, students, settings).some(x => !before.has(x))) break;
               // Moving never drops anyone, but assert it rather than trust it:
               // a silent placement loss is the one outcome worse than the gap.
-              if(this.countTotal(trial) !== placedNow) continue;
-              if(weekCost(trial) >= weekCost(schedule)) continue;
+              if(this.countTotal(trial) !== placedNow) break;
+              if(weekCost(trial) >= weekCost(schedule)) break;
               for(const d of settings.workDays) schedule[d] = trial[d];
               moved.push({ name: st.name, from: other, to: day, at: this.toTime(t) });
               done = true;
@@ -8117,6 +8191,14 @@ const App = {
       trial[d] = laid;
     }
 
+    // The two lessons traded places, and that can leave a hole: the one now in
+    // front may not be free until late, and the lessons behind it wait for it.
+    // Gather the touched days up again, with the pair frozen — the point of a
+    // swap is that they trade places, and a tidy-up that put them back would
+    // undo it. Everyone else is free to move up into the hole.
+    Scheduler.gatherDays(trial, state.students, state.settings, touched,
+      new Set([srcSlot0.studentId, tgtSlot0.studentId]));
+
     // Only problems this swap INTRODUCES may block it, judged by
     // verifySchedule — the SAME rule set the scheduler holds itself to,
     // rather than a second, partial copy of the rules living here. That copy
@@ -8172,6 +8254,11 @@ const App = {
     if(srcArrIdx>=0) state.schedule[srcDay].splice(srcArrIdx,1);
     if(!state.schedule[targetDay]) state.schedule[targetDay]=[];
     state.schedule[targetDay].push({...srcSlot, start: newTime.start, end: newTime.end});
+    // splice() above left a hole where the lesson was, and nothing closed it:
+    // the day it came FROM kept its gap until the next full recalculation.
+    // Gather both days, the moved lesson staying where the user put it.
+    Scheduler.gatherDays(state.schedule, state.students, state.settings,
+      [srcDay, targetDay], new Set([student.id]));
     Storage.saveSchedule(state.schedule);
     this.renderSchedule();
     this.renderHome();
@@ -9766,7 +9853,9 @@ const App = {
     this.closeGapFill();
     if(!ok){ Toast.show(t('gap_no_longer_fits'), 'error', 5000); return; }
     // Bringing a lesson over can leave a hole behind on the day it came from.
-    if(cand.kind === 'move') Scheduler.compactDays(state.schedule, state.students, state.settings);
+    if(cand.kind === 'move')
+      Scheduler.gatherDays(state.schedule, state.students, state.settings,
+        [cand.fromDay, g.day], new Set([cand.studentId]));
     Storage.saveSchedule(state.schedule);
     Toast.show(tf('gap_filled', { name: cand.name, time: cand.start }), 'success');
     this.renderSchedule();
