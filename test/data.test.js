@@ -846,3 +846,143 @@ describe('nothing is fetched from Google before a page is drawn', () => {
     assert.ok(/Syne/.test(greek[0]), 'and it is Syne, the one that actually has Greek');
   });
 });
+
+// ---------------------------------------------------------------------------
+// The diagnostic export: what reproduces a problem, and nothing that says who
+// ---------------------------------------------------------------------------
+
+describe('the diagnostic export carries no personal data', () => {
+  // The ordinary backup holds names, addresses, phone numbers and notes —
+  // other people's data, some of it about children. This is for sending a bug
+  // to someone who has no need for any of that.
+
+  const SECRETS = ['Νίκος Παπαδόπουλος', 'Γούναρη 58', 'Κορίνθου 210', '6941234567', 'ΜΥΣΤΙΚΗ-ΣΗΜΕΙΩΣΗ',
+    'Κυρία Ελένη', 'Πλατεία Γεωργίου', 'SECRET-HERE-KEY', 'ABCDEFGHJKMNPQRSTUVWXYZ2', 'Οδοντίατρος',
+    'Διαρροή στην κουζίνα', 'κρυφό-πεδίο', 'Ομάδα Α'];
+
+  function populated() {
+    const app = loadApp();
+    const a = student('s1717000000001', { name: 'Νίκος Παπαδόπουλος', address: 'Γούναρη 58, Πάτρα',
+      phone: '6941234567', notes: 'ΜΥΣΤΙΚΗ-ΣΗΜΕΙΩΣΗ', group: 'Ομάδα Α' });
+    a.secretField = 'κρυφό-πεδίο';                       // a field nobody planned for
+    const b = student('s1717000000002', { name: 'Κυρία Ελένη', address: 'Κορίνθου 210, Πάτρα',
+      pairedWith: 's1717000000001' });
+    a.pairedWith = b.id;
+    const cfg = settings({ teacherName: 'Κυρία Ελένη', homeAddress: 'Πλατεία Γεωργίου 1, Πάτρα',
+      hereApiKey: 'SECRET-HERE-KEY',
+      sync: { code: 'ABCDEFGHJKMNPQRSTUVWXYZ2', version: 3, primary: true },
+      blockedSlots: [{ day: 1, start: '12:00', end: '13:00', reason: 'Οδοντίατρος' }] });
+    app.setState({
+      students: [a, b], settings: cfg,
+      jobs: [{ id: 'j99', name: 'Διαρροή στην κουζίνα', address: 'Γούναρη 58', phone: '6941234567',
+        durationMin: 60, notes: 'ΜΥΣΤΙΚΗ-ΣΗΜΕΙΩΣΗ', date: '2026-09-28' }],
+      schedule: { 1: [slot(a.id, '17:00', '18:00', { studentName: 'Νίκος Παπαδόπουλος', address: 'Γούναρη 58, Πάτρα' }),
+                      slot(b.id, '18:10', '19:10', { studentName: 'Κυρία Ελένη', address: 'Κορίνθου 210, Πάτρα',
+                        pairedStudentId: a.id, isGroup: true, groupMemberIds: [b.id, a.id], groupCode: 'Ομάδα Α' })] },
+      coords: { home: { lat: 38.246612, lon: 21.734599 }, [a.id]: { lat: 38.240123456, lon: 21.730987654 },
+                [b.id]: { lat: 38.250111, lon: 21.741222 } },
+    });
+    return { app, a, b };
+  }
+
+  test('none of the personal strings appear anywhere in the output', () => {
+    const { app } = populated();
+    const text = app.App._diagnosticText();
+    for (const secret of SECRETS)
+      assert.ok(!text.includes(secret), `"${secret}" is in the diagnostic file`);
+  });
+
+  test('nor do the real ids, which are creation timestamps', () => {
+    const { app } = populated();
+    const text = app.App._diagnosticText();
+    assert.ok(!/s17170000000/.test(text), 'a student id reveals when they were added');
+    assert.ok(!text.includes('j99'));
+  });
+
+  test('a field nobody planned for is dropped rather than carried along', () => {
+    // Whitelisting: a new field added to the app next month must not leak
+    // just because nobody remembered to scrub it.
+    const { app } = populated();
+    const snap = app.App.diagnosticSnapshot();
+    assert.equal(snap.students[0].secretField, undefined);
+  });
+
+  test('the structure survives: who is paired with whom, and where they are placed', () => {
+    const { app } = populated();
+    const snap = JSON.parse(app.App._diagnosticText());
+    assert.equal(snap.students.length, 2);
+    const ids = new Set(snap.students.map(s => s.id));
+    assert.equal(ids.size, 2, 'two people must not collapse into one pseudonym');
+    // Every reference points at somebody who exists.
+    for (const s of snap.students) if (s.pairedWith) assert.ok(ids.has(s.pairedWith), 'dangling pairing');
+    for (const sl of snap.schedule[1]) {
+      assert.ok(ids.has(sl.studentId), 'a lesson for someone not in the roster');
+      for (const m of sl.groupMemberIds || []) assert.ok(ids.has(m), 'a group member not in the roster');
+    }
+    assert.deepStrictEqual(snap.schedule[1].map(x => x.start + '-' + x.end), ['17:00-18:00', '18:10-19:10']);
+    assert.equal(snap.students[0].pairedWith, snap.students[1].id);
+  });
+
+  test('the same person has the same pseudonym everywhere', () => {
+    const { app } = populated();
+    const snap = JSON.parse(app.App._diagnosticText());
+    const first = snap.students[0];
+    assert.equal(snap.schedule[1][0].studentId, first.id);
+    assert.ok(first.id in snap.coords, 'their coordinate must sit under the same alias');
+    assert.equal(snap.schedule[1][0].studentName, first.name);
+  });
+
+  test('locations are rounded to about a hundred metres', () => {
+    const { app } = populated();
+    const snap = JSON.parse(app.App._diagnosticText());
+    for (const c of Object.values(snap.coords)) {
+      assert.equal(c.lat, Math.round(c.lat * 1000) / 1000, `lat not rounded: ${c.lat}`);
+      assert.equal(c.lon, Math.round(c.lon * 1000) / 1000, `lon not rounded: ${c.lon}`);
+    }
+    assert.equal(snap.coords.home.lat, 38.247);
+  });
+
+  test('what shapes the schedule is kept', () => {
+    const { app } = populated();
+    const snap = JSON.parse(app.App._diagnosticText());
+    assert.deepStrictEqual(snap.settings.workDays, [1, 2, 3, 4, 5]);
+    assert.ok(snap.settings.dayHours[1], 'working hours are what makes a gap a gap');
+    assert.equal(snap.settings.travelMargin, 2);
+    assert.equal(snap.settings.blockedSlots[0].start, '12:00');
+    assert.equal(snap.settings.blockedSlots[0].reason, '', 'the reason is free text and can name anything');
+    assert.equal(snap.students[0].lessonDuration, 60);
+    assert.ok(snap.students[0].availability[1].on);
+  });
+
+  test('it is accepted as a backup, so it loads as it is', () => {
+    const { app } = populated();
+    const snap = JSON.parse(app.App._diagnosticText());
+    assert.deepStrictEqual(Array.from(app.App.validateBackup(snap)), []);
+  });
+
+  test('loaded back, it is a schedule the app can still check', () => {
+    const { app } = populated();
+    const snap = JSON.parse(app.App._diagnosticText());
+    const other = loadApp();
+    other.setState({ students: snap.students, jobs: snap.jobs, schedule: snap.schedule,
+      coords: snap.coords, settings: Object.assign(settings(), snap.settings),
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    const issues = other.Scheduler.verifySchedule(other.state.schedule, other.state.students, other.state.settings);
+    assert.ok(Array.isArray(issues), 'verifySchedule must run on the anonymised data');
+  });
+
+  test('taking it changes nothing in the app', () => {
+    const { app } = populated();
+    const before = JSON.stringify([app.state.students, app.state.schedule, app.state.coords, app.state.settings]);
+    app.App.diagnosticSnapshot();
+    assert.equal(JSON.stringify([app.state.students, app.state.schedule, app.state.coords, app.state.settings]), before,
+      'exporting must not rename anyone or round anything in the real data');
+  });
+
+  test('an empty app exports without error', () => {
+    const app = loadApp();
+    app.setState({ students: [], jobs: [], schedule: {}, coords: {}, settings: settings() });
+    const snap = JSON.parse(app.App._diagnosticText());
+    assert.equal(snap.students.length, 0);
+  });
+});
