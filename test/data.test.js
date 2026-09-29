@@ -1022,3 +1022,77 @@ describe('one rule decides whether HERE is used, everywhere', () => {
     assert.equal(app.hereAvailable(), true, 'an own key counts');
   });
 });
+
+describe('the map\'s drive times are scaled to what a drive really takes', () => {
+  // OSRM prices a journey at the roads' speed limits — no traffic lights, no
+  // queues, no parking — so in a city it says about half of what the drive
+  // takes. A 10-minute leg from Ρίο to the centre of Πάτρα was that figure.
+  // The scaling happens in Router.getMatrix, the one place OSRM's times enter
+  // the app, so the scheduler and the Route screen cannot disagree.
+
+  const osrm = (durations, distances) => async () => ({
+    ok: true, json: async () => ({ code: 'Ok', durations, distances }),
+  });
+  const pts = [{ lat: 38.297, lon: 21.787 }, { lat: 38.246, lon: 21.734 }];
+
+  test('durations are scaled and distances are not', async () => {
+    const app = loadApp({ fetch: osrm([[0, 600], [600, 0]], [[0, 8000], [8000, 0]]) });
+    app.setState({ settings: settings({ osrmTimeFactor: 2 }) });
+    const m = await app.Router.getMatrix(pts);
+    assert.equal(m.durations[0][1], 1200, 'ten minutes at a factor of two is twenty');
+    assert.equal(m.durations[0][0], 0, 'staying put still takes no time');
+    assert.equal(m.distances[0][1], 8000, 'the road distance is real and must not be touched');
+  });
+
+  test('the default is not "trust the map"', async () => {
+    const app = loadApp({ fetch: osrm([[0, 600], [600, 0]], [[0, 8000], [8000, 0]]) });
+    app.setState({ settings: settings() });                  // no factor saved at all
+    const m = await app.Router.getMatrix(pts);
+    assert.ok(m.durations[0][1] > 600, `the free-flow figure should be scaled up, got ${m.durations[0][1] / 60} min`);
+  });
+
+  test('a factor of 1 (0%) is a legitimate answer and means exactly the map', async () => {
+    const app = loadApp({ fetch: osrm([[0, 600], [600, 0]], [[0, 8000], [8000, 0]]) });
+    app.setState({ settings: settings({ osrmTimeFactor: 1 }) });
+    assert.equal((await app.Router.getMatrix(pts)).durations[0][1], 600);
+  });
+
+  test('a missing leg stays missing rather than becoming zero or NaN', async () => {
+    const app = loadApp({ fetch: osrm([[0, null], [600, 0]], [[0, null], [8000, 0]]) });
+    app.setState({ settings: settings({ osrmTimeFactor: 1.5 }) });
+    const m = await app.Router.getMatrix(pts);
+    assert.equal(m.durations[0][1], null, 'OSRM said it could not route this, and that must survive');
+    assert.equal(m.durations[1][0], 900);
+  });
+
+  test('a nonsense factor falls back to the default instead of breaking every drive', () => {
+    const app = loadApp();
+    for (const bad of [0, 0.5, -3, NaN, 'abc', 99, undefined]) {
+      app.setState({ settings: settings({ osrmTimeFactor: bad }) });
+      assert.equal(app.Router.timeFactor(), 1.5, `${String(bad)} should not be believed`);
+    }
+    app.setState({ settings: settings({ osrmTimeFactor: 1.3 }) });
+    assert.equal(app.Router.timeFactor(), 1.3);
+  });
+
+  test('a failed request still returns nothing, not a scaled zero', async () => {
+    const app = loadApp({ fetch: async () => ({ ok: false }) });
+    assert.equal(await app.Router.getMatrix(pts), null);
+  });
+
+  test('the setting is saved as a multiplier from a percentage, and 0 is kept', () => {
+    const fs = require('fs');
+    const { APP_FILE } = require('./harness');
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    // The save path reads the field and converts % to a multiplier.
+    assert.match(src, /set-time-factor/, 'the field must exist');
+    assert.match(src, /osrmTimeFactor\s*=\s*1\s*\+/, 'and be stored as 1 + pct/100');
+    // The clamp that stops a typo from making every drive absurdly long.
+    assert.match(src, /Math\.min\(200,\s*Math\.max\(0,/);
+  });
+
+  test('a default exists for people whose saved settings predate it', () => {
+    const app = loadApp();
+    assert.equal(app.defaultSettings().osrmTimeFactor, 1.5);
+  });
+});
