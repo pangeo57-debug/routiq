@@ -986,3 +986,39 @@ describe('the diagnostic export carries no personal data', () => {
     assert.equal(snap.students.length, 0);
   });
 });
+
+describe('one rule decides whether HERE is used, everywhere', () => {
+  // The schedule is planned with HERE's traffic-aware times when HERE is
+  // reachable. If any other screen decides "is HERE available?" a different way,
+  // the same drive gets two different figures. With the proxy there is no key in
+  // the browser at all, so a check on the KEY silently means "no".
+  const fs = require('fs');
+  const { APP_FILE } = require('./harness');
+  const src = fs.readFileSync(APP_FILE, 'utf8');
+
+  test('no code gates HERE on the presence of a key', () => {
+    const gates = src.split('\n').map((l, i) => [i + 1, l])
+      .filter(([, l]) => /\bif\s*\(\s*!?hereKey\b|hereKey\s*(\?|&&|\|\|)/.test(l))
+      .filter(([, l]) => !/^\s*\/\//.test(l));
+    assert.deepStrictEqual(gates.map(([n, l]) => `${n}: ${l.trim()}`), [],
+      'these decide by key; they should ask hereAvailable()');
+  });
+
+  test('every place that fetches a HERE matrix is behind hereAvailable()', () => {
+    const lines = src.split('\n');
+    const calls = lines.map((l, i) => [i, l]).filter(([, l]) => /Router\.getHereMatrix\(/.test(l));
+    assert.ok(calls.length >= 3, `expected the matrix call sites, found ${calls.length}`);
+    for (const [i] of calls) {
+      const window = lines.slice(Math.max(0, i - 12), i + 1).join('\n');
+      assert.match(window, /hereAvailable\(\)/, `line ${i + 1} fetches a HERE matrix without checking availability`);
+    }
+  });
+
+  test('the modes: own key, proxy, or free', () => {
+    const app = loadApp();
+    app.setState({ settings: settings() });
+    assert.equal(app.hereAvailable(), false, 'no key and no proxy: OSRM and Nominatim');
+    app.state.settings.hereApiKey = 'k';
+    assert.equal(app.hereAvailable(), true, 'an own key counts');
+  });
+});

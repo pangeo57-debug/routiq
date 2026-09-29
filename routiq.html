@@ -9285,7 +9285,11 @@ const App = {
       // traffic-free fallback.
       const allCoords = [homeC, ...slots.map(s=>state.coords[s.studentId]||Scheduler.coordsHash(s.address))];
       let matrix = null;
-      if(hereKey && allCoords.length >= 2){
+      // hereAvailable(), not hereKey: with the proxy there is no key in the
+      // browser at all, so gating on the key sent the Route screen to OSRM while
+      // the schedule itself had been planned with HERE's traffic times — two
+      // different figures for the same drive.
+      if(hereAvailable() && allCoords.length >= 2){
         const dep = new Date();
         if(Number(day)===6) dep.setHours(11,0,0,0); else dep.setHours(17,0,0,0);
         matrix = await Router.getHereMatrix(allCoords, hereKey, dep.toISOString()).catch(()=>null);
