@@ -3697,10 +3697,27 @@ const Scheduler = {
   },
 
   // What a day costs its owner: kilometres driven, plus an hour of sitting
-  // around waiting counted as roughly five kilometres of driving. Waiting is
-  // not free, and treating it as free is how a schedule ends up with a
-  // four-hour hole in the middle of an afternoon.
-  IDLE_KM_PER_MIN: 0.083,
+  // around waiting counted as fifteen kilometres of driving. Waiting is not
+  // free, and treating it as free is how a schedule ends up with a four-hour
+  // hole in the middle of an afternoon.
+  //
+  // It used to be five kilometres an hour (0.083), which was too forgiving: a
+  // detour of a few kilometres was allowed to buy back only a few minutes of
+  // gap. Measured over 35 paired weeks at 5, 9, 15, 24, 42 and 72 km an hour:
+  //
+  //    km/hour   waiting     gaps 30min+   driving
+  //       5      1259 min       11         2425 km
+  //       9      1082            8         2442
+  //      15       945            8         2469     <- here
+  //      24       995            9         2470
+  //      42       931            8         2477
+  //      72       992            9         2472
+  //
+  // Up to fifteen the waiting falls by a quarter for under 2% more driving.
+  // Beyond it nothing further is gained and the kilometres keep rising: the
+  // gaps that remain are ones somebody's availability forces, which no price
+  // can close. Same lessons placed and no violations at every setting.
+  IDLE_KM_PER_MIN: 0.25,
   dayCost(slots, day, settings){
     return this.dayKm(slots, day, settings)
          + this.dayIdle(slots, day, settings) * this.IDLE_KM_PER_MIN;

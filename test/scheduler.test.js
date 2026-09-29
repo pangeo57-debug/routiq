@@ -1065,9 +1065,18 @@ describe('dead time in the middle of a day', () => {
     // Same stops, so the same driving — the cost must still separate them.
     assert.ok(S.dayCost(slots, 1, cfg) > S.dayKm(slots, 1, cfg),
       'waiting has to cost something, or a four-hour hole looks free');
+    // At five km an hour a detour of a few kilometres was allowed to buy back
+    // only a few minutes of gap, which was too forgiving. Measured over 35
+    // paired weeks, waiting falls by a quarter up to about fifteen km an hour
+    // for under 2% more driving, and beyond that nothing further is gained
+    // while the kilometres keep rising — the remaining gaps are forced by
+    // somebody's availability, which no price can close. So: clearly more than
+    // a few kilometres, and not unbounded.
     const oneHourOfWaiting = 60 * S.IDLE_KM_PER_MIN;
-    assert.ok(oneHourOfWaiting > 2 && oneHourOfWaiting < 10,
-      `an hour of waiting should be worth a few km, got ${oneHourOfWaiting}`);
+    assert.ok(oneHourOfWaiting >= 10,
+      `an hour of waiting must outweigh a few kilometres, got ${oneHourOfWaiting}`);
+    assert.ok(oneHourOfWaiting <= 40,
+      `a price this high buys no shorter gaps, only more driving, got ${oneHourOfWaiting}`);
   });
 });
 
@@ -1906,6 +1915,35 @@ describe('the day plan explains its holes', () => {
 // Closing a hole with work from another day
 // ---------------------------------------------------------------------------
 
+// A move that fills one gap and leaves a BIGGER one behind. 'mover' fits
+// Monday's hole, but on Tuesday he sits between p (free only until 16:00) and q
+// (cannot start before 17:10): take him out and Tuesday has a hole neither can
+// close. Legal, and still a bad trade, so it is refused on price.
+function badTradeWeek(app) {
+  const cfg = settings({ workDays: [1, 2],
+    dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+  const sts = [
+    student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+    student('late',  { days: [1], window: { start: '17:30', end: '21:00' } }),
+    student('mover', { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+    student('p', { days: [2], window: { start: '15:00', end: '16:00' } }),
+    student('q', { days: [2], window: { start: '17:10', end: '22:00' } }),
+  ];
+  const coords = { home: { lat: 38.240, lon: 21.730 }, early: { lat: 38.2405, lon: 21.7305 },
+    late: { lat: 38.241, lon: 21.731 }, mover: { lat: 38.265, lon: 21.755 },
+    p: { lat: 38.2655, lon: 21.7555 }, q: { lat: 38.266, lon: 21.756 } };
+  app.setState({ coords, students: sts, settings: cfg,
+    travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+  const sched = {
+    1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+        slot('late', '17:30', '18:30', { address: 'addr-late' })],
+    2: [slot('p', '15:00', '16:00', { address: 'addr-p' }),
+        slot('mover', '16:05', '17:05', { address: 'addr-mover' }),
+        slot('q', '17:10', '18:10', { address: 'addr-q' })],
+  };
+  return { cfg, sts, sched };
+}
+
 describe('a long gap survives only if nobody can go in it', () => {
   // Everything else closes gaps within a single day: compactDays pulls lessons
   // earlier, tidyDays reorders them, and lnsRepair only places students who are
@@ -2031,40 +2069,59 @@ describe('a long gap survives only if nobody can go in it', () => {
       'a shared session cannot be moved by considering one occupant');
   });
 
-  test('refuses a move that costs more driving than the waiting is worth', () => {
+  test('refuses a move that leaves a bigger hole behind than it fills', () => {
     const app = loadApp();
-    const cfg = settings({ workDays: [1, 2],
-      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
-    const sts = [
-      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
-      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
-      student('far',   { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
-      student('stay',  { days: [2], window: { start: '15:00', end: '21:00' } }),
-    ];
-    // Two clusters. Monday's work and home are in one; Tuesday's are together
-    // in the other. 'far' could legally fill Monday's hole — the drive fits
-    // inside it — but Tuesday has to be driven out there for 'stay' anyway, so
-    // the move buys a tidier Monday with a round trip across the city.
-    const coords = {
-      home:  { lat: 38.2400, lon: 21.7300 },
-      early: { lat: 38.2405, lon: 21.7305 },
-      late:  { lat: 38.2410, lon: 21.7310 },
-      far:   { lat: 38.2750, lon: 21.7650 },
-      stay:  { lat: 38.2760, lon: 21.7660 },
-    };
-    app.setState({ coords, students: sts, settings: cfg,
-      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
-
-    const sched = {
-      1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
-          slot('late',  '19:00', '20:00', { address: 'addr-late' })],
-      2: [slot('far',  '15:00', '16:00', { address: 'addr-far' }),
-          slot('stay', '16:30', '17:30', { address: 'addr-stay' })],
-    };
+    const { cfg, sts, sched } = badTradeWeek(app);
+    const S = app.Scheduler;
+    // The premise: it IS legal, so the refusal is about price and not rules.
+    const legal = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('17:30')));
+    assert.ok(legal.some(c => c.studentId === 'mover'), 'the fixture must make the move legal');
     const before = JSON.stringify(sched);
-    assert.equal(app.Scheduler.fillGaps(sched, sts, cfg).moved.length, 0,
-      'a tidier Monday is not worth a trip across the city');
+    assert.equal(S.fillGaps(sched, sts, cfg).moved.length, 0,
+      'a tidier Monday is not worth a Tuesday with a hole nobody can close');
     assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('a detour of several kilometres is now worth it to close a long gap', () => {
+    // 'mover' can fill Monday's hole (18:20 is when 'late' starts) but lives a
+    // few kilometres out, so it costs real driving. At five km an hour of
+    // waiting the driving outweighed the gap and the move was refused; at
+    // fifteen it is taken. The same candidate, legal both times — only the
+    // price of waiting differs.
+    const build = () => {
+      const app = loadApp();
+      const cfg = settings({ workDays: [1, 2],
+        dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
+      const sts = [
+        student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
+        student('late',  { days: [1], window: { start: '18:20', end: '21:00' } }),
+        student('mover', { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
+        student('p', { days: [2], window: { start: '15:00', end: '21:00' } }),
+      ];
+      const d = 0.025;
+      const coords = { home: { lat: 38.24, lon: 21.73 }, early: { lat: 38.2405, lon: 21.7305 },
+        late: { lat: 38.241, lon: 21.731 }, mover: { lat: 38.24 + d, lon: 21.73 + d },
+        p: { lat: 38.24 + d + 0.0005, lon: 21.73 + d + 0.0005 } };
+      app.setState({ coords, students: sts, settings: cfg,
+        travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+      const sched = { 1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
+                          slot('late', '18:20', '19:20', { address: 'addr-late' })],
+                      2: [slot('mover', '15:00', '16:00', { address: 'addr-mover' }),
+                          slot('p', '16:05', '17:05', { address: 'addr-p' })] };
+      return { S: app.Scheduler, cfg, sts, sched };
+    };
+
+    const old = build();
+    old.S.IDLE_KM_PER_MIN = 0.083;                     // the previous price
+    assert.ok(Array.from(old.S.gapCandidates(old.sched, old.sts, old.cfg, 1,
+      old.S.toMin('16:00'), old.S.toMin('18:20'))).some(c => c.studentId === 'mover'),
+      'the move must be legal, so the difference is price alone');
+    assert.equal(old.S.fillGaps(old.sched, old.sts, old.cfg).moved.length, 0,
+      'at five km an hour the detour outweighed the gap');
+
+    const now = build();                                // the default
+    assert.equal(now.S.fillGaps(now.sched, now.sts, now.cfg).moved.length, 1,
+      'at the current price the same move is worth it');
   });
 
   test('a schedule with no long gaps comes back untouched', async () => {
@@ -2937,32 +2994,13 @@ describe('a change is judged, and left, gathered up', () => {
     // Gathering changes start and end in place. On a shallow copy that reaches
     // the real lesson objects, so a REJECTED experiment used to move somebody.
     //
-    // The candidate has to be LEGAL and then lose on cost, or it never reaches
-    // the gathering step and the test proves nothing: 'far' can reach Monday's
-    // gap, but Tuesday still has to be driven out to 'stay' next door to it,
-    // so the trip across the city is not worth a tidier Monday.
+    // The candidate has to be LEGAL and then lose on price, or it never
+    // reaches the gathering step and the test proves nothing.
     const app = loadApp();
-    const cfg = settings({ workDays: [1, 2],
-      dayHours: { 1: { start: '15:00', end: '21:00' }, 2: { start: '15:00', end: '21:00' } } });
-    const sts = [
-      student('early', { days: [1], window: { start: '15:00', end: '16:00' } }),
-      student('late',  { days: [1], window: { start: '19:00', end: '21:00' } }),
-      student('far',   { days: [1, 2], window: { start: '15:00', end: '21:00' } }),
-      student('stay',  { days: [2], window: { start: '15:00', end: '21:00' } }),
-    ];
-    const coords = { home: { lat: 38.240, lon: 21.730 }, early: { lat: 38.2405, lon: 21.7305 },
-      late: { lat: 38.241, lon: 21.731 }, far: { lat: 38.275, lon: 21.765 }, stay: { lat: 38.276, lon: 21.766 } };
-    app.setState({ coords, students: sts, settings: cfg,
-      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    const { cfg, sts, sched } = badTradeWeek(app);
     const S = app.Scheduler;
-    const sched = { 1: [slot('early', '15:00', '16:00', { address: 'addr-early' }),
-                        slot('late', '19:00', '20:00', { address: 'addr-late' })],
-                    2: [slot('far', '15:00', '16:00', { address: 'addr-far' }),
-                        slot('stay', '16:30', '17:30', { address: 'addr-stay' })] };
-    // Prove the premise: it IS legal, so the refusal comes from the price.
-    const legal = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('19:00')));
-    assert.ok(legal.some(c => c.studentId === 'far'), 'the fixture must make the move legal');
-
+    const legal = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('17:30')));
+    assert.ok(legal.some(c => c.studentId === 'mover'), 'the fixture must make the move legal');
     const before = JSON.stringify(sched);
     const r = S.fillGaps(sched, sts, cfg);
     assert.equal(r.moved.length, 0);
