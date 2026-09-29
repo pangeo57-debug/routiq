@@ -4020,6 +4020,128 @@ const Scheduler = {
     return { moved };
   },
 
+  // A wait shorter than this is not worth moving anyone for.
+  RELOCATE_MIN_IDLE: 15,
+
+  /** A lesson that can travel on its own: not shared, not a merged block. */
+  _movableAlone(sl, byId){
+    if(sl.isGroup || sl.merged || sl.pairedStudentId) return false;
+    if(sl.groupMemberIds && sl.groupMemberIds.length) return false;
+    const st = byId[sl.studentId];
+    return !!st && !st.pairedWith && !(st.type === 'group' && st.group) && !st.forceMerge;
+  },
+
+  /**
+   * The best place for ONE lesson on ANOTHER day, if it can go there at all.
+   *
+   * fillGaps only ever asked "who fits into this gap?". That misses the more
+   * common case: a lesson that CAUSES the wait — its student is free only from
+   * 20:00, so everything before it sits idle — could simply go to another day,
+   * and it does not need a gap there to do it. A lesson can go at the end of a
+   * day, or in the middle with the rest shifted along. So every position on
+   * the target day is tried, laid out by relayoutDay (which honours
+   * availability, breaks and the working day), and the cheapest legal one wins.
+   *
+   * Priced with both days gathered, for the reason gatherDays gives. Only
+   * compaction here, not the full tidy: this runs for every candidate and the
+   * tidy is the expensive part. It is conservative — a full tidy afterwards can
+   * only improve the result — so a move that pays under compaction alone is
+   * one that certainly pays.
+   */
+  relocateBest(schedule, students, settings, lesson, fromDay, toDay, ctx){
+    const byId = ctx.byId;
+    const st = byId[lesson.studentId];
+    if(!st) return null;
+    const av = st.availability && st.availability[toDay];
+    if(!av || !av.on) return null;
+    if((schedule[toDay] || []).some(x => this.occupantIds(x).includes(st.id))) return null;
+    const target = (schedule[toDay] || []).slice()
+      .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+
+    let best = null;
+    for(let pos = 0; pos <= target.length; pos++){
+      const arr = target.map(x => ({ ...x }));
+      arr.splice(pos, 0, { ...lesson });
+      const laid = this.relayoutDay(arr, toDay, students, settings);
+      if(!laid) continue;
+      const trial = {};
+      for(const d of settings.workDays) trial[d] = (schedule[d] || []).slice();
+      trial[fromDay] = trial[fromDay].filter(x => x !== lesson).map(x => ({ ...x }));
+      trial[toDay] = laid;
+      const cfg = { ...settings, workDays: [fromDay, toDay] };
+      this.compactDays(trial, students, cfg);
+      if(this.verifySchedule(trial, students, settings).some(x => !ctx.before.has(x))) continue;
+      if(this.countTotal(trial) !== ctx.placed) continue;
+      const cost = ctx.weekCost(trial);
+      if(!best || cost < best.cost){
+        const placedLesson = trial[toDay].find(x => x.studentId === lesson.studentId);
+        best = { cost, fromDay, toDay, trial, start: placedLesson && placedLesson.start };
+      }
+    }
+    return best;
+  },
+
+  /**
+   * Time economy: move a lesson to another day when that leaves the whole week
+   * cheaper — driving plus waiting, at the price of waiting set by
+   * IDLE_KM_PER_MIN.
+   *
+   * Looks at the lessons that are preceded by a wait, since a lesson that
+   * starts the moment the drive ends is not the cause of anything. The classic
+   * case: a student free only from 20:00 makes the teacher sit around for half
+   * an hour first, while on another day the same lesson fits with no wait at
+   * all. Nobody could ask for that move by looking at a gap — the lesson that
+   * should move is the one AFTER it.
+   *
+   * Takes the single best move, applies it, and looks again, until nothing
+   * improves or the time is up. Legality is verifySchedule, as everywhere.
+   */
+  relocateForTime(schedule, students, settings, budgetMs = 1500){
+    const t0 = Date.now();
+    const margin = settings.travelMargin ?? 2;
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const moved = [];
+    const weekCost = (sch) => (settings.workDays || []).reduce((sum, d) =>
+      sum + this.dayCost((sch[d] || []).slice()
+        .sort((x,y) => this.toMin(x.start) - this.toMin(y.start)), d, settings), 0);
+
+    for(let round = 0; round < 12; round++){
+      if(Date.now() - t0 > budgetMs) break;
+      const ctx = { byId, weekCost,
+        before: new Set(this.verifySchedule(schedule, students, settings)),
+        placed: this.countTotal(schedule) };
+      const base = weekCost(schedule);
+      let best = null;
+
+      for(const day of settings.workDays){
+        const slots = (schedule[day] || []).slice()
+          .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+        for(let i = 1; i < slots.length; i++){
+          if(Date.now() - t0 > budgetMs) break;
+          const prev = slots[i-1], cur = slots[i];
+          const drive = this.travelEstMin(prev.studentId, prev.address, cur.studentId, cur.address,
+            day, this.toMin(prev.end)) + margin;
+          const idle = this.toMin(cur.start) - this.toMin(prev.end) - drive;
+          if(idle < this.RELOCATE_MIN_IDLE) continue;
+          if(!this._movableAlone(cur, byId)) continue;
+          for(const other of settings.workDays){
+            if(other === day) continue;
+            const r = this.relocateBest(schedule, students, settings, cur, day, other, ctx);
+            if(r && r.cost < base - 0.5 && (!best || r.cost < best.cost)){
+              best = { ...r, lesson: cur, name: byId[cur.studentId].name, saved: base - r.cost };
+            }
+          }
+        }
+      }
+      if(!best) break;
+      for(const d of settings.workDays) schedule[d] = best.trial[d];
+      // The full tidy on the two days it touched. It can only improve them.
+      this.gatherDays(schedule, students, settings, [best.fromDay, best.toDay]);
+      moved.push({ name: best.name, from: best.fromDay, to: best.toDay, at: best.start, saved: best.saved });
+    }
+    return { moved };
+  },
+
   /**
    * Who could go into this gap, by the user's choice rather than the
    * scheduler's.
@@ -4144,6 +4266,7 @@ const Scheduler = {
     this.tidyDays(work, students, cfg);
     this.compactDays(work, students, cfg);
     this.fillGaps(work, students, cfg, 400);
+    this.relocateForTime(work, students, cfg, 400);
     this.compactDays(work, students, cfg);
 
     if(JSON.stringify(schedule) !== snapshot)
@@ -6099,6 +6222,17 @@ const App = {
         console.info(`fillGaps: ${f.moved.map(m=>`${m.name} → day ${m.to} at ${m.at}`).join(', ')}`);
         Scheduler.compactDays(state.schedule, state.students, state.settings);
       }
+    }catch(e){}
+
+    // The other direction. fillGaps asks who could go INTO a gap; this asks
+    // whether the lesson that CAUSES a wait — a student free only from 20:00,
+    // say — could go to another day where it fits with no waiting at all.
+    // Without it the teacher sat around for half an hour on Wednesday rather
+    // than have that lesson moved to a Tuesday it fitted on.
+    try{
+      const r = Scheduler.relocateForTime(state.schedule, state.students, state.settings);
+      if(r.moved.length)
+        console.info(`relocateForTime: ${r.moved.map(m=>`${m.name} → day ${m.to} at ${m.at}`).join(', ')}`);
     }catch(e){}
 
     // Verify constraints — surfaced to the user, not just the console, so a

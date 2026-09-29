@@ -81,6 +81,7 @@ async function runPipeline(app, sts, cfg, coords, budgets) {
     const f = S.fillGaps(r.schedule, sts, cfg);
     if (f.moved.length) S.compactDays(r.schedule, sts, cfg);
   }
+  if (S.relocateForTime) S.relocateForTime(r.schedule, sts, cfg);
   return { schedule: r.schedule, ms: Date.now() - t0 };
 }
 

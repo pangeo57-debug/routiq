@@ -39,6 +39,12 @@ async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
   S.collapseForceMergeFragments(r.schedule, students, cfg);
   S.tidyDays(r.schedule, students, cfg);
   S.compactDays(r.schedule, students, cfg);
+  // These two were missing, so every invariant test below audited a schedule
+  // the user never sees. fillGaps and relocateForTime both move lessons
+  // between days, which is exactly the kind of step an audit exists to check.
+  const f = S.fillGaps(r.schedule, students, cfg);
+  if (f.moved.length) S.compactDays(r.schedule, students, cfg);
+  S.relocateForTime(r.schedule, students, cfg);
   return r.schedule;
 }
 
@@ -3123,5 +3129,171 @@ describe('the hand swap and the hand move gather the days they touched', () => {
     assert.equal(day2.length, 2);
     assert.equal(day2[0].start, '15:00', `y should have moved up to the start of the day, got ${day2[0].start}`);
     assert.ok(app.state.schedule[1].some(x => x.studentId === 'x'), 'and x arrived on day 1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Time economy: moving the lesson that CAUSES a wait to a day where it fits
+// ---------------------------------------------------------------------------
+
+describe('a lesson that causes a wait can move to a day it fits without waiting', () => {
+  // The report: on Wednesday, Κυριάκος is free only from 20:00, so the teacher
+  // sits around for half an hour before him. Tuesday had room for him, and the
+  // scheduler left the wait in place. fillGaps only asks who could go INTO a
+  // gap; it never asks whether the lesson AFTER the gap could go elsewhere —
+  // and here Tuesday had no gap to go into, only the end of the day.
+
+  function week(over = {}) {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [2, 3],
+      dayHours: { 2: { start: '15:00', end: '22:00' }, 3: { start: '15:00', end: '22:00' } } });
+    const mk = (id, days, from = '15:00') => student(id, { days, lessonDuration: 60,
+      window: { start: from, end: '22:00' } });
+    const sts = over.students || [mk('u', [2]), mk('v', [2]), mk('a', [3]), mk('b', [3]), mk('k', [2, 3])];
+    const k = sts.find(x => x.id === 'k');
+    // Free on Wednesday only from 20:00.
+    k.availability[3] = { on: true, start: '20:00', end: '22:00', windows: [[1200, 1320]] };
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 4000, lon: 21.7305 + i / 4000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    const sched = over.sched || {
+      2: [slot('u', '15:00', '16:00', { address: 'addr-u' }), slot('v', '16:05', '17:05', { address: 'addr-v' })],
+      3: [slot('a', '17:11', '18:11', { address: 'addr-a' }), slot('b', '18:14', '19:14', { address: 'addr-b' }),
+          slot('k', '20:00', '21:00', { address: 'addr-k' })],
+    };
+    return { app, S, cfg, sts, sched };
+  }
+  const cost = (S, sch, cfg) => cfg.workDays.reduce((s, d) => s + S.dayCost((sch[d] || []).slice()
+    .sort((a, b) => S.toMin(a.start) - S.toMin(b.start)), d, cfg), 0);
+
+  test('fillGaps cannot see it: the other day has no gap to go into', () => {
+    const { S, cfg, sts, sched } = week();
+    assert.equal(S.fillGaps(sched, sts, cfg).moved.length, 0,
+      'the premise of this scenario — if fillGaps handled it, nothing here would be new');
+  });
+
+  test('he moves to Tuesday, and the week gets cheaper', () => {
+    const { S, cfg, sts, sched } = week();
+    const before = cost(S, sched, cfg);
+    const r = S.relocateForTime(sched, sts, cfg);
+    assert.equal(r.moved.length, 1);
+    assert.equal(r.moved[0].name, 'k');
+    assert.equal(r.moved[0].to, 2);
+    assert.ok(sched[2].some(x => x.studentId === 'k'), 'k is on Tuesday');
+    assert.ok(!sched[3].some(x => x.studentId === 'k'), 'and gone from Wednesday');
+    assert.ok(cost(S, sched, cfg) < before - 5, `${before.toFixed(1)} -> ${cost(S, sched, cfg).toFixed(1)}`);
+  });
+
+  test('Wednesday is closed up behind him, not left starting late', () => {
+    const { S, cfg, sts, sched } = week();
+    S.relocateForTime(sched, sts, cfg);
+    const first = sched[3].slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start))[0];
+    assert.equal(first.start, '15:00', `Wednesday should now start at the beginning of the day, got ${first.start}`);
+  });
+
+  test('nobody is dropped and no rule is broken', () => {
+    const { S, cfg, sts, sched } = week();
+    const placed = S.countTotal(sched);
+    S.relocateForTime(sched, sts, cfg);
+    assert.equal(S.countTotal(sched), placed);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, sched, sts, cfg)), []);
+  });
+
+  test('if he is not free on the other day, nothing moves', () => {
+    const { S, cfg, sts, sched } = week();
+    sts.find(x => x.id === 'k').availability[2] = { on: false };
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('if he is already on the other day, he is not given a second lesson', () => {
+    const { S, cfg, sts, sched } = week();
+    sched[2].push(slot('k', '17:10', '17:40', { address: 'addr-k', duration: 30 }));
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('if the other day has no room for him, nothing moves', () => {
+    const { S, cfg, sts, sched } = week();
+    // Tuesday ends at 17:30: after u and v there is no hour left.
+    cfg.dayHours[2] = { start: '15:00', end: '17:30' };
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before, 'a refused move must leave the schedule byte for byte alone');
+  });
+
+  test('a lesson shared with someone else is not moved on one occupant\'s account', () => {
+    // The partner is free on Tuesday too, so the move would be LEGAL. If it
+    // were only illegal, the refusal would come from the rule set and prove
+    // nothing about whether shared lessons are left alone on purpose.
+    const mk = (id, days, from = '15:00') => student(id, { days, lessonDuration: 60,
+      window: { start: from, end: '22:00' } });
+    const { S, cfg, sts, sched } = week({ students: [mk('u', [2]), mk('v', [2]), mk('a', [3]),
+      mk('b', [2, 3]), mk('k', [2, 3])] });
+    const k = sched[3].find(x => x.studentId === 'k');
+    k.pairedStudentId = 'b'; k.isGroup = true; k.groupMemberIds = ['k', 'b'];
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('a layout that breaks a rule is never adopted', () => {
+    // No real pass produces an invalid day, so one is forced to: the target
+    // day comes back with two lessons on top of each other.
+    const { S, cfg, sts, sched } = week();
+    S.relayoutDay = (arr) => arr.map(x => ({ ...x, start: '15:00', end: '16:00' }));
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('a move that would lose a lesson is never adopted', () => {
+    // A lesson that has simply vanished breaks no rule — verifySchedule cannot
+    // see an absence — and a week with fewer lessons in it is CHEAPER, so
+    // only the count of who is placed stands between this and a silent loss.
+    const { S, cfg, sts, sched } = week();
+    const real = S.compactDays.bind(S);
+    S.compactDays = (t, st, c) => { real(t, st, c); t[c.workDays[1]].pop(); };
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('a wait too short to matter moves nobody', () => {
+    // Ten minutes of waiting is not worth uprooting anyone for.
+    const { S, cfg, sts, sched } = week();
+    sched[3][2] = slot('k', '19:24', '20:24', { address: 'addr-k' });   // b ends 19:14: about 7 min of waiting
+    sts.find(x => x.id === 'k').availability[3] = { on: true, start: '19:24', end: '22:00', windows: [[1164, 1320]] };
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('a move that makes the week worse is not made', () => {
+    // He can reach Tuesday, but only far across the city, on a day that is
+    // otherwise all near home: the drive costs more than the wait it saves.
+    const { S, cfg, sts, sched } = week();
+    S.IDLE_KM_PER_MIN = 0.001;                          // waiting is all but free
+    const before = JSON.stringify(sched);
+    assert.equal(S.relocateForTime(sched, sts, cfg).moved.length, 0,
+      'with waiting priced at nothing there is no reason to move him');
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('the real pipeline actually calls it, and so does the refinement', () => {
+    // Written and not wired is the mistake this project has made three times.
+    const fs = require('fs');
+    const { APP_FILE } = require('./harness');
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const run = src.slice(src.indexOf('async runAndNotify()'));
+    assert.match(run.slice(0, run.indexOf('\n  },\n')), /Scheduler\.relocateForTime\(/,
+      'runAndNotify must run it');
+    const refine = src.slice(src.indexOf('async refineExcept('));
+    assert.match(refine.slice(0, refine.indexOf('\n  },\n')), /this\.relocateForTime\(/,
+      'and so must the short refinement after a gap is filled by hand');
   });
 });
