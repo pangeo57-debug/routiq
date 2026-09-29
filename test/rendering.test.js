@@ -943,3 +943,168 @@ describe('the client card shows every free stretch', () => {
     assert.ok(html.includes('20:00–22:00'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Kilometres that follow the schedule
+// ---------------------------------------------------------------------------
+
+describe('the kilometres on screen belong to the schedule on screen', () => {
+  // The week's kilometres were a number stored at the end of a full
+  // calculation, and the Route screen kept a stored road route per day. Neither
+  // remembered which schedule it was computed for, so a hand swap, a move, a
+  // filled gap or a break left both showing the OLD figures beside the NEW
+  // lessons.
+
+  function world() {
+    const app = loadApp({ realRender: true });
+    const cfg = settings({ workDays: [1, 2] });
+    const sts = [student('a'), student('b'), student('c')];
+    const coords = { home: { lat: 38.240, lon: 21.730 }, a: { lat: 38.241, lon: 21.731 },
+      b: { lat: 38.300, lon: 21.790 }, c: { lat: 38.242, lon: 21.732 } };
+    app.setState({ students: sts, settings: cfg, coords, jobs: [],
+      schedule: { 1: [slot('a', '17:00', '18:00', { address: 'addr-a' }), slot('b', '18:40', '19:40', { address: 'addr-b' })],
+                  2: [slot('c', '17:00', '18:00', { address: 'addr-c' })] },
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    return app;
+  }
+
+  test('the fingerprint changes when a lesson moves in time, day or place', () => {
+    const app = world();
+    const A = app.App;
+    const base = A.scheduleKey();
+    app.state.schedule[1][1].start = '18:45'; app.state.schedule[1][1].end = '19:45';
+    assert.notEqual(A.scheduleKey(), base, 'a different time is a different schedule');
+    app.state.schedule[1][1].start = '18:40'; app.state.schedule[1][1].end = '19:40';
+    assert.equal(A.scheduleKey(), base, 'and putting it back restores the fingerprint');
+
+    app.state.coords.b = { lat: 38.31, lon: 21.79 };
+    assert.notEqual(A.scheduleKey(), base, 'a client who moved changes the kilometres too');
+    app.state.coords.b = { lat: 38.300, lon: 21.790 };
+
+    app.state.schedule[2] = [app.state.schedule[1].pop()];
+    assert.notEqual(A.scheduleKey(), base, 'a lesson on another day is a different week');
+  });
+
+  test('the order the lessons are stored in does not matter, only the day they describe', () => {
+    const app = world();
+    const base = app.App.scheduleKey();
+    app.state.schedule[1].reverse();
+    assert.equal(app.App.scheduleKey(), base);
+  });
+
+  test('right after a change the figure is the new schedule\'s, not the old one\'s', () => {
+    const app = world();
+    const A = app.App;
+    // A stored figure for the schedule as it WAS.
+    app.state._kmCache = { key: A.scheduleKey(), km: 999, real: true };
+    assert.equal(A.currentKm().km, 999, 'while nothing changed it is used');
+
+    app.state.schedule[1].pop();                        // b is taken off Monday
+    const now = A.currentKm();
+    assert.notEqual(now.km, 999, 'the old figure must not be shown beside the new lessons');
+    assert.equal(now.real, false, 'it is the immediate straight-line one, and says so');
+    assert.ok(now.km > 0 && now.km < 50);
+  });
+
+  test('the road figure replaces the estimate once it arrives, and redraws', async () => {
+    const app = world();
+    const A = app.App;
+    A._kmOf = async () => 42.5;
+    let redrawn = 0;
+    A.renderHome = () => { redrawn++; };
+    app.state.currentScreen = 'home';
+    A.currentKm();                                       // asks for it
+    await new Promise(r => setTimeout(r, 500));
+    const after = A.currentKm();
+    assert.equal(after.km, 42.5);
+    assert.equal(after.real, true);
+    assert.equal(redrawn, 1, 'the screen must be redrawn when the real figure lands');
+  });
+
+  test('a road figure that arrives after the schedule changed again is thrown away', async () => {
+    const app = world();
+    const A = app.App;
+    let release;
+    A._kmOf = () => new Promise(r => { release = r; });
+    app.state.currentScreen = 'home';
+    A.renderHome = () => {};
+    A.currentKm();                                       // starts asking about schedule 1
+    await new Promise(r => setTimeout(r, 450));          // the request is now in flight
+    app.state.schedule[1].pop();                         // the user changes something
+    release(777);                                        // the OLD answer finally lands
+    await new Promise(r => setTimeout(r, 50));
+    const now = A.currentKm();
+    assert.notEqual(now.km, 777, 'an answer about a schedule that no longer exists must be ignored');
+  });
+
+  test('a late answer cannot evict a good figure for the schedule that is on screen', async () => {
+    // Stored under its own fingerprint, a stale answer could never be MISTAKEN
+    // for the current one. What it could still do is take the single cache slot
+    // and push out a correct figure that had already been worked out for the
+    // schedule now showing, dropping the screen back to a straight-line guess.
+    const app = world();
+    const A = app.App;
+    let release;
+    A._kmOf = () => new Promise(r => { release = r; });
+    app.state.currentScreen = 'home';
+    A.renderHome = () => {};
+    A.currentKm();                                       // asks about the first schedule
+    await new Promise(r => setTimeout(r, 450));
+    app.state.schedule[1].pop();                         // the schedule changes...
+    app.state._kmCache = { key: A.scheduleKey(), km: 5.5, real: true };   // ...and its figure is known
+    release(777);                                        // the OLD answer lands last
+    await new Promise(r => setTimeout(r, 50));
+    const now = A.currentKm();
+    assert.equal(now.km, 5.5, 'the good figure must still be there');
+    assert.equal(now.real, true);
+  });
+
+  test('a day\'s stored route is used only while that day is unchanged', () => {
+    const app = world();
+    const A = app.App;
+    app.state.routeResults = { 1: { stops: [], totalKm: 10, totalMinutes: 20, fuelCost: '1.00', _key: A.dayKey(1) } };
+    assert.ok(A.routeFor(1), 'unchanged, so it is still good');
+    app.state.schedule[1][1].start = '19:00'; app.state.schedule[1][1].end = '20:00';
+    assert.equal(A.routeFor(1), null, 'a lesson moved on that day, so the stored route is stale');
+    assert.equal(A.routeFor(2), null, 'and a day never computed has none');
+  });
+
+  test('changing ONE day leaves the other day\'s route alone', () => {
+    const app = world();
+    const A = app.App;
+    app.state.routeResults = {
+      1: { stops: [], totalKm: 10, _key: A.dayKey(1) },
+      2: { stops: [], totalKm: 5, _key: A.dayKey(2) },
+    };
+    app.state.schedule[1][1].start = '19:00'; app.state.schedule[1][1].end = '20:00';
+    assert.equal(A.routeFor(1), null);
+    assert.ok(A.routeFor(2), 'Tuesday did not change, so its route is still right');
+  });
+
+  test('the home screen shows the current schedule\'s kilometres', () => {
+    const app = world();
+    const A = app.App;
+    const boxes = {};
+    app.ctx.document.getElementById = (id) => (boxes[id] = boxes[id] ||
+      { textContent: '', innerHTML: '', style: {}, classList: { add() {}, remove() {} } });
+    app.state._kmCache = { key: A.scheduleKey(), km: 123.4, real: true };
+    A.renderHome();
+    assert.match(boxes['screen-home'].innerHTML, /123\.4/, 'a stored figure for this schedule is shown');
+
+    app.state.schedule[1].pop();
+    A.renderHome();
+    assert.doesNotMatch(boxes['screen-home'].innerHTML, /123\.4/,
+      'after a change the old figure must be gone from the screen');
+  });
+
+  test('a stored route is stamped with the day it was computed for', () => {
+    // The two places that store a route must both record the fingerprint, or
+    // routeFor can never accept them and the screen recalculates forever.
+    const fs = require('fs');
+    const { APP_FILE } = require('./harness');
+    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const stores = src.match(/state\.routeResults\[day\]\s*=\s*\{[^}]*\}/g) || [];
+    assert.equal(stores.length, 2, 'there are two places a route is stored');
+    for (const st of stores) assert.match(st, /_key:\s*this\.dayKey\(day\)/, `unstamped: ${st.slice(0, 60)}`);
+  });
+});

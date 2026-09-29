@@ -3297,3 +3297,158 @@ describe('a lesson that causes a wait can move to a day it fits without waiting'
       'and so must the short refinement after a gap is filled by hand');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Offering the move by hand, and saying why when it cannot be done
+// ---------------------------------------------------------------------------
+
+describe('the gap sheet offers to send the lesson after the gap to another day', () => {
+  // The automatic pass did not move Κυριάκος off Wednesday, and the user knows
+  // he fits on Tuesday because they have put him there in real life. Whatever
+  // the automatic pass decides, the person should be able to do it in a tap —
+  // and when it cannot be done, the sheet should say why, since a refusal
+  // nobody can explain is indistinguishable from a bug.
+
+  function world(over = {}) {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [2, 3],
+      dayHours: { 2: { start: '15:00', end: '22:00' }, 3: { start: '15:00', end: '22:00' } } });
+    const mk = (id, days, from = '15:00') => student(id, { days, lessonDuration: 60,
+      window: { start: from, end: '22:00' } });
+    const sts = [mk('u', [2]), mk('v', [2]), mk('a', [3]), mk('b', [3]), mk('k', [2, 3])];
+    sts[4].availability[3] = { on: true, start: '20:00', end: '22:00', windows: [[1200, 1320]] };
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 4000, lon: 21.7305 + i / 4000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      travelMatrix: null, travelMatrixPeak: null, travelMatrixOffPeak: null });
+    const sched = {
+      2: [slot('u', '15:00', '16:00', { address: 'addr-u' }), slot('v', '16:05', '17:05', { address: 'addr-v' })],
+      3: [slot('a', '17:11', '18:11', { address: 'addr-a' }), slot('b', '18:14', '19:14', { address: 'addr-b' }),
+          slot('k', '20:00', '21:00', { address: 'addr-k' })],
+    };
+    return { app, S, cfg, sts, sched };
+  }
+  const gap = (S) => [S.toMin('19:14'), S.toMin('20:00')];
+  const relocs = (S, sched, sts, cfg) => Array.from(S.gapCandidates(sched, sts, cfg, 3, ...gap(S)))
+    .filter(c => c.kind === 'relocate');
+
+  test('the lesson after the gap is offered on the other day', () => {
+    const { S, cfg, sts, sched } = world();
+    const r = relocs(S, sched, sts, cfg);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].studentId, 'k');
+    assert.equal(r[0].toDay, 2);
+    assert.equal(r[0].cheaper, true, 'it saves the wait, so it is marked as the better week');
+  });
+
+  test('choosing it moves him, and nobody is lost or broken', () => {
+    const { S, cfg, sts, sched } = world();
+    const placed = S.countTotal(sched);
+    const c = relocs(S, sched, sts, cfg)[0];
+    assert.equal(S.applyGapCandidate(sched, sts, cfg, 3, c), true);
+    assert.ok(sched[2].some(x => x.studentId === 'k'));
+    assert.ok(!sched[3].some(x => x.studentId === 'k'));
+    assert.equal(S.countTotal(sched), placed);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, sched, sts, cfg)), []);
+  });
+
+  test('a move the scheduler would not make on price is still offered, and marked so', () => {
+    // The person may know something the price does not. Waiting is priced at
+    // almost nothing here, so the automatic pass declines — but it is legal.
+    const { S, cfg, sts, sched } = world();
+    S.IDLE_KM_PER_MIN = 0.001;
+    const r = relocs(S, sched, sts, cfg);
+    assert.equal(r.length, 1, 'legal, so it must still be on the list');
+    assert.equal(r[0].cheaper, false);
+  });
+
+  test('when he is not free on the other day, the sheet says so', () => {
+    const { S, cfg, sts, sched } = world();
+    sts.find(x => x.id === 'k').availability[2] = { on: false };
+    const list = S.gapCandidates(sched, sts, cfg, 3, ...gap(S));
+    assert.equal(Array.from(list).filter(c => c.kind === 'relocate').length, 0);
+    assert.deepStrictEqual(Array.from(list.relocateNotes).map(n => [n.toDay, n.reason]), [[2, 'unavailable']]);
+    assert.equal(list.afterName, 'k');
+  });
+
+  test('when the other day has no room, the sheet says that instead', () => {
+    const { S, cfg, sts, sched } = world();
+    cfg.dayHours[2] = { start: '15:00', end: '17:30' };
+    const list = S.gapCandidates(sched, sts, cfg, 3, ...gap(S));
+    assert.deepStrictEqual(Array.from(list.relocateNotes).map(n => [n.toDay, n.reason]), [[2, 'noroom']]);
+  });
+
+  test('when he is already on the other day, the sheet says that', () => {
+    const { S, cfg, sts, sched } = world();
+    sched[2].push(slot('k', '17:10', '17:40', { address: 'addr-k', duration: 30 }));
+    const list = S.gapCandidates(sched, sts, cfg, 3, ...gap(S));
+    assert.deepStrictEqual(Array.from(list.relocateNotes).map(n => [n.toDay, n.reason]), [[2, 'already']]);
+  });
+
+  test('a lesson shared with someone is not offered as a move on one occupant', () => {
+    const mk = (id, days) => student(id, { days, lessonDuration: 60, window: { start: '15:00', end: '22:00' } });
+    const { S, cfg, sts, sched } = world();
+    sts.find(x => x.id === 'b').availability[2] = { on: true, start: '15:00', end: '22:00', windows: [[900, 1320]] };
+    const k = sched[3].find(x => x.studentId === 'k');
+    k.pairedStudentId = 'b'; k.isGroup = true; k.groupMemberIds = ['k', 'b'];
+    assert.equal(relocs(S, sched, sts, cfg).length, 0);
+  });
+
+  test('an offer that no longer holds is refused when chosen', () => {
+    const { S, cfg, sts, sched } = world();
+    const c = relocs(S, sched, sts, cfg)[0];
+    // Somebody moves him first.
+    sched[3] = sched[3].filter(x => x.studentId !== 'k');
+    const before = JSON.stringify(sched);
+    assert.equal(S.applyGapCandidate(sched, sts, cfg, 3, c), false);
+    assert.equal(JSON.stringify(sched), before);
+  });
+
+  test('the sheet shows the move and the reasons in the words the user reads', () => {
+    const { app, S, cfg, sts, sched } = world();
+    app.state.schedule = sched;
+    const boxes = {};
+    app.ctx.document.getElementById = (id) => (boxes[id] = boxes[id] ||
+      { textContent: '', innerHTML: '', classList: { add() {}, remove() {} } });
+    app.App.openGapFill(3, '19:14', '20:00');
+    assert.match(boxes['gap-list'].innerHTML, /k · 1[67]:\d\d/, 'the offer is on the sheet');
+    assert.match(boxes['gap-list'].innerHTML, /Τρίτη/, 'and says which day');
+
+    // And with him unable to go: the reason, not an empty list.
+    sts.find(x => x.id === 'k').availability[2] = { on: false };
+    app.App.openGapFill(3, '19:14', '20:00');
+    assert.match(boxes['gap-list'].innerHTML, /δεν είναι διαθέσιμος/,
+      'a refusal with no explanation is indistinguishable from a bug');
+  });
+
+  test('choosing it from the sheet pins the day he lands on for the refinement', async () => {
+    const { app, S, cfg, sts, sched } = world();
+    app.state.schedule = sched;
+    const pinned = [];
+    S.refineExcept = async (...a) => { pinned.push(a[3]); return { adopted: false }; };
+    const list = S.gapCandidates(sched, sts, cfg, 3, ...gap(S));
+    app.state._gapFill = { day: 3, cands: Array.from(list) };
+    const idx = Array.from(list).findIndex(c => c.kind === 'relocate');
+    app.App.applyGapFill(idx);
+    await new Promise(r => setTimeout(r, 30));
+    assert.deepStrictEqual(pinned, [2], 'the refinement must leave the day he was put on alone');
+  });
+
+  test('choosing it closes up the day he left, and the day he arrived on', async () => {
+    // Taking him off Wednesday leaves Wednesday starting late; putting him on
+    // Tuesday can leave a hole there. Both days are gathered, with him frozen
+    // where the user just put him.
+    const { app, S, cfg, sts, sched } = world();
+    app.state.schedule = sched;
+    S.refineExcept = async () => ({ adopted: false });
+    const list = S.gapCandidates(sched, sts, cfg, 3, ...gap(S));
+    app.state._gapFill = { day: 3, cands: Array.from(list) };
+    app.App.applyGapFill(Array.from(list).findIndex(c => c.kind === 'relocate'));
+    await new Promise(r => setTimeout(r, 30));
+    const wed = app.state.schedule[3].slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+    assert.equal(wed[0].start, '15:00',
+      `Wednesday should start at the top of the day now that he has left, got ${wed[0].start}`);
+    assert.ok(app.state.schedule[2].some(x => x.studentId === 'k'), 'and he is on Tuesday');
+  });
+});
