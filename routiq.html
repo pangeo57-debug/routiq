@@ -752,6 +752,14 @@ const QuickNote = {
     d.setDate(d.getDate() + n);
     return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
   },
+  STREET_WORDS: new Set(['οδος','οδου','οδο','λεωφ','λεωφορος','πλατεια','πλ','αριθμος','αρ','no','nr','number','street','st','road','rd','avenue','ave','blvd','boulevard','rue','strasse','straße','platz','via']),
+  // "at 3" means three in the afternoon to nearly everyone; "at 11" means 11 in
+  // the morning. With no am/pm and no 24-hour form (leading zero), 1–6 is
+  // read as the afternoon.
+  _hour(h, raw, suffix){
+    if(!suffix && h >= 1 && h <= 6 && raw[0] !== '0') return h + 12;
+    return h;
+  },
   _clock(h, m){
     if(!(h >= 0 && h <= 23 && m >= 0 && m <= 59)) return null;
     return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
@@ -824,7 +832,7 @@ const QuickNote = {
           const clockForm = hasColon || suffix === 'am' || suffix === 'pm' || suffix === 'uhr' || suffix === 'h';
           const dotOnly = /^\d{1,2}\.\d{2}$/.test(tk);
           if(marked || (clockForm && !dotOnly)){
-            let h = Number(m[1]); const min = m[2] ? Number(m[2]) : 0;
+            let h = this._hour(Number(m[1]), m[1], suffix); const min = m[2] ? Number(m[2]) : 0;
             if(suffix === 'pm' && h < 12) h += 12;
             if(suffix === 'am' && h === 12) h = 0;
             const clock = this._clock(h, min);
@@ -834,6 +842,23 @@ const QuickNote = {
               continue;
             }
           }
+        }
+      }
+    }
+
+    // "μαγνητική 11": a lone number at the very end, after a name, is the hour.
+    // A number above 23 cannot be one ("Γούναρη 58"), and after a street word it
+    // is a house number ("Ermou street 12"). What was understood is shown in
+    // the job form, so a wrong guess is one tap to fix, never saved unseen.
+    if(out.start === null){
+      const left = [];
+      for(let i = 0; i < toks.length; i++) if(!used[i]) left.push(i);
+      if(left.length >= 2){
+        const k = left[left.length - 1], prev = left[left.length - 2];
+        if(/^\d{1,2}$/.test(norm[k]) && Number(norm[k]) >= 1 && Number(norm[k]) <= 23
+           && !this.STREET_WORDS.has(norm[prev])){
+          const clock = this._clock(this._hour(Number(norm[k]), norm[k], null), 0);
+          if(clock){ out.start = clock; used[k] = true; }
         }
       }
     }

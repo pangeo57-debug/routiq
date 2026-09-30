@@ -4149,7 +4149,43 @@ describe('a note becomes a job without a form', () => {
 
   test('a house number is never a time', () => {
     assert.equal(row(P('Γούναρη 58 πλυντήριο')), JSON.stringify(['Γούναρη 58 πλυντήριο', null, null, null]));
-    assert.equal(P('deliver to Ermou 12 tomorrow').start, null);
+    assert.equal(P('deliver to Ermou street 12 tomorrow').start, null);
+    assert.equal(P('Γούναρη 58').start, null, 'above 23 it cannot be an hour');
+  });
+
+  test('a lone number at the end of a name is the hour: "μαγνητική 11"', () => {
+    assert.equal(row(P('μαγνητική 11')), JSON.stringify(['μαγνητική', null, '11:00', null]));
+    assert.equal(row(P('Μαγνητικη 11 αύριο')), JSON.stringify(['Μαγνητικη', '2026-10-01', '11:00', null]));
+    assert.equal(P('καφές 9').start, '09:00');
+  });
+
+  test('zero is not an hour someone means by a bare number', () => {
+    assert.equal(P('room 0').start, null);
+    assert.equal(P('Γούναρη 58').start, null);
+  });
+
+  test('a number alone is not a note with a time: there is no name to attach it to', () => {
+    const r = P('11');
+    assert.equal(r.start, null);
+    assert.equal(r.title, '11');
+  });
+
+  test('a house number after a street word stays in the title', () => {
+    const r = P('Ermou street 12');
+    assert.equal(r.start, null);
+    assert.equal(r.title, 'Ermou street 12');
+    assert.equal(P('Ermou Nr 12').start, null);
+  });
+
+  test('1 to 6 without am/pm is the afternoon, 7 to 12 is the morning or noon', () => {
+    assert.equal(P('γιατρός 3').start, '15:00');
+    assert.equal(P('doctor at 3').start, '15:00');
+    assert.equal(P('doctor at 6:30').start, '18:30');
+    assert.equal(P('doctor at 7').start, '07:00');
+    assert.equal(P('doctor at 12').start, '12:00');
+    assert.equal(P('doctor at 03:00').start, '03:00', 'a leading zero is a 24-hour time');
+    assert.equal(P('doctor 3am').start, '03:00');
+    assert.equal(P('Zahnarzt um 3 Uhr').start, '03:00', 'an explicit Uhr is taken as written');
   });
 
   test('a weekday said on that weekday means next week', () => {
