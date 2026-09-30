@@ -4345,3 +4345,187 @@ describe('hours for one date, typed on the day screen', () => {
     for (const s of app.state.dayPlan.stops) assert.ok(app.Scheduler.toMin(s.start) >= 13 * 60);
   });
 });
+
+describe('errands: the day for people who are not at work', () => {
+  const MONDAY = '2026-09-28';
+  function world(extra) {
+    const app = loadApp({ seed: 3 });
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '12:00' } },
+      blockedSlots: [{ day: 1, start: '18:00', end: '19:00', reason: '' }], ...(extra || {}) });
+    const jobs = [
+      { id: 'w1', name: 'Work A', address: 'a', durationMin: 60, date: MONDAY },
+      { id: 'e1', name: 'Pharmacy', address: 'p', durationMin: 30, date: MONDAY, kind: 'errand' },
+      { id: 'e2', name: 'Bank', address: 'b', durationMin: 30, date: MONDAY, kind: 'errand' },
+      { id: 'e3', name: 'Post office', address: 'o', durationMin: 30, date: '2026-09-29', kind: 'errand' },
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    jobs.forEach((j, i) => { coords[j.id] = { lat: 38.240 + i / 80, lon: 21.730 + i / 90 }; });
+    app.setState({ jobs, settings: cfg, coords, students: [], schedule: {}, planDate: MONDAY });
+    app.App.renderDayPlanner = () => {};
+    app.App._ensureDayCoords = async () => ({ missing: [], homeOk: true });
+    app.App.loadDayMatrix = async () => 'estimate';
+    app.Toast.show = () => {};
+    return app;
+  }
+  const names = (l) => Array.from(l, j => j.name).sort();
+
+  test('work and errands are separate lists', () => {
+    const app = world();
+    app.state.scheduleMode = 'day';
+    assert.deepStrictEqual(names(app.App.jobsFor(MONDAY)), ['Work A']);
+    app.state.scheduleMode = 'errands';
+    assert.deepStrictEqual(names(app.App.jobsFor(MONDAY)), ['Bank', 'Pharmacy']);
+  });
+
+  test('an errand day has its own default hours, not the working hours', () => {
+    const app = world();
+    app.state.scheduleMode = 'errands';
+    assert.equal(app.App.dateHoursFor(MONDAY).end, '20:00');
+    app.state.scheduleMode = 'day';
+    assert.equal(app.App.dateHoursFor(MONDAY).end, '12:00');
+  });
+
+  test('hours typed for errands do not change the work day, and the other way round', () => {
+    const app = world();
+    app.state.scheduleMode = 'errands';
+    app.ctx.document.getElementById = (id) => ({ 'day-h-from': { value: '10:00' }, 'day-h-to': { value: '13:00' } })[id] || null;
+    app.App.setDateHours();
+    assert.equal(app.App.dateHoursFor(MONDAY).start, '10:00');
+    app.state.scheduleMode = 'day';
+    assert.equal(app.App.dateHoursFor(MONDAY).start, '08:00');
+  });
+
+  test('errands are planned after working hours end, and past the work blocked slots', async () => {
+    const app = world();
+    app.state.scheduleMode = 'errands';
+    app.state.settings.dateHours = { ['e:' + MONDAY]: { start: '17:30', end: '20:00' } };
+    await app.App.planTheDay();
+    const p = app.state.dayPlan;
+    assert.equal(p.errand, true);
+    assert.equal(p.stops.length, 2, 'the 18:00 work block must not stop errands');
+    for (const s of p.stops) assert.ok(app.Scheduler.toMin(s.end) <= 20 * 60);
+    assert.deepStrictEqual(names(p.stops.map(x => x.job)), ['Bank', 'Pharmacy']);
+  });
+
+  test('the work day still respects its blocked slots', async () => {
+    const app = world();
+    app.state.scheduleMode = 'day';
+    app.state.settings.blockedSlots = [{ day: 1, start: '08:00', end: '12:00', reason: '' }];
+    await app.App.planTheDay();
+    assert.equal(app.state.dayPlan.stops.length, 0, 'the whole work day is blocked');
+  });
+
+  test('a reorder of an errand day keeps ignoring work breaks', async () => {
+    const app = world();
+    app.state.scheduleMode = 'errands';
+    app.state.settings.blockedSlots = [{ day: 1, start: '09:00', end: '20:00', reason: '' }];
+    await app.App.planTheDay();
+    const p = app.state.dayPlan;
+    assert.equal(p.stops.length, 2);
+    const r = app.Scheduler.reorderDay(p, app.state.settings, app.state.coords, 0, 1);
+    assert.equal(r.ok, true);
+    assert.equal(r.plan.errand, true);
+  });
+
+  test('a saved errand is marked as one; a saved work job is not', async () => {
+    const app = world();
+    app.App.closeStudentDrawer = () => {};
+    const els = { 'jb-name': 'Milk', 'jb-addr': '', 'jb-dmin': '30', 'jb-dmax': '', 'jb-wfrom': '', 'jb-wto': '' };
+    app.ctx.document.getElementById = (id) => id in els ? { value: els[id] } : { value: '', style: {}, classList: { add() {}, remove() {} } };
+    app.state.scheduleMode = 'errands';
+    app.state.editingJobId = null;
+    app.App.saveJob();
+    await new Promise(r => setTimeout(r, 5));      // job ids are made from the clock
+    app.state.scheduleMode = 'day';
+    app.state.editingJobId = null;
+    els['jb-name'] = 'Fix sink';
+    app.App.saveJob();
+    const milk = app.state.jobs.find(j => j.name === 'Milk');
+    const sink = app.state.jobs.find(j => j.name === 'Fix sink');
+    assert.equal(milk.kind, 'errand');
+    assert.notEqual(sink.kind, 'errand');
+  });
+
+  test('a note in the errands tab defaults to 30 minutes, at work to 60', () => {
+    const app = world();
+    app.App.todayISO = () => MONDAY;
+    const got = [];
+    app.App.openJobDrawer = (id, pre) => got.push(pre.durationMin);
+    app.ctx.document.getElementById = (id) => id === 'qn-text' ? { value: 'milk' } : null;
+    app.state.scheduleMode = 'errands';
+    app.App.quickNoteAdd();
+    app.state.scheduleMode = 'day';
+    app.App.quickNoteAdd();
+    assert.deepStrictEqual(got, [30, 60]);
+  });
+
+  test('a plan made for work is not shown on the errands tab', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /!!state\.dayPlan\.errand === this\.isErrands\(\)/);
+  });
+
+  test('the tab bar has all three, and errands render the day screen', () => {
+    const app = world();
+    app.state.scheduleMode = 'errands';
+    const html = app.App._modeTabsHtml();
+    for (const k of ["'week'", "'day'", "'errands'"]) assert.ok(html.includes(`setScheduleMode(${k})`), k);
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /if\(state\.scheduleMode === 'day' \|\| state\.scheduleMode === 'errands'\) return this\.renderDayPlanner\(\);/,
+      'the test harness stubs renderSchedule, so the routing is checked in the source');
+    app.App.setScheduleMode('nonsense');
+    assert.equal(app.state.scheduleMode, 'week');
+  });
+
+  test('choosing the errands tab keeps it', () => {
+    const app = world();
+    app.App.setScheduleMode('errands');
+    assert.equal(app.state.scheduleMode, 'errands');
+    app.App.setScheduleMode('day');
+    assert.equal(app.state.scheduleMode, 'day');
+  });
+
+  test('an errand day where nothing could be planned is still an errand day', async () => {
+    const app = world();
+    app.state.scheduleMode = 'errands';
+    delete app.state.coords.e1; delete app.state.coords.e2;   // no positions: planDay returns early
+    await app.App.planTheDay();
+    assert.equal(app.state.dayPlan.errand, true, 'or the screen would hide it as a work plan');
+  });
+
+  test('moving a job to the next day changes its date and clears the plan', () => {
+    const app = world();
+    app.state.dayPlan = { date: MONDAY, stops: [] };
+    app.App.moveJobDay('e1', 1);
+    assert.equal(app.state.jobs.find(j => j.id === 'e1').date, '2026-09-29');
+    assert.equal(app.state.dayPlan, null);
+    app.App.moveJobDay('nobody', 1);
+  });
+
+  test('the day map is drawn from home and the stops in order, skipping unknown positions', () => {
+    const app = world();
+    const marks = [];
+    const line = [];
+    app.ctx.L = {
+      map: () => ({ remove() {}, fitBounds() {} }),
+      tileLayer: () => ({ addTo() {} }),
+      polyline: (pts) => ({ addTo() { line.push(pts.length); } }),
+      divIcon: (o) => o,
+      marker: (ll, o) => ({ addTo() { marks.push(o.icon.html.replace(/<[^>]*>/g, '').trim()); } }),
+      latLngBounds: (x) => x,
+    };
+    app.ctx.document.getElementById = (id) => id === 'day-map' ? {} : null;
+    delete app.state.coords.e2;
+    const plan = { date: MONDAY, stops: [
+      { job: { id: 'e1', name: 'Pharmacy' } }, { job: { id: 'e2', name: 'Bank' } }, { job: { id: 'w1', name: 'Work A' } }] };
+    app.App._drawDayMap(plan);
+    assert.deepStrictEqual(marks, ['🏠', '1', '3']);
+    assert.deepStrictEqual(line, [4], 'home, two known stops, and back home');
+  });
+
+  test('no map library or no container is not an error', () => {
+    const app = world();
+    app.App._drawDayMap({ date: MONDAY, stops: [] });
+    app.ctx.document.getElementById = () => null;
+    app.App._drawDayMap({ date: MONDAY, stops: [{ job: { id: 'e1' } }] });
+  });
+});
