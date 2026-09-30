@@ -3988,3 +3988,141 @@ describe('the job form finds addresses the way the student form does', () => {
     assert.equal(app.App._jobAddrPendingCoord, null);
   });
 });
+
+describe('reordering the stops of a planned day by hand', () => {
+  const MONDAY = '2026-09-28';
+  const cfgOf = () => settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '18:00' } } });
+
+  async function planned(extraJobs, cfgOv) {
+    const app = loadApp({ seed: 3 });
+    const cfg = cfgOv || cfgOf();
+    const list = extraJobs || [
+      { id: 'a', name: 'A', address: 'a', durationMin: 60, date: MONDAY },
+      { id: 'b', name: 'B', address: 'b', durationMin: 60, date: MONDAY },
+      { id: 'c', name: 'C', address: 'c', durationMin: 60, date: MONDAY },
+    ];
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    list.forEach((j, i) => { coords[j.id] = { lat: 38.240 + i / 60, lon: 21.730 + i / 80 }; });
+    app.setState({ jobs: list, settings: cfg, coords, students: [], schedule: {},
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const plan = await app.Scheduler.planDay(list, cfg, coords, MONDAY);
+    return { app, plan, cfg, coords, list };
+  }
+  const ids = (p) => Array.from(p.stops, x => x.job.id);
+
+  test('a move changes the order and the times follow it', async () => {
+    const { app, plan, cfg, coords } = await planned();
+    const before = ids(plan);
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 2);
+    assert.equal(r.ok, true);
+    assert.deepStrictEqual(ids(r.plan), [before[1], before[2], before[0]]);
+    const S = app.Scheduler;
+    for (let i = 1; i < r.plan.stops.length; i++)
+      assert.ok(S.toMin(r.plan.stops[i].start) >= S.toMin(r.plan.stops[i - 1].end),
+        'stops must not overlap after a move');
+    assert.deepStrictEqual(Array.from(r.plan.issues), []);
+  });
+
+  test('the kilometres are those of the new order, not the old', async () => {
+    const { app, plan, cfg, coords } = await planned();
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 2);
+    const slots = r.plan.stops.map(x => x.slot);
+    const { cfg: dayCfg } = app.Scheduler._dayFrame(r.plan.stops.map(x => x.job), 1, cfg);
+    assert.equal(r.plan.km, app.Scheduler.dayKm(slots, 1, dayCfg));
+    assert.notEqual(r.plan.km, plan.km, 'reversing the ends of a line of stops changes the drive');
+  });
+
+  test('no job is lost or duplicated by a move', async () => {
+    const { app, plan, cfg, coords } = await planned();
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 1, 0);
+    assert.deepStrictEqual(ids(r.plan).slice().sort(), ids(plan).slice().sort());
+  });
+
+  test('an order that breaks a window is refused and nothing changes', async () => {
+    // X may only be seen 08:00-09:00, so it can only be first.
+    const jobs = [
+      { id: 'x', name: 'X', address: 'x', durationMin: 60, date: MONDAY, window: { start: '08:00', end: '09:00' } },
+      { id: 'y', name: 'Y', address: 'y', durationMin: 60, date: MONDAY },
+    ];
+    const { app, plan, cfg, coords } = await planned(jobs);
+    assert.deepStrictEqual(ids(plan), ['x', 'y']);
+    const snapshot = JSON.stringify(plan.stops.map(x => [x.job.id, x.start, x.end]));
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 1);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'illegal');
+    assert.equal(JSON.stringify(plan.stops.map(x => [x.job.id, x.start, x.end])), snapshot,
+      'the plan handed in is not touched');
+  });
+
+  test('a stop that would end after closing time is refused', async () => {
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '11:00' } } });
+    const jobs = [
+      { id: 'p', name: 'P', address: 'p', durationMin: 60, date: MONDAY },
+      { id: 'q', name: 'Q', address: 'q', durationMin: 60, date: MONDAY, window: { start: '08:00', end: '09:00' } },
+    ];
+    const { app, plan, coords } = await planned(jobs, cfg);
+    assert.equal(plan.stops.length, 2);
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 1);
+    assert.equal(r.ok, false);
+  });
+
+  test('positions outside the list, and a move to the same place, do nothing', async () => {
+    const { app, plan, cfg, coords } = await planned();
+    const S = app.Scheduler;
+    assert.equal(S.reorderDay(plan, cfg, coords, -1, 0).reason, 'bad-index');
+    assert.equal(S.reorderDay(plan, cfg, coords, 0, 3).reason, 'bad-index');
+    assert.equal(S.reorderDay(plan, cfg, coords, 0.5, 1).reason, 'bad-index');
+    assert.equal(S.reorderDay(plan, cfg, coords, 1, 1).plan, plan);
+  });
+
+  test('a job that did not fit stays reported as not planned after a move', async () => {
+    const jobs = [
+      { id: 'a', name: 'A', address: 'a', durationMin: 60, date: MONDAY },
+      { id: 'b', name: 'B', address: 'b', durationMin: 60, date: MONDAY },
+      { id: 'huge', name: 'Huge', address: 'h', durationMin: 900, date: MONDAY },
+    ];
+    const { app, plan, cfg, coords } = await planned(jobs);
+    assert.deepStrictEqual(Array.from(plan.unplanned, j => j.id), ['huge']);
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 1);
+    assert.deepStrictEqual(Array.from(r.plan.unplanned, j => j.id), ['huge'],
+      'a move must not make an unplaceable job disappear from the report');
+  });
+
+  test('the source of the travel times survives a move', async () => {
+    const { app, plan, cfg, coords } = await planned();
+    plan.timesFrom = 'osrm';
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 1);
+    assert.equal(r.plan.timesFrom, 'osrm');
+  });
+
+  test('moveStop replaces the plan on success and keeps it, with a message, on refusal', async () => {
+    const { app, plan } = await planned();
+    const shown = [];
+    app.Toast.show = (m, kind) => shown.push(kind);
+    app.App.renderDayPlanner = () => {};
+    app.state.dayPlan = plan;
+    const first = ids(plan);
+    app.App.moveStop(0, 1);
+    assert.notDeepEqual(ids(app.state.dayPlan), first);
+    assert.deepStrictEqual(shown, ['success']);
+
+    const w = await planned([
+      { id: 'x', name: 'X', address: 'x', durationMin: 60, date: MONDAY, window: { start: '08:00', end: '09:00' } },
+      { id: 'y', name: 'Y', address: 'y', durationMin: 60, date: MONDAY },
+    ]);
+    w.app.Toast.show = (m, kind) => shown.push(kind);
+    w.app.App.renderDayPlanner = () => {};
+    w.app.state.dayPlan = w.plan;
+    w.app.App.moveStop(0, 1);
+    assert.equal(w.app.state.dayPlan, w.plan);
+    assert.equal(shown[shown.length - 1], 'error');
+  });
+
+  test('every stop has move buttons, the first cannot go up and the last cannot go down', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /App\.moveStop\(\$\{i\},-1\)/);
+    assert.match(src, /App\.moveStop\(\$\{i\},1\)/);
+    assert.match(src, /\$\{i===0\?'disabled':''\}/);
+    assert.match(src, /\$\{i===plan\.stops\.length-1\?'disabled':''\}/);
+  });
+});
