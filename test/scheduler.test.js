@@ -4565,3 +4565,87 @@ describe('errands: the day for people who are not at work', () => {
     app.App._drawDayMap({ date: MONDAY, stops: [{ job: { id: 'e1' } }] });
   });
 });
+
+describe('Google Maps opens the leg from the previous stop, and wrong towns are flagged', () => {
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings({ homeAddress: 'Home St 1' }),
+      jobs: [{ id: 'a', name: 'A', address: 'Addr A' }, { id: 'b', name: 'B', address: 'Addr B' }, { id: 'c', name: 'C', address: 'Addr C' }],
+      students: [], schedule: {},
+      coords: { home: { lat: 38.24, lon: 21.73 }, a: { lat: 38.25, lon: 21.74 }, b: { lat: 38.26, lon: 21.75 } } });
+    const opened = [];
+    app.ctx.window.open = (u) => opened.push(u);
+    app.Toast.show = () => {};
+    return { app, opened };
+  }
+  const q = (u) => Object.fromEntries(new (require('url').URL)(u).searchParams);
+
+  test('the URL carries both the start and the destination', () => {
+    const { app } = world();
+    const u = app.App.buildGoogleLegUrl({ id: 'a', address: 'Addr A' }, { id: 'b', address: 'Addr B' });
+    assert.equal(q(u).origin, '38.25,21.74');
+    assert.equal(q(u).destination, '38.26,21.75');
+    assert.equal(q(u).travelmode, 'driving');
+  });
+
+  test('without a start it is a destination-only link', () => {
+    const { app } = world();
+    const u = app.App.buildGoogleLegUrl(null, { id: 'b', address: 'Addr B' });
+    assert.equal(q(u).origin, undefined);
+    assert.equal(q(u).destination, '38.26,21.75');
+  });
+
+  test('a stop without any position or address gives no link', () => {
+    const { app } = world();
+    assert.equal(app.App.buildGoogleLegUrl(null, { id: 'zz', address: '' }), null);
+  });
+
+  test('the second stop of the day is reached from the first, the first from home', () => {
+    const { app, opened } = world();
+    app.state.dayPlan = { date: 'd', stops: [{ job: app.state.jobs[0] }, { job: app.state.jobs[1] }] };
+    app.App.openJobInMaps('b');
+    app.App.openJobInMaps('a');
+    assert.equal(q(opened[0]).origin, '38.25,21.74');
+    assert.equal(q(opened[1]).origin, '38.24,21.73');
+  });
+
+  test('a job that is not in the plan opens with no start', () => {
+    const { app, opened } = world();
+    app.state.dayPlan = { date: 'd', stops: [] };
+    app.App.openJobInMaps('b');
+    assert.equal(q(opened[0]).origin, undefined);
+  });
+
+  test('the weekly route does the same', () => {
+    const { app, opened } = world();
+    const S = app.Scheduler;
+    app.state.students = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }];
+    app.state.schedule = { 1: [
+      { studentId: 'a', studentName: 'A', address: 'Addr A', start: '09:00', end: '10:00', duration: 60, mergedCount: 1 },
+      { studentId: 'b', studentName: 'B', address: 'Addr B', start: '11:00', end: '12:00', duration: 60, mergedCount: 1 }] };
+    app.App.openStopInMaps(1, 1);
+    app.App.openStopInMaps(1, 0);
+    assert.equal(q(opened[0]).origin, '38.25,21.74');
+    assert.equal(q(opened[1]).origin, '38.24,21.73');
+  });
+
+  test('a stop far from home is flagged, with the distance', () => {
+    const { app } = world();
+    app.state.coords.far = { lat: 37.98, lon: 23.72 };     // Athens
+    assert.ok(app.App.suspiciousDistanceKm('far') > 150);
+    assert.equal(app.App.suspiciousDistanceKm('a'), 0);
+  });
+
+  test('no position, or no home, is not called suspicious', () => {
+    const { app } = world();
+    assert.equal(app.App.suspiciousDistanceKm('nobody'), 0);
+    delete app.state.coords.home;
+    app.state.coords.far = { lat: 37.98, lon: 23.72 };
+    assert.equal(app.App.suspiciousDistanceKm('far'), 0);
+  });
+
+  test('the day plan shows the warning on the stop', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /this\.suspiciousDistanceKm\(x\.job\.id\) \?/);
+  });
+});
