@@ -3676,3 +3676,232 @@ describe('the first placement already respects the road matrix', () => {
     assert.deepStrictEqual(Array.from(auditSchedule(S, r.schedule, sts, cfg)), []);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The day planner never plans on an invented position
+// ---------------------------------------------------------------------------
+
+describe('a job with no known position is reported, not planned on a guess', () => {
+  // Saving a job geocodes it in the background, and nothing checked the result.
+  // A lookup that failed or had not landed left the job with no position, and
+  // safeCoord quietly turned that into a position hashed from the address text
+  // — somewhere in Πάτρα with no relation to where the customer is. The plan
+  // was drawn up on it without a word.
+
+  const MONDAY = '2026-09-28';
+  function world(coordsOver = {}) {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5],
+      dayHours: { 1: { start: '08:00', end: '18:00' } } });
+    const coords = Object.assign({ home: { lat: 38.24, lon: 21.73 },
+      j1: { lat: 38.25, lon: 21.74 }, j2: { lat: 38.26, lon: 21.75 } }, coordsOver);
+    const jobs = [{ id: 'j1', name: 'A', address: 'a', durationMin: 60, date: MONDAY },
+                  { id: 'j2', name: 'B', address: 'b', durationMin: 60, date: MONDAY }];
+    app.setState({ settings: cfg, coords, jobs, students: [], dayMatrixPeak: null, dayMatrixOffPeak: null });
+    return { app, S: app.Scheduler, cfg, jobs, coords };
+  }
+
+  test('a job without a position is listed apart and not scheduled', async () => {
+    const { app, S, cfg, jobs, coords } = world();
+    delete coords.j2;
+    const plan = await S.planDay(jobs, cfg, coords, MONDAY, { optimise: false });
+    assert.deepStrictEqual(Array.from(plan.stops).map(x => x.job.id), ['j1']);
+    assert.deepStrictEqual(Array.from(plan.unlocated).map(j => j.id), ['j2']);
+    assert.deepStrictEqual(Array.from(plan.unplanned), [], 'it is not merely "did not fit"');
+  });
+
+  test('a null or garbage position counts as unknown', async () => {
+    for (const bad of [null, {}, { lat: NaN, lon: 21 }, { lat: 'x', lon: 'y' }]) {
+      const { S, cfg, jobs, coords } = world({ j2: bad });
+      const plan = await S.planDay(jobs, cfg, coords, MONDAY, { optimise: false });
+      assert.deepStrictEqual(Array.from(plan.unlocated).map(j => j.id), ['j2'], JSON.stringify(bad));
+    }
+  });
+
+  test('when nobody has a position there is nothing to plan and every job is listed', async () => {
+    const { S, cfg, jobs } = world();
+    const plan = await S.planDay(jobs, cfg, { home: { lat: 38.24, lon: 21.73 } }, MONDAY, { optimise: false });
+    assert.equal(plan.stops.length, 0);
+    assert.equal(plan.unlocated.length, 2);
+  });
+
+  test('without a home there is nothing to measure from, and it says so', async () => {
+    const { S, cfg, jobs, coords } = world();
+    delete coords.home;
+    const plan = await S.planDay(jobs, cfg, coords, MONDAY, { optimise: false });
+    assert.equal(plan.error, 'no-home');
+    assert.equal(plan.stops.length, 0, 'no plan on a home invented from the address text');
+  });
+
+  test('a full set of positions plans exactly as before', async () => {
+    const { S, cfg, jobs, coords } = world();
+    const plan = await S.planDay(jobs, cfg, coords, MONDAY, { optimise: false });
+    assert.equal(plan.stops.length, 2);
+    assert.deepStrictEqual(Array.from(plan.unlocated), []);
+  });
+});
+
+describe('planning the day finds the positions first, by the same rule as the week', () => {
+  const MONDAY = '2026-09-28';
+  function world(over = {}) {
+    const app = loadApp();
+    const cfg = settings(Object.assign({ workDays: [1], homeAddress: 'Πλατεία Γεωργίου 1',
+      dayHours: { 1: { start: '08:00', end: '18:00' } } }, over.settings || {}));
+    const jobs = [{ id: 'j1', name: 'A', address: 'Γούναρη 58', durationMin: 60, date: MONDAY },
+                  { id: 'j2', name: 'B', address: 'Κορίνθου 10', durationMin: 60, date: MONDAY },
+                  { id: 'j3', name: 'C', address: '', durationMin: 60, date: MONDAY }];
+    app.setState({ settings: cfg, jobs, students: [], coords: over.coords || {} });
+    app.App.renderDayPlanner = () => {};
+    return app;
+  }
+
+  test('a missing home and missing jobs are geocoded before planning', async () => {
+    const app = world();
+    const asked = [];
+    app.Router.geocode = async (a) => { asked.push(a); return { lat: 38.24 + asked.length / 100, lon: 21.73 }; };
+    const geo = await app.App._ensureDayCoords(MONDAY);
+    assert.deepStrictEqual(asked, ['Πλατεία Γεωργίου 1', 'Γούναρη 58', 'Κορίνθου 10'],
+      'the home first, then each job; the job with no address is not looked up');
+    assert.equal(geo.homeOk, true);
+    assert.deepStrictEqual(Array.from(geo.missing), []);
+    assert.ok(app.Scheduler.validCoord(app.state.coords.j1));
+  });
+
+  test('a position that is already known is not looked up again', async () => {
+    const app = world({ coords: { home: { lat: 38.2, lon: 21.7 }, j1: { lat: 38.3, lon: 21.8 } } });
+    const asked = [];
+    app.Router.geocode = async (a) => { asked.push(a); return { lat: 38.1, lon: 21.6 }; };
+    await app.App._ensureDayCoords(MONDAY);
+    assert.deepStrictEqual(asked, ['Κορίνθου 10']);
+  });
+
+  test('with HERE available it uses HERE, not Nominatim', async () => {
+    const app = world({ settings: { hereApiKey: 'k' } });
+    const used = [];
+    app.Router.geocodeHere = async (a) => { used.push('here'); return { lat: 38.2, lon: 21.7 }; };
+    app.Router.geocode = async () => { used.push('nominatim'); return null; };
+    await app.App._ensureDayCoords(MONDAY);
+    assert.ok(used.length >= 2);
+    assert.ok(used.every(u => u === 'here'), `Nominatim was used while HERE was available: ${used}`);
+  });
+
+  test('a lookup that fails is reported as missing, and the home reported as not found', async () => {
+    const app = world();
+    app.Router.geocode = async () => null;
+    const geo = await app.App._ensureDayCoords(MONDAY);
+    assert.equal(geo.homeOk, false);
+    assert.ok(geo.missing.includes('home') && geo.missing.includes('j1'));
+    assert.equal(app.state.coords.j1, undefined, 'and nothing is invented in its place');
+  });
+
+  test('a lookup that throws does not stop the others', async () => {
+    const app = world();
+    let n = 0;
+    app.Router.geocode = async () => { n++; if (n === 2) throw new Error('rate limit'); return { lat: 38.2, lon: 21.7 }; };
+    const geo = await app.App._ensureDayCoords(MONDAY);
+    assert.deepStrictEqual(Array.from(geo.missing), ['j1']);
+    assert.ok(app.Scheduler.validCoord(app.state.coords.j2), 'the third still got its position');
+  });
+
+  test('planning refuses, with a message, when the home cannot be found', async () => {
+    const app = world();
+    app.Router.geocode = async () => null;
+    const toasts = [];
+    app.Toast.show = (m) => toasts.push(m);
+    let planned = false;
+    app.Scheduler.planDay = async () => { planned = true; return { stops: [], unplanned: [], unlocated: [], km: 0 }; };
+    app.state.planDate = MONDAY;
+    await app.App.planTheDay();
+    assert.equal(planned, false, 'no plan may be drawn up without a home');
+    assert.ok(toasts.some(m => /σπιτιού/.test(m)), `the person must be told: ${toasts}`);
+  });
+
+  test('positions are found BEFORE the matrix and the plan', async () => {
+    const app = world();
+    const order = [];
+    app.App._ensureDayCoords = async () => { order.push('geocode'); return { missing: [], homeOk: true }; };
+    app.App.loadDayMatrix = async () => { order.push('matrix'); return 'osrm'; };
+    app.Scheduler.planDay = async () => { order.push('plan'); return { stops: [], unplanned: [], unlocated: [], km: 0 }; };
+    app.state.planDate = MONDAY;
+    await app.App.planTheDay();
+    assert.deepStrictEqual(order, ['geocode', 'matrix', 'plan']);
+  });
+});
+
+describe('saving a job keeps its position honest', () => {
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings(), jobs: [], students: [],
+      coords: { j1: { lat: 38.2, lon: 21.7 } } });
+    app.App.renderDayPlanner = () => {};
+    app.App.closeStudentDrawer = () => {};
+    return app;
+  }
+  const form = (app, v) => {
+    app.ctx.document.getElementById = (id) => (id in v)
+      ? { value: v[id] } : { value: '', style: {}, classList: { add() {}, remove() {} } };
+  };
+  const base = { 'jb-name': 'A', 'jb-addr': 'Γούναρη 58', 'jb-dmin': '60', 'jb-dmax': '', 'jb-wfrom': '', 'jb-wto': '',
+    'jb-phone': '', 'jb-service': '', 'jb-notes': '' };
+
+  test('changing the address throws away the old position immediately', () => {
+    const app = world();
+    app.state.jobs = [{ id: 'j1', name: 'A', address: 'Παλιά διεύθυνση 1', durationMin: 60, date: '2026-09-28' }];
+    app.state.editingJobId = 'j1';
+    app.Router.geocode = () => new Promise(() => {});         // never answers
+    form(app, { ...base, 'jb-addr': 'Νέα διεύθυνση 2' });
+    app.App.saveJob();
+    assert.equal(app.state.coords.j1, undefined,
+      'a stale position is not just old, it is wrong, and must not be planned on while the lookup is pending');
+  });
+
+  test('saving without changing the address keeps the position it has', () => {
+    const app = world();
+    app.state.jobs = [{ id: 'j1', name: 'A', address: 'Γούναρη 58', durationMin: 60, date: '2026-09-28' }];
+    app.state.editingJobId = 'j1';
+    app.Router.geocode = async () => { throw new Error('no need to ask'); };
+    form(app, base);
+    app.App.saveJob();
+    assert.deepStrictEqual(app.state.coords.j1, { lat: 38.2, lon: 21.7 });
+  });
+
+  test('the new position is looked up by the same rule as everything else', async () => {
+    const app = world();
+    app.state.settings.hereApiKey = 'k';
+    const used = [];
+    app.Router.geocodeHere = async () => { used.push('here'); return { lat: 38.5, lon: 21.9 }; };
+    app.Router.geocode = async () => { used.push('nominatim'); return null; };
+    form(app, base);
+    app.App.saveJob();
+    await new Promise(r => setTimeout(r, 30));
+    assert.deepStrictEqual(used, ['here']);
+    const id = app.state.jobs[0].id;
+    assert.deepStrictEqual(app.state.coords[id], { lat: 38.5, lon: 21.9 });
+  });
+
+  test('a lookup that lands after the address was edited again is discarded', async () => {
+    const app = world();
+    let resolveFirst;
+    app.Router.geocode = (a) => a === 'Πρώτη 1'
+      ? new Promise(r => { resolveFirst = r; }) : Promise.resolve({ lat: 39, lon: 22 });
+    form(app, { ...base, 'jb-addr': 'Πρώτη 1' });
+    app.App.saveJob();
+    const id = app.state.jobs[0].id;
+    app.state.editingJobId = id;
+    form(app, { ...base, 'jb-addr': 'Δεύτερη 2' });
+    app.App.saveJob();
+    await new Promise(r => setTimeout(r, 30));
+    resolveFirst({ lat: 11, lon: 11 });                       // the OLD answer arrives last
+    await new Promise(r => setTimeout(r, 30));
+    assert.deepStrictEqual(app.state.coords[id], { lat: 39, lon: 22 },
+      'the position for the address that is no longer there must not win');
+  });
+
+  test('deleting a job removes its position too', () => {
+    const app = world();
+    app.state.jobs = [{ id: 'j1', name: 'A', address: 'x', durationMin: 60 }];
+    app.App.confirm = (title, text, cb) => cb();
+    app.App.deleteJob('j1');
+    assert.equal(app.state.coords.j1, undefined);
+  });
+});
