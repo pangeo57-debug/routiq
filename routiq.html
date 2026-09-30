@@ -8849,7 +8849,7 @@ const App = {
     if(!j) return;
     const stops = (state.dayPlan && state.dayPlan.stops) || [];
     const i = stops.findIndex(x => x.job && x.job.id === jobId);
-    const from = i > 0 ? stops[i-1].job : (i === 0 ? this._homePlace() : null);
+    const from = i > 0 ? stops[i-1].job : null;
     const url = this.buildGoogleLegUrl(from, j);
     if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
     window.open(url,'_blank','noopener');
@@ -9740,8 +9740,9 @@ const App = {
 
   // Directions FROM the previous stop TO this one. Sending only a destination
   // makes Google start from wherever the phone is; the leg the person actually
-  // drives is previous stop -> this stop (home -> first stop for the first).
-  // With no known start it falls back to destination only.
+  // drives is previous stop -> this stop. The FIRST stop has no start here on
+  // purpose: Google then starts from where the phone is, which is where the
+  // person is when they set off.
   buildGoogleLegUrl(from, to){
     const dest = this._mapPoint(to && to.id, to && to.address);
     if(!dest) return null;
@@ -9750,8 +9751,6 @@ const App = {
     if(origin) params.origin = origin;
     return 'https://www.google.com/maps/dir/?' + new URLSearchParams(params).toString();
   },
-
-  _homePlace(){ return { id: 'home', address: (state.settings && state.settings.homeAddress) || '' }; },
 
   // A position far from home is almost always a wrong lookup (a street name
   // that also exists in another city), and it sends the map to the wrong town.
@@ -9779,7 +9778,7 @@ const App = {
     const stop = this._mergeConsecutiveRouteStops(slots)[idx];
     if(!stop) return;
     const merged = this._mergeConsecutiveRouteStops(slots);
-    const prev = idx > 0 ? { id: merged[idx-1].studentId, address: merged[idx-1].address } : this._homePlace();
+    const prev = idx > 0 ? { id: merged[idx-1].studentId, address: merged[idx-1].address } : null;
     const url = this.buildGoogleLegUrl(prev, { id: stop.studentId, address: stop.address });
     if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
     window.open(url, '_blank', 'noopener');

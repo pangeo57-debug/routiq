@@ -4600,13 +4600,13 @@ describe('Google Maps opens the leg from the previous stop, and wrong towns are 
     assert.equal(app.App.buildGoogleLegUrl(null, { id: 'zz', address: '' }), null);
   });
 
-  test('the second stop of the day is reached from the first, the first from home', () => {
+  test('the second stop of the day is reached from the first, the first from where I am', () => {
     const { app, opened } = world();
     app.state.dayPlan = { date: 'd', stops: [{ job: app.state.jobs[0] }, { job: app.state.jobs[1] }] };
     app.App.openJobInMaps('b');
     app.App.openJobInMaps('a');
     assert.equal(q(opened[0]).origin, '38.25,21.74');
-    assert.equal(q(opened[1]).origin, '38.24,21.73');
+    assert.equal(q(opened[1]).origin, undefined, 'no start: Google uses the phone\'s position');
   });
 
   test('a job that is not in the plan opens with no start', () => {
@@ -4626,7 +4626,7 @@ describe('Google Maps opens the leg from the previous stop, and wrong towns are 
     app.App.openStopInMaps(1, 1);
     app.App.openStopInMaps(1, 0);
     assert.equal(q(opened[0]).origin, '38.25,21.74');
-    assert.equal(q(opened[1]).origin, '38.24,21.73');
+    assert.equal(q(opened[1]).origin, undefined);
   });
 
   test('a stop far from home is flagged, with the distance', () => {
