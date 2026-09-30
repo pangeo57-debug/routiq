@@ -9781,6 +9781,18 @@ const App = {
     window.location.href = this.buildGoogleAppUrl(from, to);
   },
 
+  // A position far from home is almost always a wrong lookup (a street name
+  // that also exists in another city), and it sends the map to the wrong town.
+  // Returns the distance in km when it is suspicious, else 0.
+  FAR_KM: 60,
+  suspiciousDistanceKm(id){
+    const c = state.coords && state.coords[id];
+    const h = state.coords && state.coords['home'];
+    if(!Scheduler.validCoord(c) || !Scheduler.validCoord(h)) return 0;
+    const km = Scheduler.haversineKm(h, c);
+    return km > this.FAR_KM ? km : 0;
+  },
+
   buildGoogleStopUrl(id, address){
     const pt = this._mapPoint(id, address);
     if(!pt) return null;
