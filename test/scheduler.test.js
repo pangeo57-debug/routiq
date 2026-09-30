@@ -3905,3 +3905,86 @@ describe('saving a job keeps its position honest', () => {
     assert.equal(app.state.coords.j1, undefined);
   });
 });
+
+describe('the job form finds addresses the way the student form does', () => {
+  const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings(), jobs: [], students: [], coords: {} });
+    app.App.renderDayPlanner = () => {};
+    app.App.closeStudentDrawer = () => {};
+    return app;
+  }
+  const form = (app, v) => {
+    const els = {};
+    app.ctx.document.getElementById = (id) => (id in v)
+      ? (els[id] = els[id] || { value: v[id], style: {} })
+      : { value: '', style: {}, classList: { add() {}, remove() {} } };
+    return els;
+  };
+  const base = { 'jb-name': 'A', 'jb-addr': '', 'jb-dmin': '60', 'jb-dmax': '', 'jb-wfrom': '', 'jb-wto': '',
+    'jb-phone': '', 'jb-service': '', 'jb-notes': '' };
+
+  test('the address field has a suggestion list, keyboard handling and a map pin', () => {
+    const at = src.indexOf('id="jb-addr"');
+    const chunk = src.slice(at - 200, at + 1400);
+    assert.match(chunk, /onAddrInput\(this\.value,'jb-addr-suggest'\)/);
+    assert.match(chunk, /onAddrKey\(event,'jb-addr-suggest'\)/);
+    assert.match(chunk, /id="jb-addr-suggest"/);
+    assert.match(chunk, /openMapPicker\('jb-addr'\)/);
+  });
+
+  test('picking a suggestion fills the field and remembers the position', () => {
+    const app = world();
+    const els = form(app, { ...base });
+    app.App.selectAddr('Γούναρη 58, Πάτρα', 38.24, 21.73, 'jb-addr-suggest');
+    assert.match(els['jb-addr'].value, /Γούναρη 58/);
+    assert.equal(JSON.stringify(app.App._jobAddrPendingCoord), JSON.stringify({ lat: 38.24, lon: 21.73 }));
+  });
+
+  test('the house number typed in the field survives picking a street', () => {
+    const app = world();
+    const els = form(app, { ...base, 'jb-addr': 'Γούναρη 58' });
+    app.App.selectAddr('Γούναρη, Πάτρα', 38.24, 21.73, 'jb-addr-suggest');
+    assert.match(els['jb-addr'].value, /Γούναρη 58/, 'the number the user typed is not the list\'s to drop');
+  });
+
+  test('the picked position is saved and no lookup is made', () => {
+    const app = world();
+    app.Router.geocode = async () => { throw new Error('should not ask'); };
+    app.Router.geocodeHere = async () => { throw new Error('should not ask'); };
+    form(app, { ...base, 'jb-addr': 'Γούναρη 58' });
+    app.App._jobAddrPendingCoord = { lat: 38.24, lon: 21.73 };
+    app.App.saveJob();
+    assert.equal(JSON.stringify(app.state.coords[app.state.jobs[0].id]), JSON.stringify({ lat: 38.24, lon: 21.73 }));
+    assert.equal(app.App._jobAddrPendingCoord, null, 'a pick belongs to one save only');
+  });
+
+  test('typing after picking throws the pick away', () => {
+    const app = world();
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.App._jobAddrPendingCoord = { lat: 1, lon: 1 };
+    app.App.onAddrInput('Γούναρη 5', 'jb-addr-suggest');
+    assert.equal(app.App._jobAddrPendingCoord, null);
+  });
+
+  test('the map pin sets the same pending position', () => {
+    const app = world();
+    form(app, { ...base });
+    app.ctx.document.getElementById = (id) => id === 'jb-addr' ? { value: '' } : { style: {}, textContent: '' };
+    app.Toast.show = () => {};
+    app.App._mapPickerTarget = 'jb-addr';
+    app.App._mapPickerCoord = { lat: 38.3, lon: 21.8 };
+    app.App._mapPickerAddress = 'Κορίνθου 10, Πάτρα';
+    app.App.confirmMapPicker();
+    assert.equal(JSON.stringify(app.App._jobAddrPendingCoord), JSON.stringify({ lat: 38.3, lon: 21.8 }));
+    assert.equal(app.App._addrPendingCoord, null, 'not the student form\'s slot');
+  });
+
+  test('opening the form starts with no pick', () => {
+    const app = world();
+    app.App._jobAddrPendingCoord = { lat: 1, lon: 1 };
+    try { app.App.openJobDrawer(); } catch (e) { /* DOM stubs may stop it after the reset */ }
+    assert.equal(app.App._jobAddrPendingCoord, null);
+  });
+});

@@ -7159,6 +7159,7 @@ const App = {
 
   _addrTimer: null,
   _addrPendingCoord: null,
+  _jobAddrPendingCoord: null,
 
   /**
    * Addresses already in the app, matched locally.
@@ -7191,6 +7192,7 @@ const App = {
 
   onAddrInput(val, boxId='addr-suggest'){
     if(boxId==='addr-suggest') this._addrPendingCoord = null;
+    else if(boxId==='jb-addr-suggest') this._jobAddrPendingCoord = null;
     else if(boxId==='set-home-suggest') this._homeAddrPendingCoord = null;
     else this._obCoord = null;
     clearTimeout(this._addrTimer);
@@ -7568,7 +7570,7 @@ const App = {
     // code order (_formatAddressOrdered) — saved as-is, not truncated to the
     // first 3 comma-parts like before, which would have silently dropped the
     // postal code off the end.
-    const typedIn = { 'ob-addr-suggest':'ob-addr', 'set-home-suggest':'set-home' }[boxId] || 'st-addr';
+    const typedIn = { 'ob-addr-suggest':'ob-addr', 'set-home-suggest':'set-home', 'jb-addr-suggest':'jb-addr' }[boxId] || 'st-addr';
     const typed = document.getElementById(typedIn)?.value || '';
     const short = this._keepTypedNumber(name.trim(), typed);
     if(boxId==='ob-addr-suggest'){
@@ -7584,6 +7586,10 @@ const App = {
       // scroll position/keyboard focus aren't disturbed).
       this.commitHomeLocation(coord, short);
       Toast.show(t('toast_home_location_saved'), 'success');
+    } else if(boxId==='jb-addr-suggest'){
+      const inp = document.getElementById('jb-addr');
+      if(inp) inp.value = short;
+      this._jobAddrPendingCoord = coord;
     } else {
       const inp = document.getElementById('st-addr');
       if(inp) inp.value = short;
@@ -7700,6 +7706,7 @@ const App = {
     if(input) input.value = short;
     if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
     else if(this._mapPickerTarget === 'set-home') this.commitHomeLocation(coord, short);
+    else if(this._mapPickerTarget === 'jb-addr') this._jobAddrPendingCoord = coord;
     else { this._addrPendingCoord = coord; this.updateStudentLocationMapMarker(coord); }
     Toast.show(t('toast_location_picked'), 'success');
     this.closeMapPicker();
@@ -8237,6 +8244,7 @@ const App = {
   // second one, but the fields are the ones a one-off job actually has: how
   // long it might take, and the window the customer gave you.
   openJobDrawer(id){
+    this._jobAddrPendingCoord = null;
     const j = id ? (state.jobs||[]).find(x=>x.id===id) : null;
     state.editingJobId = j ? j.id : null;
     const body = document.getElementById('drawer-student-body');
@@ -8249,8 +8257,15 @@ const App = {
     body.innerHTML = `
       <div class="form-group"><label>${t('day_job_name')}</label>
         <input type="text" id="jb-name" value="${esc(j?.name||'')}" placeholder="${esc(t('day_job_name_ph'))}"></div>
-      <div class="form-group"><label>${t('student_address_label')}</label>
-        <input type="text" id="jb-addr" value="${esc(j?.address||'')}" placeholder="${esc(t('form_address_placeholder'))}"></div>
+      <div class="form-group" style="position:relative"><label>${t('student_address_label')}</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="jb-addr" value="${esc(j?.address||'')}" placeholder="${esc(t('form_address_placeholder'))}" autocomplete="off" style="flex:1"
+            oninput="App.onAddrInput(this.value,'jb-addr-suggest')" onkeydown="App.onAddrKey(event,'jb-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('jb-addr-suggest'),200)">
+          <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('jb-addr')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </button>
+        </div>
+        <div id="jb-addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div>
       <div class="form-group"><label>${t('form_phone_label')}</label>
         <input type="tel" id="jb-phone" value="${esc(j?.phone||'')}" placeholder="${esc(t('form_phone_ph'))}" autocomplete="tel"></div>
       <div class="form-group"><label>${getLabels().session}</label>
@@ -8306,6 +8321,11 @@ const App = {
     // the job was planned at the place it used to be.
     const prevAddr = idx >= 0 ? (state.jobs[idx].address || '') : null;
     if(prevAddr !== addr) delete state.coords[job.id];
+    // A position the user picked (from the list or the map) is the answer, not
+    // something to look up again. Typing after picking clears it (onAddrInput).
+    const picked = this._jobAddrPendingCoord;
+    this._jobAddrPendingCoord = null;
+    if(addr && Scheduler.validCoord(picked)) state.coords[job.id] = picked;
     if(idx >= 0) state.jobs[idx] = { ...state.jobs[idx], ...job };
     else (state.jobs = state.jobs||[]).push(job);
     Storage.saveJobs(state.jobs);
