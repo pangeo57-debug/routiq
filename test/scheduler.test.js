@@ -4126,3 +4126,222 @@ describe('reordering the stops of a planned day by hand', () => {
     assert.match(src, /\$\{i===plan\.stops\.length-1\?'disabled':''\}/);
   });
 });
+
+describe('a note becomes a job without a form', () => {
+  const TODAY = '2026-09-30'; // a Wednesday
+  const P = (text) => loadApp().QuickNote.parse(text, TODAY);
+  const row = (r) => JSON.stringify([r.title, r.date, r.start, r.durationMin]);
+
+  const CASES = [
+    ['dentist tomorrow at 11',                   ['dentist', '2026-10-01', '11:00', null]],
+    ['Οδοντίατρος αύριο στις 11',                ['Οδοντίατρος', '2026-10-01', '11:00', null]],
+    ['coiffeur demain à 14h30',                  ['coiffeur', '2026-10-01', '14:30', null]],
+    ['Zahnarzt morgen um 9 Uhr',                 ['Zahnarzt', '2026-10-01', '09:00', null]],
+    ['meeting friday 3pm for 2 hours',           ['meeting', '2026-10-02', '15:00', 120]],
+    ['κομμωτήριο μεθαύριο 10:30 για 45 λεπτά',   ['κομμωτήριο', '2026-10-02', '10:30', 45]],
+    ['lunch 12:30 1.5 hours',                    ['lunch', null, '12:30', 90]],
+    ['Arzt Montag 11h',                          ['Arzt', '2026-10-05', '11:00', null]],
+    ['12am gym',                                 ['gym', null, '00:00', null]],
+    ['call mom',                                 ['call mom', null, null, null]],
+  ];
+  for (const [text, want] of CASES)
+    test(`reads "${text}"`, () => assert.equal(row(P(text)), JSON.stringify(want)));
+
+  test('a house number is never a time', () => {
+    assert.equal(row(P('Γούναρη 58 πλυντήριο')), JSON.stringify(['Γούναρη 58 πλυντήριο', null, null, null]));
+    assert.equal(P('deliver to Ermou 12 tomorrow').start, null);
+  });
+
+  test('a weekday said on that weekday means next week', () => {
+    assert.equal(P('dentist wednesday').date, '2026-10-07');
+  });
+
+  test('an hour that does not exist is left in the title, not guessed', () => {
+    const r = P('party at 25');
+    assert.equal(r.start, null);
+    assert.match(r.title, /25/);
+  });
+
+  test('a length outside sensible bounds is left alone', () => {
+    assert.equal(P('nap for 2 min').durationMin, null);
+    assert.equal(P('trip for 30 hours').durationMin, null);
+  });
+
+  test('a note that is only a day and time keeps its words as the title', () => {
+    const r = P('tomorrow at 11');
+    assert.equal(r.title, 'tomorrow at 11', 'an empty title would save a job with no name');
+    assert.equal(r.start, '11:00');
+  });
+
+  test('an unnamed earlier job is not a place for an empty name', () => {
+    const app = loadApp();
+    app.setState({ settings: settings(), jobs: [{ id: 'x', name: '', address: 'Somewhere 1' }], students: [], coords: {} });
+    assert.equal(app.App.rememberedPlace(''), null);
+    assert.equal(app.App.rememberedPlace('   '), null);
+  });
+
+  test('an empty note gives an empty result', () => {
+    assert.equal(row(P('   ')), JSON.stringify(['', null, null, null]));
+  });
+
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings(), jobs: [], students: [], coords: {} });
+    app.App.renderDayPlanner = () => {};
+    return app;
+  }
+  const withBox = (app, text) => {
+    app.ctx.document.getElementById = (id) => id === 'qn-text' ? { value: text } : null;
+  };
+
+  test('quickNoteAdd opens the job form filled in, and moves to that date', () => {
+    const app = world();
+    app.App.todayISO = () => TODAY;
+    let got = null;
+    app.App.openJobDrawer = (id, prefill) => { got = { id, prefill }; };
+    withBox(app, 'dentist tomorrow at 11 for 30 min');
+    app.App.quickNoteAdd();
+    assert.equal(app.state.planDate, '2026-10-01');
+    assert.equal(got.id, null);
+    assert.equal(got.prefill.name, 'dentist');
+    assert.equal(got.prefill.durationMin, 30);
+    assert.equal(JSON.stringify(got.prefill.window), JSON.stringify({ start: '11:00', end: '11:30' }));
+  });
+
+  test('a note is never saved without the person seeing the form', () => {
+    const app = world();
+    app.App.todayISO = () => TODAY;
+    app.App.openJobDrawer = () => {};
+    withBox(app, 'dentist tomorrow at 11');
+    app.App.quickNoteAdd();
+    assert.equal(app.state.jobs.length, 0);
+  });
+
+  test('a place the person has been before is filled in by name', () => {
+    const app = world();
+    app.App.todayISO = () => TODAY;
+    app.state.jobs = [{ id: 'old', name: 'Dentist', address: 'Κορίνθου 10', durationMin: 60, date: '2026-09-01' }];
+    app.state.coords = { old: { lat: 38.25, lon: 21.74 } };
+    let got = null;
+    app.App.openJobDrawer = (id, prefill) => { got = prefill; };
+    withBox(app, 'dentist tomorrow at 11');
+    app.App.quickNoteAdd();
+    assert.equal(got.address, 'Κορίνθου 10');
+    assert.equal(JSON.stringify(got._coord), JSON.stringify({ lat: 38.25, lon: 21.74 }));
+  });
+
+  test('a name never seen before gets no invented place', () => {
+    const app = world();
+    app.state.jobs = [{ id: 'old', name: 'Dentist', address: 'Κορίνθου 10', durationMin: 60 }];
+    assert.equal(app.App.rememberedPlace('Plumber'), null);
+    assert.equal(app.App.rememberedPlace(''), null);
+  });
+
+  test('a remembered place with no known position is offered by address only', () => {
+    const app = world();
+    app.state.jobs = [{ id: 'old', name: 'Dentist', address: 'Κορίνθου 10', durationMin: 60 }];
+    const p = app.App.rememberedPlace('DENTIST');
+    assert.equal(p.address, 'Κορίνθου 10');
+    assert.equal(p.coord, null);
+  });
+
+  test('the form for a note starts a NEW job, not an edit of one', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /state\.editingJobId = id && j \? j\.id : null;/);
+    assert.match(src, /id="qn-text"/);
+  });
+});
+
+describe('hours for one date, typed on the day screen', () => {
+  const MONDAY = '2026-09-28';
+  const jobs = [
+    { id: 'a', name: 'A', address: 'a', durationMin: 60, date: MONDAY },
+    { id: 'b', name: 'B', address: 'b', durationMin: 60, date: MONDAY },
+    { id: 'c', name: 'C', address: 'c', durationMin: 60, date: MONDAY },
+  ];
+  function world() {
+    const app = loadApp({ seed: 3 });
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '18:00' } } });
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    jobs.forEach((j, i) => { coords[j.id] = { lat: 38.240 + i / 60, lon: 21.730 + i / 80 }; });
+    app.setState({ jobs: jobs.map(j => ({ ...j })), settings: cfg, coords, students: [], schedule: {} });
+    return { app, cfg, coords };
+  }
+
+  test('the plan stays inside the hours given for that date', async () => {
+    const { app, cfg, coords } = world();
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, MONDAY, { hours: { start: '13:00', end: '16:30' } });
+    assert.ok(plan.stops.length >= 1);
+    for (const s of plan.stops) {
+      assert.ok(app.Scheduler.toMin(s.start) >= 13 * 60, 'nothing before the day opens');
+      assert.ok(app.Scheduler.toMin(s.end) <= 16 * 60 + 30, 'nothing after it closes');
+    }
+    assert.equal(plan.hours.start, '13:00');
+    assert.equal(plan.hours.assumed, false);
+  });
+
+  test('without them the weekly hours still apply', async () => {
+    const { app, cfg, coords } = world();
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, MONDAY);
+    assert.equal(plan.hours.start, '08:00');
+    assert.equal(plan.stops.length, 3);
+  });
+
+  test('hours that end before they start are ignored, not obeyed', async () => {
+    const { app, cfg, coords } = world();
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, MONDAY, { hours: { start: '16:00', end: '09:00' } });
+    assert.equal(plan.hours.start, '08:00');
+  });
+
+  test('a reorder keeps the date\'s own hours', async () => {
+    const { app, cfg, coords } = world();
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, MONDAY, { hours: { start: '13:00', end: '18:00' } });
+    const r = app.Scheduler.reorderDay(plan, cfg, coords, 0, 2);
+    assert.equal(r.ok, true);
+    for (const s of r.plan.stops) assert.ok(app.Scheduler.toMin(s.start) >= 13 * 60);
+  });
+
+  test('typing the hours saves them for that date only and drops the old plan', () => {
+    const { app } = world();
+    app.App.renderDayPlanner = () => {};
+    app.state.planDate = MONDAY;
+    app.state.dayPlan = { date: MONDAY, stops: [] };
+    app.ctx.document.getElementById = (id) => ({ 'day-h-from': { value: '10:00' }, 'day-h-to': { value: '15:00' } })[id] || null;
+    app.App.setDateHours();
+    assert.equal(JSON.stringify(app.state.settings.dateHours[MONDAY]), JSON.stringify({ start: '10:00', end: '15:00' }));
+    assert.equal(app.state.dayPlan, null);
+    assert.equal(app.state.settings.dayHours[1].start, '08:00', 'the weekly hours are not touched');
+  });
+
+  test('an end before the start is refused and nothing is saved', () => {
+    const { app } = world();
+    app.App.renderDayPlanner = () => {};
+    const shown = [];
+    app.Toast.show = (m, k) => shown.push(k);
+    app.state.planDate = MONDAY;
+    app.ctx.document.getElementById = (id) => ({ 'day-h-from': { value: '15:00' }, 'day-h-to': { value: '10:00' } })[id] || null;
+    app.App.setDateHours();
+    assert.equal(app.state.settings.dateHours, undefined);
+    assert.deepStrictEqual(shown, ['error']);
+  });
+
+  test('the screen shows the date\'s own hours, else the weekly ones', () => {
+    const { app } = world();
+    assert.equal(app.App.dateHoursFor(MONDAY).start, '08:00');
+    app.state.settings.dateHours = { [MONDAY]: { start: '11:00', end: '14:00' } };
+    assert.equal(app.App.dateHoursFor(MONDAY).start, '11:00');
+  });
+
+  test('planTheDay hands the date\'s hours to the planner', async () => {
+    const { app } = world();
+    app.state.planDate = MONDAY;
+    app.state.settings.dateHours = { [MONDAY]: { start: '13:00', end: '18:00' } };
+    app.App._ensureDayCoords = async () => ({ missing: [], homeOk: true });
+    app.App.loadDayMatrix = async () => 'estimate';
+    app.App.renderDayPlanner = () => {};
+    app.Toast.show = () => {};
+    await app.App.planTheDay();
+    assert.ok(app.state.dayPlan.stops.length >= 1);
+    for (const s of app.state.dayPlan.stops) assert.ok(app.Scheduler.toMin(s.start) >= 13 * 60);
+  });
+});

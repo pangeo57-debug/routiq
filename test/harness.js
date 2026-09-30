@@ -138,7 +138,7 @@ function loadApp(opts = {}) {
     'I18N','PROFESSION_VALUES','SUBJECTS','COLORS','DAYS','DAYS_FULL','esc','t','tf',
     'curLang','normalizeSearchText','getProfessions','getLabels','subjectLabel',
     'getHereKey','schedProgress','_schedFrame','Toast',
-    'API_BASE','lookupMode','hereAvailable','apiUrl','Sync'];
+    'API_BASE','lookupMode','hereAvailable','apiUrl','Sync','QuickNote'];
   const src = extractScript() +
     '\n;this.__exports = {' +
     EXPORTS.map(n => `${n}: (typeof ${n} === 'undefined' ? undefined : ${n})`).join(',') +
