@@ -8850,9 +8850,7 @@ const App = {
     const stops = (state.dayPlan && state.dayPlan.stops) || [];
     const i = stops.findIndex(x => x.job && x.job.id === jobId);
     const from = i > 0 ? stops[i-1].job : null;
-    const url = this.buildGoogleLegUrl(from, j);
-    if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
-    window.open(url,'_blank','noopener');
+    this.openLegInMaps(from, j);
   },
 
   deleteJob(id){
@@ -9752,6 +9750,38 @@ const App = {
     return 'https://www.google.com/maps/dir/?' + new URLSearchParams(params).toString();
   },
 
+  // The Google Maps APP's own link. An https://www.google.com/maps link opened
+  // from a home-screen web app stays in a browser sheet on iPhone instead of
+  // opening the app; this scheme opens the app when it is installed.
+  buildGoogleAppUrl(from, to){
+    const dest = this._mapPoint(to && to.id, to && to.address);
+    if(!dest) return null;
+    const origin = from ? this._mapPoint(from.id, from.address) : '';
+    const params = { daddr: dest, directionsmode: 'driving' };
+    if(origin) params.saddr = origin;
+    return 'comgooglemaps://?' + new URLSearchParams(params).toString();
+  },
+
+  _isIOS(){
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+    return /iPhone|iPad|iPod/.test(ua) ||
+      (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  },
+
+  // Open the leg in the Maps app. On iPhone: try the app's scheme first, and if
+  // the page is still in front a moment later (app not installed, or the
+  // person declined), fall back to the web link. Elsewhere the web link is
+  // enough: Android hands it to the app by itself.
+  openLegInMaps(from, to){
+    const web = this.buildGoogleLegUrl(from, to);
+    if(!web){ Toast.show(t('toast_no_stop_location'),'error'); return; }
+    if(!this._isIOS()){ window.open(web, '_blank', 'noopener'); return; }
+    window.location.href = this.buildGoogleAppUrl(from, to);
+    setTimeout(() => {
+      if(!document.hidden) window.open(web, '_blank', 'noopener');
+    }, 1200);
+  },
+
   // A position far from home is almost always a wrong lookup (a street name
   // that also exists in another city), and it sends the map to the wrong town.
   // Returns the distance in km when it is suspicious, else 0.
@@ -9779,9 +9809,7 @@ const App = {
     if(!stop) return;
     const merged = this._mergeConsecutiveRouteStops(slots);
     const prev = idx > 0 ? { id: merged[idx-1].studentId, address: merged[idx-1].address } : null;
-    const url = this.buildGoogleLegUrl(prev, { id: stop.studentId, address: stop.address });
-    if(!url){ Toast.show(t('toast_no_stop_location'),'error'); return; }
-    window.open(url, '_blank', 'noopener');
+    this.openLegInMaps(prev, { id: stop.studentId, address: stop.address });
   },
 
   // Say plainly when a day's driving is longer than the stops require.

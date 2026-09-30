@@ -4649,3 +4649,91 @@ describe('Google Maps opens the leg from the previous stop, and wrong towns are 
     assert.match(src, /this\.suspiciousDistanceKm\(x\.job\.id\) \?/);
   });
 });
+
+describe('opening a leg in the Maps app itself', () => {
+  function world(ua, platform) {
+    const app = loadApp();
+    app.setState({ settings: settings(), jobs: [{ id: 'a', name: 'A', address: 'Addr A' }, { id: 'b', name: 'B', address: 'Addr B' }],
+      students: [], schedule: {},
+      coords: { home: { lat: 38.24, lon: 21.73 }, a: { lat: 38.25, lon: 21.74 }, b: { lat: 38.26, lon: 21.75 } } });
+    const opened = [], timers = [], shown = [];
+    app.ctx.navigator = { userAgent: ua, platform: platform || '', maxTouchPoints: 0 };
+    app.ctx.window.open = (u) => opened.push(u);
+    app.ctx.window.location = { href: '' };
+    app.ctx.setTimeout = (f, ms) => { timers.push({ f, ms }); return 1; };
+    app.ctx.document.hidden = false;
+    app.Toast.show = (m, k) => shown.push(k);
+    return { app, opened, timers, shown, loc: () => app.ctx.window.location.href };
+  }
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)';
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 14)';
+  const A = { id: 'a', address: 'Addr A' }, B = { id: 'b', address: 'Addr B' };
+
+  test('the app link asks for driving directions between the two points', () => {
+    const { app } = world(IPHONE);
+    const u = app.App.buildGoogleAppUrl(A, B);
+    assert.ok(u.startsWith('comgooglemaps://?'));
+    const p = Object.fromEntries(new (require('url').URL)(u.replace('comgooglemaps://', 'https://x/')).searchParams);
+    assert.equal(p.saddr, '38.25,21.74');
+    assert.equal(p.daddr, '38.26,21.75');
+    assert.equal(p.directionsmode, 'driving');
+  });
+
+  test('the first stop has no saddr, so the app starts from where the phone is', () => {
+    const { app } = world(IPHONE);
+    assert.ok(!app.App.buildGoogleAppUrl(null, B).includes('saddr'));
+  });
+
+  test('a stop with nothing to go to gives no app link', () => {
+    const { app } = world(IPHONE);
+    assert.equal(app.App.buildGoogleAppUrl(null, { id: 'zz', address: '' }), null);
+  });
+
+  test('on iPhone the app is tried first, and nothing is opened in the browser yet', () => {
+    const { app, opened, timers, loc } = world(IPHONE);
+    app.App.openLegInMaps(A, B);
+    assert.ok(loc().startsWith('comgooglemaps://'));
+    assert.deepStrictEqual(opened, []);
+    assert.equal(timers.length, 1);
+    assert.ok(timers[0].ms >= 800, 'the app needs time to take over before the fallback fires');
+  });
+
+  test('if the app did not take over, the web link opens after a moment', () => {
+    const { app, opened, timers } = world(IPHONE);
+    app.App.openLegInMaps(A, B);
+    timers[0].f();
+    assert.equal(opened.length, 1);
+    assert.ok(opened[0].startsWith('https://www.google.com/maps/dir/'));
+  });
+
+  test('if the app took over (the page went to the background), no web link follows', () => {
+    const { app, opened, timers } = world(IPHONE);
+    app.App.openLegInMaps(A, B);
+    app.ctx.document.hidden = true;
+    timers[0].f();
+    assert.deepStrictEqual(opened, []);
+  });
+
+  test('an iPad that presents itself as a Mac is still iOS', () => {
+    const { app, loc } = world('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'MacIntel');
+    app.ctx.navigator.maxTouchPoints = 5;
+    app.App.openLegInMaps(A, B);
+    assert.ok(loc().startsWith('comgooglemaps://'));
+  });
+
+  test('elsewhere the web link is opened straight away and no scheme is tried', () => {
+    const { app, opened, timers, loc } = world(ANDROID);
+    app.App.openLegInMaps(A, B);
+    assert.equal(opened.length, 1);
+    assert.equal(loc(), '');
+    assert.equal(timers.length, 0);
+  });
+
+  test('with nowhere to go, the person is told and nothing is opened', () => {
+    const { app, opened, shown, loc } = world(IPHONE);
+    app.App.openLegInMaps(null, { id: 'zz', address: '' });
+    assert.deepStrictEqual(shown, ['error']);
+    assert.deepStrictEqual(opened, []);
+    assert.equal(loc(), '');
+  });
+});
