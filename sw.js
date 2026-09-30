@@ -21,7 +21,7 @@
 
 // Bump on deploy to retire old caches. Any change to this file also causes the
 // browser to treat the worker as updated.
-const CACHE = 'routepal-v3';   // bumped: fonts are now served from this site
+const CACHE = 'routepal-v4';   // bumped: Leaflet is now served from this site
 
 self.addEventListener('install', (event) => {
   // Take over as soon as possible rather than waiting for every existing tab
