@@ -3452,3 +3452,227 @@ describe('the gap sheet offers to send the lesson after the gap to another day',
     assert.ok(app.state.schedule[2].some(x => x.studentId === 'k'), 'and he is on Tuesday');
   });
 });
+
+// ---------------------------------------------------------------------------
+// The day planner uses the map for its drives
+// ---------------------------------------------------------------------------
+
+describe('a day\'s jobs are timed from a road matrix, not a straight line', () => {
+  // The weekly matrix holds the students and the home and nothing else. A
+  // day's jobs are not in it, so every leg between two of them fell through to
+  // a straight line at 25 km/h: no road, no traffic, and none of the correction
+  // for OSRM's optimistic times. Shown by asking about two places at the same
+  // coordinates, once as students and once as jobs: 40 minutes against 5.
+
+  const mk = (ids, secs, metres) => ({ coordIds: ids,
+    durations: ids.map((_, a) => ids.map((__, b) => (a === b ? 0 : secs))),
+    distances: ids.map((_, a) => ids.map((__, b) => (a === b ? 0 : metres))) });
+
+  function world(extra = {}) {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5], dayHours: { 1: { start: '08:00', end: '18:00' } } });
+    const coords = { home: { lat: 38.24, lon: 21.73 }, s1: { lat: 38.25, lon: 21.74 },
+      s2: { lat: 38.26, lon: 21.75 }, j1: { lat: 38.25, lon: 21.74 }, j2: { lat: 38.26, lon: 21.75 } };
+    app.setState(Object.assign({ settings: cfg, coords, students: [student('s1'), student('s2')],
+      travelMatrixPeak: mk(['home', 's1', 's2'], 40 * 60, 30000),
+      travelMatrixOffPeak: mk(['home', 's1', 's2'], 40 * 60, 30000),
+      travelMatrix: null, dayMatrixPeak: null, dayMatrixOffPeak: null }, extra));
+    return { app, S: app.Scheduler, cfg };
+  }
+  const leg = (S, a, b, atMin = 17 * 60) => S.travelEstMin(a, 'x', b, 'y', 1, atMin);
+
+  test('without a day matrix the jobs fall back to a straight line (the old behaviour)', () => {
+    const { S } = world();
+    assert.equal(leg(S, 's1', 's2'), 40, 'students come from the weekly matrix');
+    assert.equal(leg(S, 'j1', 'j2'), 5, 'jobs are in no matrix, so a straight line');
+  });
+
+  test('with a day matrix the jobs use it', () => {
+    const { S } = world({ dayMatrixPeak: mk(['home', 'j1', 'j2'], 22 * 60, 15000),
+                          dayMatrixOffPeak: mk(['home', 'j1', 'j2'], 22 * 60, 15000) });
+    assert.equal(leg(S, 'j1', 'j2'), 22);
+    assert.equal(S.travelEstKm('j1', 'x', 'j2', 'y', 1, 17 * 60), 15, 'kilometres too');
+  });
+
+  test('the weekly matrix still answers for students, and is not disturbed', () => {
+    const { S } = world({ dayMatrixPeak: mk(['home', 'j1', 'j2'], 22 * 60, 15000),
+                          dayMatrixOffPeak: mk(['home', 'j1', 'j2'], 22 * 60, 15000) });
+    assert.equal(leg(S, 's1', 's2'), 40);
+    assert.equal(S.travelEstKm('s1', 'x', 's2', 'y', 1, 17 * 60), 30);
+  });
+
+  test('a job in neither matrix still falls back rather than failing', () => {
+    const { S } = world({ dayMatrixPeak: mk(['home', 'j1', 'j2'], 22 * 60, 15000),
+                          dayMatrixOffPeak: mk(['home', 'j1', 'j2'], 22 * 60, 15000) });
+    const m = leg(S, 'j1', 'j9');                       // j9 was never fetched
+    assert.ok(Number.isFinite(m) && m >= 1);
+  });
+
+  test('the day matrix is chosen by time of day like the weekly one', () => {
+    const { S } = world({ dayMatrixPeak: mk(['home', 'j1', 'j2'], 30 * 60, 1),
+                          dayMatrixOffPeak: mk(['home', 'j1', 'j2'], 10 * 60, 1) });
+    assert.equal(leg(S, 'j1', 'j2', 17 * 60), 30, 'inside the rush');
+    assert.equal(leg(S, 'j1', 'j2', 10 * 60), 10, 'and outside it');
+  });
+
+  test('planning a day is timed by it: the second job starts after the real drive', async () => {
+    const { app, S, cfg } = world({ dayMatrixPeak: mk(['home', 'j1', 'j2'], 40 * 60, 30000),
+                                    dayMatrixOffPeak: mk(['home', 'j1', 'j2'], 40 * 60, 30000) });
+    const MONDAY = '2026-09-28';
+    const jobs = [{ id: 'j1', name: 'A', address: 'a', durationMin: 60, date: MONDAY },
+                  { id: 'j2', name: 'B', address: 'b', durationMin: 60, date: MONDAY }];
+    app.setState({ jobs });
+    const plan = await S.planDay(jobs, cfg, app.state.coords, MONDAY, { optimise: false });
+    assert.equal(plan.stops.length, 2);
+    const [a, b] = plan.stops;
+    const gap = S.toMin(b.start) - S.toMin(a.end);
+    assert.ok(gap >= 40, `40 minutes of driving between them, but the plan leaves ${gap}`);
+  });
+});
+
+describe('loading the day matrix', () => {
+  const MONDAY = '2026-09-28';
+  function world(over = {}) {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '18:00' } } });
+    const coords = Object.assign({ home: { lat: 38.24, lon: 21.73 },
+      j1: { lat: 38.25, lon: 21.74 }, j2: { lat: 38.26, lon: 21.75 } }, over.coords || {});
+    const jobs = over.jobs || [
+      { id: 'j1', name: 'A', address: 'a', durationMin: 60, date: MONDAY },
+      { id: 'j2', name: 'B', address: 'b', durationMin: 60, date: MONDAY }];
+    app.setState({ settings: over.settings || cfg, coords, jobs, students: [] });
+    return app;
+  }
+  const fake = (n) => ({ durations: Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => i === j ? 0 : 600)),
+                         distances: Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => i === j ? 0 : 5000)) });
+
+  test('without HERE it asks OSRM, for the home and the day\'s jobs only', async () => {
+    const app = world();
+    let asked = null;
+    app.Router.getMatrix = async (pts) => { asked = pts; return fake(pts.length); };
+    const src = await app.App.loadDayMatrix(MONDAY);
+    assert.equal(src, 'osrm');
+    assert.equal(asked.length, 3, 'home plus two jobs');
+    assert.deepStrictEqual(Array.from(app.state.dayMatrixPeak.coordIds), ['home', 'j1', 'j2']);
+  });
+
+  test('with HERE available it asks HERE for a peak and an off-peak matrix', async () => {
+    const app = world({ settings: settings({ workDays: [1], hereApiKey: 'k',
+      dayHours: { 1: { start: '08:00', end: '18:00' } } }) });
+    const departures = [];
+    app.Router.getHereMatrix = async (pts, key, dep) => { departures.push(dep); return fake(pts.length); };
+    app.Router.getMatrix = async () => { throw new Error('OSRM must not be used when HERE answers'); };
+    assert.equal(await app.App.loadDayMatrix(MONDAY), 'here');
+    assert.equal(departures.length, 2);
+    assert.notEqual(departures[0], departures[1], 'two different times of day');
+    for (const d of departures) assert.ok(new Date(d) > new Date(Date.now() - 1000), 'a future time, which HERE requires');
+  });
+
+  test('if HERE fails it falls back to OSRM, and says so', async () => {
+    const app = world({ settings: settings({ workDays: [1], hereApiKey: 'k',
+      dayHours: { 1: { start: '08:00', end: '18:00' } } }) });
+    app.Router.getHereMatrix = async () => { throw new Error('HERE 503'); };
+    app.Router.getMatrix = async (pts) => fake(pts.length);
+    assert.equal(await app.App.loadDayMatrix(MONDAY), 'osrm');
+  });
+
+  test('if nothing answers it says "estimate" and leaves no half-built matrix', async () => {
+    const app = world();
+    app.Router.getMatrix = async () => null;
+    assert.equal(await app.App.loadDayMatrix(MONDAY), 'estimate');
+    assert.equal(app.state.dayMatrixPeak, null);
+    assert.equal(app.state.dayMatrixOffPeak, null);
+  });
+
+  test('a job with no position is left out rather than sent to the map as nothing', async () => {
+    const app = world({ coords: { j2: null } });
+    let asked = null;
+    app.Router.getMatrix = async (pts) => { asked = pts; return fake(pts.length); };
+    await app.App.loadDayMatrix(MONDAY);
+    assert.equal(asked.length, 2, 'home and the one job that has a position');
+    assert.deepStrictEqual(Array.from(app.state.dayMatrixPeak.coordIds), ['home', 'j1']);
+  });
+
+  test('a stale matrix from another day is cleared before the new one is built', async () => {
+    const app = world();
+    app.state.dayMatrixPeak = { coordIds: ['home', 'old'], durations: [[0, 1], [1, 0]], distances: [[0, 1], [1, 0]] };
+    app.Router.getMatrix = async () => null;
+    await app.App.loadDayMatrix(MONDAY);
+    assert.equal(app.state.dayMatrixPeak, null, 'yesterday\'s matrix must not survive a failed reload');
+  });
+
+  test('planning the day loads the matrix first, and the plan says where the times came from', async () => {
+    const app = world();
+    const order = [];
+    app.App.loadDayMatrix = async () => { order.push('matrix'); return 'osrm'; };
+    app.Scheduler.planDay = async () => { order.push('plan'); return { stops: [], unplanned: [], km: 0 }; };
+    app.App.renderDayPlanner = () => {};
+    app.state.planDate = MONDAY;
+    await app.App.planTheDay();
+    assert.deepStrictEqual(order, ['matrix', 'plan'], 'the map must be asked BEFORE the plan is drawn up');
+    assert.equal(app.state.dayPlan.timesFrom, 'osrm');
+  });
+});
+
+describe('the first placement already respects the road matrix', () => {
+  // geoOptimize re-lays every day out, and it timed the drive between two
+  // lessons with a STRAIGHT LINE: its travel helper took coordinates and so
+  // could not consult a matrix at all. Against a matrix that says the legs are
+  // long, the first placement was impossible — four impossible drives in five
+  // lessons — and later passes repaired it. In the week that repair happened to
+  // succeed; in the day planner it dropped the second job outright.
+
+  async function place(legMin) {
+    const app = loadApp({ seed: 3 });
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [1, 2],
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } });
+    const sts = ['a', 'b', 'c', 'd', 'e'].map(id => student(id, { days: [1, 2], lessonDuration: 60,
+      window: { start: '15:00', end: '22:00' } }));
+    // All close together, so the straight line says a minute or two.
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 4000, lon: 21.7305 + i / 4000 }; });
+    const ids = ['home', ...sts.map(s => s.id)];
+    const mat = { coordIds: ids,
+      durations: ids.map((_, a) => ids.map((__, b) => (a === b ? 0 : legMin * 60))),
+      distances: ids.map((_, a) => ids.map((__, b) => (a === b ? 0 : 9000))) };
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      travelMatrixPeak: mat, travelMatrixOffPeak: mat, travelMatrix: null });
+    const r = await S.runMultiAttempt(sts, cfg, coords, 2, false);
+    return { S, sts, cfg, sched: r.schedule };
+  }
+
+  for (const leg of [25, 40]) {
+    test(`with ${leg}-minute drives the schedule is valid BEFORE any repair pass`, async () => {
+      const { S, sts, cfg, sched } = await place(leg);
+      assert.deepStrictEqual(Array.from(auditSchedule(S, sched, sts, cfg)), [],
+        'the first placement must not rely on a later pass to make its drives possible');
+    });
+  }
+
+  test('lessons in different places are separated by at least the real drive', async () => {
+    const { S, sched } = await place(40);
+    for (const d of [1, 2]) {
+      const day = (sched[d] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+      for (let i = 1; i < day.length; i++) {
+        const gap = S.toMin(day[i].start) - S.toMin(day[i - 1].end);
+        assert.ok(gap >= 40, `day ${d}: ${day[i - 1].studentId} to ${day[i].studentId} leaves ${gap} min for a 40-minute drive`);
+      }
+    }
+  });
+
+  test('with no matrix it behaves exactly as before: the straight line', async () => {
+    const app = loadApp({ seed: 3 });
+    const S = app.Scheduler;
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    const sts = ['a', 'b', 'c'].map(id => student(id, { days: [1], lessonDuration: 60,
+      window: { start: '15:00', end: '22:00' } }));
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.2405 + i / 4000, lon: 21.7305 + i / 4000 }; });
+    app.setState({ coords, students: sts, settings: cfg, jobs: [],
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const r = await S.runMultiAttempt(sts, cfg, coords, 2, false);
+    assert.equal(S.countTotal(r.schedule), 3);
+    assert.deepStrictEqual(Array.from(auditSchedule(S, r.schedule, sts, cfg)), []);
+  });
+});
