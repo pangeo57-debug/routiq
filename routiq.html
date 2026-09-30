@@ -9768,30 +9768,17 @@ const App = {
       (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   },
 
-  // Open the leg in the Maps app. On iPhone: try the app's scheme first, and if
-  // the page is still in front a moment later (app not installed, or the
-  // person declined), fall back to the web link. Elsewhere the web link is
-  // enough: Android hands it to the app by itself.
+  // Open the leg in the Maps app. On iPhone the app's own scheme is used and
+  // NOTHING else is opened: iOS keeps the page in front while it asks "Open in
+  // Google Maps?", so a timed fallback to the web link fired alongside the
+  // question and sent the person to the app store instead. If the app is not
+  // installed iOS says so itself. Elsewhere the web link is enough: Android
+  // hands it to the app by itself.
   openLegInMaps(from, to){
     const web = this.buildGoogleLegUrl(from, to);
     if(!web){ Toast.show(t('toast_no_stop_location'),'error'); return; }
     if(!this._isIOS()){ window.open(web, '_blank', 'noopener'); return; }
     window.location.href = this.buildGoogleAppUrl(from, to);
-    setTimeout(() => {
-      if(!document.hidden) window.open(web, '_blank', 'noopener');
-    }, 1200);
-  },
-
-  // A position far from home is almost always a wrong lookup (a street name
-  // that also exists in another city), and it sends the map to the wrong town.
-  // Returns the distance in km when it is suspicious, else 0.
-  FAR_KM: 60,
-  suspiciousDistanceKm(id){
-    const c = state.coords && state.coords[id];
-    const h = state.coords && state.coords['home'];
-    if(!Scheduler.validCoord(c) || !Scheduler.validCoord(h)) return 0;
-    const km = Scheduler.haversineKm(h, c);
-    return km > this.FAR_KM ? km : 0;
   },
 
   buildGoogleStopUrl(id, address){

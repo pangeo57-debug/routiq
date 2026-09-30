@@ -4689,29 +4689,12 @@ describe('opening a leg in the Maps app itself', () => {
     assert.equal(app.App.buildGoogleAppUrl(null, { id: 'zz', address: '' }), null);
   });
 
-  test('on iPhone the app is tried first, and nothing is opened in the browser yet', () => {
+  test('on iPhone only the app is opened: no web link, and no timer that could open one later', () => {
     const { app, opened, timers, loc } = world(IPHONE);
     app.App.openLegInMaps(A, B);
     assert.ok(loc().startsWith('comgooglemaps://'));
     assert.deepStrictEqual(opened, []);
-    assert.equal(timers.length, 1);
-    assert.ok(timers[0].ms >= 800, 'the app needs time to take over before the fallback fires');
-  });
-
-  test('if the app did not take over, the web link opens after a moment', () => {
-    const { app, opened, timers } = world(IPHONE);
-    app.App.openLegInMaps(A, B);
-    timers[0].f();
-    assert.equal(opened.length, 1);
-    assert.ok(opened[0].startsWith('https://www.google.com/maps/dir/'));
-  });
-
-  test('if the app took over (the page went to the background), no web link follows', () => {
-    const { app, opened, timers } = world(IPHONE);
-    app.App.openLegInMaps(A, B);
-    app.ctx.document.hidden = true;
-    timers[0].f();
-    assert.deepStrictEqual(opened, []);
+    assert.equal(timers.length, 0, 'iOS keeps the page in front while it asks; a fallback would fire beside the question');
   });
 
   test('an iPad that presents itself as a Mac is still iOS', () => {
