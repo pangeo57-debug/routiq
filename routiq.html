@@ -80,6 +80,8 @@
   --nav-h: 64px;
   --max-w: 430px;
 }
+/* A laptop gets a wider column; a phone is unchanged. */
+@media (min-width: 900px){ :root{ --max-w: 760px; } }
 /* Dark theme — either the OS preference (auto) or an explicit user choice
    (data-theme attribute on <html>, set by App.setTheme() and always wins
    over the OS preference since it's more specific / comes later). */
@@ -8376,10 +8378,10 @@ const App = {
           <button class="btn btn-primary" style="padding:8px 14px;font-size:13px" onclick="App.quickNoteAdd()">${esc(t('qn_add'))}</button>
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--text3)">
-          <span style="flex:1">${esc(t('day_hours_for'))}</span>
-          <input type="time" id="day-h-from" value="${esc(dayHours.start)}" onchange="App.setDateHours()">
+          <span style="flex:1;white-space:nowrap">${esc(t('day_hours_for'))}</span>
+          <input type="time" id="day-h-from" style="width:118px;flex:none" value="${esc(dayHours.start)}" onchange="App.setDateHours()">
           <span>–</span>
-          <input type="time" id="day-h-to" value="${esc(dayHours.end)}" onchange="App.setDateHours()">
+          <input type="time" id="day-h-to" style="width:118px;flex:none" value="${esc(dayHours.end)}" onchange="App.setDateHours()">
         </div>
       </div>
 
