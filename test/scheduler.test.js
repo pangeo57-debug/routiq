@@ -27,7 +27,7 @@ function assertClean(issues, msg) {
  * was checking a schedule the user never actually sees — and compactDays is
  * precisely the phase that rewrites lesson times.
  */
-async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
+async function runPipeline(app, students, cfg, coords, { budget = 800, refine = 600 } = {}) {
   const S = app.Scheduler;
   app.setState({ coords, students, settings: cfg,
     travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
@@ -45,6 +45,7 @@ async function runPipeline(app, students, cfg, coords, { budget = 800 } = {}) {
   const f = S.fillGaps(r.schedule, students, cfg);
   if (f.moved.length) S.compactDays(r.schedule, students, cfg);
   S.relocateForTime(r.schedule, students, cfg);
+  if (S.refineWeek) await S.refineWeek(r.schedule, students, cfg, refine);
   return r.schedule;
 }
 
@@ -4770,5 +4771,222 @@ describe('the map library comes from this site, and the day map zooms to the sto
     app.ctx.document.getElementById = (id) => id === 'day-map' ? {} : null;
     app.App._drawDayMap({ stops: [{ job: { id: 'nowhere', name: 'X' } }] });
     assert.equal(JSON.stringify(fitted), JSON.stringify([[38.24, 21.73]]));
+  });
+});
+
+describe('refineWeek: fit the lessons that are out, then win the kilometres back', () => {
+  const H = { lat: 38.2466, lon: 21.7346 };
+  function world(sts, cfg, coords) {
+    const app = loadApp({ seed: 5 });
+    app.setState({ students: sts, settings: cfg, coords: coords || cityCoords(sts),
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    return app;
+  }
+  const km = (S, sch, cfg) => cfg.workDays.reduce((a, d) => a + ((sch[d] || []).length ? S.dayKm(sch[d], d, cfg) : 0), 0);
+
+  test('bestDayOrder finds the cheapest legal order, which the given one is not', () => {
+    const sts = ['a', 'b', 'c'].map(id => student(id, { days: [1] }));
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '22:00' } } });
+    // a and c sit together far east; b is next to home. Visiting a, b, c doubles back.
+    const coords = { home: H, a: { lat: H.lat, lon: H.lon + 0.06 }, b: { lat: H.lat, lon: H.lon + 0.005 },
+      c: { lat: H.lat + 0.003, lon: H.lon + 0.06 } };
+    const app = world(sts, cfg, coords), S = app.Scheduler;
+    const given = [slot('a', '15:00', '16:00'), slot('b', '16:30', '17:30'), slot('c', '18:00', '19:00')];
+    const r = S.bestDayOrder(given, 1, sts, cfg);
+    let brute = Infinity;
+    for (const p of [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]]) {
+      const laid = S.relayoutDay(p.map(i => given[i]), 1, sts, cfg);
+      if (laid) brute = Math.min(brute, S.dayCost(laid, 1, cfg));
+    }
+    assert.ok(Math.abs(r.cost - brute) < 1e-6, `exact search ${r.cost} must equal the brute-force best ${brute}`);
+    assert.ok(r.cost < S.dayCost(S.relayoutDay(given, 1, sts, cfg), 1, cfg));
+    assert.equal(S.verifySchedule({ 1: r.laid }, sts, cfg).length, 0);
+  });
+
+  test('bestDayOrder says no when no order is legal', () => {
+    const sts = [student('a', { days: [1], window: { start: '15:00', end: '16:00' } }),
+                 student('b', { days: [1], window: { start: '15:00', end: '16:00' } })];
+    const cfg = settings({ workDays: [1] });
+    const S = world(sts, cfg).Scheduler;
+    assert.equal(S.bestDayOrder([slot('a', '15:00', '16:00'), slot('b', '15:00', '16:00')], 1, sts, cfg), null);
+  });
+
+  test('a lesson that fits nowhere gets in by moving another lesson to a different day', async () => {
+    const cfg = settings({ workDays: [1, 2], dayHours: { 1: { start: '17:00', end: '19:00' }, 2: { start: '17:00', end: '19:00' } } });
+    const A = student('A', { days: [1], window: { start: '17:00', end: '18:00' } });   // Monday 17-18 only
+    const B = student('B', { days: [1, 2], window: { start: '17:00', end: '19:00' } });
+    const sts = [A, B];
+    const app = world(sts, cfg), S = app.Scheduler;
+    const sch = { 1: [slot('B', '17:00', '18:00')], 2: [] };
+    assert.equal(S.bestDayOrder(S._byStart(sch[1]).concat([S._lessonSlot(A)]), 1, sts, cfg), null,
+      'precondition: A cannot simply be added to Monday');
+    const r = await S.ejectionChains(sch, sts, cfg, 3000);
+    assert.equal(r.added, 1);
+    assert.ok(sch[1].some(x => x.studentId === 'A'), 'A on Monday');
+    assert.ok(sch[2].some(x => x.studentId === 'B'), 'B moved to Tuesday');
+    assert.equal(S.verifySchedule(sch, sts, cfg).length, 0);
+    assert.equal(auditSchedule(S, sch, sts, cfg).length, 0, 'and the independent audit agrees');
+  });
+
+  test('chains never move a pair, a group or a merged block', async () => {
+    const cfg = settings({ workDays: [1, 2], dayHours: { 1: { start: '17:00', end: '19:00' }, 2: { start: '17:00', end: '19:00' } } });
+    const A = student('A', { days: [1], window: { start: '17:00', end: '18:00' } });
+    const B = student('B', { days: [1, 2], window: { start: '17:00', end: '19:00' }, pairedWith: 'C' });
+    const C = student('C', { days: [1, 2], window: { start: '17:00', end: '19:00' }, pairedWith: 'B' });
+    const sts = [A, B, C];
+    const S = world(sts, cfg).Scheduler;
+    const sch = { 1: [slot('B', '17:00', '18:00', { pairedStudentId: 'C' })], 2: [] };
+    const before = JSON.stringify(sch);
+    await S.ejectionChains(sch, sts, cfg, 2000);
+    assert.equal(JSON.stringify(sch), before, 'the paired lesson stays where it is');
+  });
+
+  test('interDayMoves swaps lessons so each day stays on one side of town', async () => {
+    const cfg = settings({ workDays: [1, 2] });
+    const sts = ['N1', 'N2', 'S1', 'S2'].map(id => student(id, { days: [1, 2] }));
+    const coords = { home: H,
+      N1: { lat: H.lat + 0.05, lon: H.lon }, N2: { lat: H.lat + 0.052, lon: H.lon + 0.004 },
+      S1: { lat: H.lat - 0.05, lon: H.lon }, S2: { lat: H.lat - 0.052, lon: H.lon + 0.004 } };
+    const app = world(sts, cfg, coords), S = app.Scheduler;
+    const sch = { 1: [slot('N1', '15:00', '16:00'), slot('S1', '17:00', '18:00')],
+                  2: [slot('N2', '15:00', '16:00'), slot('S2', '17:00', '18:00')] };
+    const k0 = km(S, sch, cfg), n0 = S.countTotal(sch);
+    const m = await S.interDayMoves(sch, sts, cfg, 3000);
+    assert.ok(m.swap + m.relocate >= 1);
+    assert.ok(km(S, sch, cfg) < k0 - 1, `km ${km(S, sch, cfg)} must fall below ${k0}`);
+    assert.equal(S.countTotal(sch), n0, 'no lesson lost');
+    assert.equal(auditSchedule(S, sch, sts, cfg).length, 0);
+  });
+
+  test('string removals never lose a lesson and never make the week dearer', async () => {
+    const sts = Array.from({ length: 10 }, (_, i) => student('s' + i, { days: [1, 2, 3], lessonsPerWeek: i % 3 ? 1 : 2 }));
+    const cfg = settings({ workDays: [1, 2, 3], dayHours: Object.fromEntries([1, 2, 3].map(d => [d, { start: '15:00', end: '19:00' }])) });
+    const app = world(sts, cfg), S = app.Scheduler;
+    const sch = await runPipeline(app, sts, cfg, cityCoords(sts), { refine: 0 });
+    const n0 = S.countTotal(sch), c0 = S._weekCost(sch, cfg);
+    const r = await S.stringRemovals(sch, sts, cfg, 1500);
+    assert.ok(r.iters > 0);
+    assert.ok(S.countTotal(sch) >= n0);
+    if (S.countTotal(sch) === n0) assert.ok(S._weekCost(sch, cfg) <= c0 + 1e-6);
+    assert.equal(auditSchedule(S, sch, sts, cfg).length, 0);
+  });
+
+  test('refineWeek on a crowded week: never fewer lessons, never a broken week', async () => {
+    for (const seed of [1, 2, 3]) {
+      const sts = Array.from({ length: 14 }, (_, i) => student('s' + i, {
+        days: [[1, 2], [2, 3], [1, 3], [1, 2, 3]][(i + seed) % 4], lessonsPerWeek: 1 + (i % 2),
+        window: [{ start: '15:00', end: '18:00' }, { start: '16:00', end: '20:00' }][(i + seed) % 2] }));
+      const cfg = settings({ workDays: [1, 2, 3], dayHours: Object.fromEntries([1, 2, 3].map(d => [d, { start: '15:00', end: '20:00' }])) });
+      const app = loadApp({ seed });
+      const sch = await runPipeline(app, sts, cfg, cityCoords(sts), { refine: 0 });
+      const S = app.Scheduler, n0 = S.countTotal(sch);
+      await S.refineWeek(sch, sts, cfg, 2000);
+      assert.ok(S.countTotal(sch) >= n0, `seed ${seed}: ${S.countTotal(sch)} < ${n0}`);
+      assert.equal(auditSchedule(S, sch, sts, cfg).length, 0, `seed ${seed}`);
+    }
+  });
+
+  test('bestDayOrder matches a brute-force search on random days with windows', () => {
+    const perms = (a) => a.length <= 1 ? [a] : a.flatMap((x, i) => perms(a.filter((_, j) => j !== i)).map(p => [x, ...p]));
+    let r = 7; const rnd = () => ((r = (r * 1103515245 + 12345) % 2147483648) / 2147483648);
+    for (let k = 0; k < 25; k++) {
+      const ids = ['a', 'b', 'c', 'd'];
+      const sts = ids.map(id => {
+        const st = 15 * 60 + Math.floor(rnd() * 4) * 60, len = 60 + Math.floor(rnd() * 4) * 60;
+        const f = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+        return student(id, { days: [1], window: { start: f(st), end: f(Math.min(22 * 60, st + len)) } });
+      });
+      const cfg = settings({ workDays: [1] });
+      const coords = { home: H };
+      ids.forEach(id => { coords[id] = { lat: H.lat + (rnd() - .5) * 0.08, lon: H.lon + (rnd() - .5) * 0.08 }; });
+      const S = world(sts, cfg, coords).Scheduler;
+      const given = ids.map(id => slot(id, '15:00', '16:00'));
+      let brute = null;
+      for (const p of perms([0, 1, 2, 3])) {
+        const laid = S.relayoutDay(p.map(i => given[i]), 1, sts, cfg);
+        if (laid) { const c = S.dayCost(laid, 1, cfg); if (brute === null || c < brute) brute = c; }
+      }
+      const got = S.bestDayOrder(given, 1, sts, cfg);
+      if (brute === null) assert.equal(got, null, `case ${k}`);
+      else assert.ok(got && Math.abs(got.cost - brute) < 1e-6, `case ${k}: ${got && got.cost} vs ${brute}`);
+    }
+  });
+
+  test('a paired student who is missing a lesson is never given one on their own', async () => {
+    const cfg = settings({ workDays: [1, 2] });
+    const B = student('B', { days: [1, 2], pairedWith: 'C' }), C = student('C', { days: [1, 2], pairedWith: 'B' });
+    const sts = [B, C];
+    const S = world(sts, cfg).Scheduler;
+    const sch = { 1: [], 2: [] };
+    assert.equal(JSON.stringify(S._missingLessons(sch, sts)), '[]');
+    await S.ejectionChains(sch, sts, cfg, 1000);
+    assert.equal(S.countTotal(sch), 0);
+  });
+
+  test('a chain of three steps: A needs B\'s place, B needs D\'s, D has a free day', async () => {
+    const H2 = { 1: { start: '17:00', end: '18:00' }, 2: { start: '17:00', end: '18:00' }, 3: { start: '17:00', end: '18:00' } };
+    const cfg = settings({ workDays: [1, 2, 3], dayHours: H2 });
+    const w = { start: '17:00', end: '18:00' };
+    const A = student('A', { days: [1], window: w }), B = student('B', { days: [1, 2], window: w }),
+          D = student('D', { days: [2, 3], window: w });
+    const sts = [A, B, D];
+    const S = world(sts, cfg).Scheduler;
+    const sch = { 1: [slot('B', '17:00', '18:00')], 2: [slot('D', '17:00', '18:00')], 3: [] };
+    const r = await S.ejectionChains(sch, sts, cfg, 4000);
+    assert.equal(r.added, 1);
+    assert.equal(JSON.stringify([1, 2, 3].map(d => sch[d].map(x => x.studentId).join())), JSON.stringify(['A', 'B', 'D']));
+    assert.equal(auditSchedule(S, sch, sts, cfg).length, 0);
+  });
+
+  test('a week already laid out well is left exactly as it is', async () => {
+    const cfg = settings({ workDays: [1, 2] });
+    const sts = ['N1', 'N2', 'S1', 'S2'].map(id => student(id, { days: [1, 2] }));
+    const coords = { home: H,
+      N1: { lat: H.lat + 0.05, lon: H.lon }, N2: { lat: H.lat + 0.052, lon: H.lon + 0.004 },
+      S1: { lat: H.lat - 0.05, lon: H.lon }, S2: { lat: H.lat - 0.052, lon: H.lon + 0.004 } };
+    const S = world(sts, cfg, coords).Scheduler;
+    const sch = { 1: S.bestDayOrder([slot('N1', '15:00', '16:00'), slot('N2', '17:00', '18:00')], 1, sts, cfg).laid,
+                  2: S.bestDayOrder([slot('S1', '15:00', '16:00'), slot('S2', '17:00', '18:00')], 2, sts, cfg).laid };
+    const before = JSON.stringify(sch);
+    const m = await S.interDayMoves(sch, sts, cfg, 2000);
+    assert.equal(JSON.stringify(m), JSON.stringify({ relocate: 0, swap: 0 }));
+    assert.equal(JSON.stringify(sch), before);
+  });
+
+  test('when a day has room for no one else, the gain comes from a swap', async () => {
+    // Two lessons a day at most, so nothing can simply be moved over.
+    const cfg = settings({ workDays: [1, 2], dayHours: { 1: { start: '15:00', end: '17:40' }, 2: { start: '15:00', end: '17:40' } } });
+    const sts = ['N1', 'N2', 'S1', 'S2'].map(id => student(id, { days: [1, 2] }));
+    const coords = { home: H,
+      N1: { lat: H.lat + 0.03, lon: H.lon }, N2: { lat: H.lat + 0.031, lon: H.lon + 0.003 },
+      S1: { lat: H.lat - 0.03, lon: H.lon }, S2: { lat: H.lat - 0.031, lon: H.lon + 0.003 } };
+    const S = world(sts, cfg, coords).Scheduler;
+    const sch = { 1: S.relayoutDay([slot('N1', '15:00', '16:00'), slot('S1', '16:30', '17:30')], 1, sts, cfg),
+                  2: S.relayoutDay([slot('N2', '15:00', '16:00'), slot('S2', '16:30', '17:30')], 2, sts, cfg) };
+    assert.ok(sch[1] && sch[2], 'precondition: the starting week is legal');
+    const k0 = km(S, sch, cfg);
+    const m = await S.interDayMoves(sch, sts, cfg, 3000);
+    assert.ok(m.swap >= 1, `expected a swap, got ${JSON.stringify(m)}`);
+    assert.ok(km(S, sch, cfg) < k0 - 1);
+    assert.equal(auditSchedule(S, sch, sts, cfg).length, 0);
+  });
+
+  test('no student is given two lessons on the same day', async () => {
+    const cfg = settings({ workDays: [1, 2] });
+    const sts = [student('X', { days: [1], lessonsPerWeek: 2 }), student('Y', { days: [1, 2] })];
+    const S = world(sts, cfg).Scheduler;
+    const sch = { 1: [slot('X', '15:00', '16:00')], 2: [slot('Y', '15:00', '16:00')] };
+    await S.ejectionChains(sch, sts, cfg, 1000);
+    await S.stringRemovals(sch, sts, cfg, 800);
+    await S.interDayMoves(sch, sts, cfg, 800);
+    assert.equal(sch[1].filter(x => x.studentId === 'X').length, 1, 'X is free only on Monday and has one lesson there');
+  });
+
+  test('the app runs refineWeek after relocateForTime and before the final check', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const run = src.slice(src.indexOf('async runAndNotify()'));
+    const iRel = run.indexOf('Scheduler.relocateForTime(state.schedule'), iRef = run.indexOf('Scheduler.refineWeek(state.schedule'),
+      iVer = run.indexOf('Scheduler.verifySchedule(state.schedule');
+    assert.ok(iRel > 0 && iRef > iRel && iVer > iRef, 'order: relocateForTime, refineWeek, verifySchedule');
   });
 });

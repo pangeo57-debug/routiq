@@ -34,6 +34,7 @@ const { auditSchedule } = require('./invariants');
 const Solomon = require('./solomon');
 
 const SEED = 12345;          // every run is reproducible
+const REFINE_MS = 4000;      // refineWeek's share in the benchmark
 // The three-instance default keeps `npm run bench` usable as a quick check.
 // `--all` runs Solomon's complete 56-instance set, and `--class C1` (or R2,
 // RC1, …) one family. Three instances is enough to catch a regression; it is
@@ -82,6 +83,7 @@ async function runPipeline(app, sts, cfg, coords, budgets) {
     if (f.moved.length) S.compactDays(r.schedule, sts, cfg);
   }
   if (S.relocateForTime) S.relocateForTime(r.schedule, sts, cfg);
+  if (S.refineWeek) await S.refineWeek(r.schedule, sts, cfg, REFINE_MS);
   return { schedule: r.schedule, ms: Date.now() - t0 };
 }
 
