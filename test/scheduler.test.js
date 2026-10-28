@@ -4990,3 +4990,105 @@ describe('refineWeek: fit the lessons that are out, then win the kilometres back
     assert.ok(iRel > 0 && iRef > iRel && iVer > iRef, 'order: relocateForTime, refineWeek, verifySchedule');
   });
 });
+
+describe('one note, several errands: each becomes its own box', () => {
+  const TODAY = '2026-10-28';
+  const M = (t, known) => JSON.parse(JSON.stringify(loadApp().QuickNote.parseMany(t, TODAY, known || [])));
+  const brief = (xs) => xs.map(x => [x.title, x.place, x.start, x.date]);
+
+  test('"αύριο φαρμακείο Κορίνθου γιατρός 12 Φιλοποίμενος και καφές κέντρο" is three things tomorrow', () => {
+    assert.deepStrictEqual(brief(M('αύριο φαρμακείο Κορίνθου γιατρός 12 Φιλοποίμενος και καφές κέντρο')), [
+      ['φαρμακείο', 'Κορίνθου', null, '2026-10-29'],
+      ['γιατρός', 'Φιλοποίμενος', '12:00', '2026-10-29'],
+      ['καφές', 'κέντρο', null, '2026-10-29'],
+    ]);
+  });
+
+  test('a number after the place is the house number, not the hour', () => {
+    assert.deepStrictEqual(brief(M('φαρμακείο Κορίνθου 12, γιατρός στις 11 Μαιζώνος')), [
+      ['φαρμακείο', 'Κορίνθου 12', null, null],
+      ['γιατρός', 'Μαιζώνος', '11:00', null],
+    ]);
+  });
+
+  test('commas and joining words cut a note in any of the four languages', () => {
+    assert.equal(M('tomorrow pharmacy Main street and dentist 3 Oak road').length, 2);
+    assert.equal(M('pharmacie rue Haute et banque place Carnot').length, 2);
+    assert.equal(M('Apotheke Hauptstraße und Bank Marktplatz').length, 2);
+    assert.equal(M('τράπεζα, ταχυδρομείο, φούρνος').length, 3);
+    assert.deepStrictEqual(M('πάρε δέμα Ερμού, πλήρωσε λογαριασμό').map(x => x.title), ['πάρε δέμα Ερμού', 'πλήρωσε λογαριασμό'],
+      'a comma ends an item even when no word in it is a known activity');
+  });
+
+  test('a name used before counts as an activity', () => {
+    assert.deepStrictEqual(brief(M('Μαγνητική 10 και Νίκος Γούναρη', ['Μαγνητική', 'Νίκος'])), [
+      ['Μαγνητική', '', '10:00', null], ['Νίκος', 'Γούναρη', null, null]]);
+  });
+
+  test('a single thing is still one item, read the way it always was', () => {
+    assert.deepStrictEqual(brief(M('οδοντίατρος αύριο στις 11')), [['οδοντίατρος', '', '11:00', '2026-10-29']]);
+    assert.deepStrictEqual(brief(M('call mom')), [['call mom', '', null, null]]);
+    assert.deepStrictEqual(M('   '), []);
+  });
+
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings({ homeAddress: 'Πλατεία Γεωργίου 1, Πάτρα' }), jobs: [], students: [], coords: {} });
+    app.App.todayISO = () => TODAY;
+    app.App.renderDayPlanner = () => {};
+    app.Toast.show = () => {};
+    app.ctx.document.getElementById = (id) => id === 'qn-text' ? { value: app._note } : null;
+    return app;
+  }
+
+  test('quickNoteAdd turns a several-item note into boxes on that day, with no form', () => {
+    const app = world();
+    let forms = 0;
+    app.App.openJobDrawer = () => { forms++; };
+    app.state.scheduleMode = 'errands';
+    app.state.dayPlan = { date: '2026-10-29', stops: [], errand: true };
+    app._note = 'αύριο φαρμακείο Κορίνθου γιατρός 12 Φιλοποίμενος και καφές κέντρο';
+    app.App.quickNoteAdd();
+    const J = app.state.jobs;
+    assert.equal(forms, 0);
+    assert.equal(J.length, 3);
+    assert.deepStrictEqual(J.map(j => [j.name, j.address, j.date, j.kind]), [
+      ['Φαρμακείο', 'Κορίνθου, Πάτρα', '2026-10-29', 'errand'],
+      ['Γιατρός', 'Φιλοποίμενος, Πάτρα', '2026-10-29', 'errand'],
+      ['Καφές', 'Πάτρα', '2026-10-29', 'errand'],
+    ]);
+    assert.equal(JSON.stringify(J[1].window), JSON.stringify({ start: '12:00', end: '12:30' }));
+    assert.equal(J[0].window, null, 'no time given, no window');
+    assert.equal(app.state.planDate, '2026-10-29');
+    assert.equal(new Set(J.map(j => j.id)).size, 3, 'every box has its own id');
+    assert.equal(app.state.dayPlan, null, 'the old plan no longer describes the day, and the new one waits for Plan');
+  });
+
+  test('a box with no place takes the remembered one', () => {
+    const app = world();
+    app.state.jobs = [{ id: 'old', name: 'Καφές', address: 'Ρήγα Φεραίου 5, Πάτρα', date: '2026-09-01' }];
+    app.state.coords = { old: { lat: 38.25, lon: 21.74 } };
+    app._note = 'τράπεζα Μαιζώνος και καφές';
+    app.App.quickNoteAdd();
+    const cafe = app.state.jobs.find(j => j.id !== 'old' && j.name === 'Καφές');
+    assert.equal(cafe.address, 'Ρήγα Φεραίου 5, Πάτρα');
+    assert.equal(JSON.stringify(app.state.coords[cafe.id]), JSON.stringify({ lat: 38.25, lon: 21.74 }));
+  });
+
+  test('the town is not added twice when the note already names it', () => {
+    const app = world();
+    app._note = 'φαρμακείο Κορίνθου Πάτρα και τράπεζα Μαιζώνος';
+    app.App.quickNoteAdd();
+    assert.equal(app.state.jobs[0].address, 'Κορίνθου Πάτρα');
+  });
+
+  test('a one-item note still opens the form', () => {
+    const app = world();
+    let got = null;
+    app.App.openJobDrawer = (id, pre) => { got = pre; };
+    app._note = 'οδοντίατρος αύριο στις 11';
+    app.App.quickNoteAdd();
+    assert.equal(app.state.jobs.length, 0);
+    assert.equal(got.name, 'οδοντίατρος');
+  });
+});
