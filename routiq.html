@@ -80,7 +80,8 @@
   --nav-h: 64px;
   --max-w: 430px;
 }
-/* A laptop gets a wider column; a phone is unchanged. */
+/* A tablet and a laptop get a wider column; a phone is unchanged. */
+@media (min-width: 700px){ :root{ --max-w: 680px; } }
 @media (min-width: 900px){ :root{ --max-w: 760px; } }
 /* Dark theme — either the OS preference (auto) or an explicit user choice
    (data-theme attribute on <html>, set by App.setTheme() and always wins
@@ -169,7 +170,15 @@ nav{
   background:var(--bg);
   position:sticky;top:0;z-index:10;
 }
-.topbar-inner{display:flex;align-items:center;justify-content:space-between}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.topbar-inner > div:first-child{min-width:0}
+/* A narrow phone (320–360px): the action button goes under the title rather
+   than off the edge of the screen. */
+@media (max-width: 360px){
+  .topbar{ padding-left:16px; padding-right:16px; }
+  .topbar-inner{ flex-wrap:wrap; }
+  .topbar-inner .btn{ padding:7px 10px !important; font-size:12px !important; }
+}
 .logo{font-size:22px;font-weight:800;letter-spacing:-0.5px}
 .logo span{color:var(--green)}
 .topbar-sub{color:var(--text2);font-size:13px;margin-top:2px}
@@ -8443,9 +8452,9 @@ const App = {
   // anyone who teaches mornings and evenings.
   _dayIntervalRowHtml(day, k, iv){
     return `<div class="dh-row" data-day="${day}" style="display:flex;align-items:center;gap:6px">
-      <input type="time" class="dh-start" data-day="${day}" value="${esc(iv.start||'')}" style="flex:1">
+      <input type="time" class="dh-start" data-day="${day}" value="${esc(iv.start||'')}" style="flex:1;min-width:0">
       <span style="font-size:12px;color:var(--text3)">–</span>
-      <input type="time" class="dh-end" data-day="${day}" value="${esc(iv.end||'')}" style="flex:1">
+      <input type="time" class="dh-end" data-day="${day}" value="${esc(iv.end||'')}" style="flex:1;min-width:0">
       ${k>0 ? `<button class="chip chip-gray" style="border:none;cursor:pointer;font-size:12px;padding:2px 7px"
         onclick="App.removeDayInterval(${day},${k})">✕</button>` : '<span style="width:26px"></span>'}
     </div>`;
@@ -10554,7 +10563,7 @@ const App = {
         ${allDays.filter(d=>st.workDays.includes(d)).map(d=>`
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="width:36px;font-size:13px;font-weight:600;color:var(--text2)">${DAYS[d]}</span>
-            <div style="flex:1;display:flex;flex-direction:column;gap:6px" id="dh-rows-${d}">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px" id="dh-rows-${d}">
               ${(this.dayIntervals(d).length ? this.dayIntervals(d) : [{start:'',end:''}])
                 .map((iv,k)=>this._dayIntervalRowHtml(d,k,iv)).join('')}
             </div>
