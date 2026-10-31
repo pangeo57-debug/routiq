@@ -1023,6 +1023,8 @@ function defaultSettings(){
     travelBuffer:0,
     travelMargin:2,
     lunchBreak:0,
+    // Most appointments the scheduler may put on one day. 0 = no limit.
+    maxPerDay:0,
     avgCitySpeedKmh:25,
     // OSRM prices a journey at the roads' speed limits, as if there were no
     // traffic lights, no queues and no looking for a place to park, so in a city
@@ -1170,7 +1172,7 @@ const I18N = {
     settings_fuel_consumption_label:'Κατανάλωση (L/100km)', settings_margin_label:'Margin ασφαλείας (λεπτά)',
     settings_avg_speed_label:'Μέση ταχύτητα πόλης (km/h)',
     settings_here_key_shared_active:'Βελτιωμένη ακρίβεια διευθύνσεων ενεργή', settings_lunch_label:'Διάλειμμα μεσημεριού',
-    settings_lunch_none:'Κανένα', settings_lunch_30:'30 λεπτά', settings_lunch_60:'1 ώρα',
+    settings_maxday_label:'Μέγιστα ραντεβού ανά μέρα', settings_maxday_none:'Χωρίς όριο', settings_maxday_hint:'Μοιράζει τα ραντεβού πιο ομοιόμορφα στην εβδομάδα. Χωρίς όριο, το πρόγραμμα μαζεύει τα ραντεβού σε λιγότερες μέρες για λιγότερα χιλιόμετρα.', settings_lunch_none:'Κανένα', settings_lunch_30:'30 λεπτά', settings_lunch_60:'1 ώρα',
     settings_add_block:'Προσθήκη μπλοκαρίσματος', settings_maps_title:'Χάρτες &amp; Δρομολόγηση',
     settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Geocoding &amp; διαδρομές χωρίς API key — δωρεάν',
     settings_install_desc:'Για να εγκαταστήσεις το RoutePal ως εφαρμογή στο iPhone/iPad, άνοιξέ το στο <strong>Safari</strong> και πάτα <strong>Κοινοποίηση → Προσθήκη στην Αρχική Οθόνη</strong>.',
@@ -1360,7 +1362,7 @@ const I18N = {
     settings_fuel_consumption_label:'Consumption (L/100km)', settings_margin_label:'Safety margin (minutes)',
     settings_avg_speed_label:'Average city speed (km/h)',
     settings_here_key_shared_active:'Improved address accuracy active', settings_lunch_label:'Lunch break',
-    settings_lunch_none:'None', settings_lunch_30:'30 minutes', settings_lunch_60:'1 hour',
+    settings_maxday_label:'Max appointments per day', settings_maxday_none:'No limit', settings_maxday_hint:'Spreads appointments more evenly across the week. With no limit, the schedule packs them into fewer days for fewer kilometres.', settings_lunch_none:'None', settings_lunch_30:'30 minutes', settings_lunch_60:'1 hour',
     settings_add_block:'Add blocked time', settings_maps_title:'Maps &amp; Routing',
     settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Geocoding &amp; routes with no API key — free',
     settings_install_desc:'To install RoutePal as an app on iPhone/iPad, open it in <strong>Safari</strong> and tap <strong>Share → Add to Home Screen</strong>.',
@@ -1550,7 +1552,7 @@ const I18N = {
     settings_fuel_consumption_label:'Consommation (L/100km)', settings_margin_label:'Marge de sécurité (minutes)',
     settings_avg_speed_label:'Vitesse moyenne en ville (km/h)',
     settings_here_key_shared_active:'Précision d\'adresse améliorée active', settings_lunch_label:'Pause déjeuner',
-    settings_lunch_none:'Aucune', settings_lunch_30:'30 minutes', settings_lunch_60:'1 heure',
+    settings_maxday_label:'Rendez-vous max par jour', settings_maxday_none:'Sans limite', settings_maxday_hint:'Répartit les rendez-vous plus régulièrement sur la semaine. Sans limite, le planning les regroupe sur moins de jours pour moins de kilomètres.', settings_lunch_none:'Aucune', settings_lunch_30:'30 minutes', settings_lunch_60:'1 heure',
     settings_add_block:'Ajouter un blocage', settings_maps_title:'Cartes &amp; Itinéraires',
     settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Géocodage &amp; itinéraires sans clé API — gratuit',
     settings_install_desc:'Pour installer RoutePal comme application sur iPhone/iPad, ouvrez-le dans <strong>Safari</strong> et appuyez sur <strong>Partager → Sur l\'écran d\'accueil</strong>.',
@@ -1740,7 +1742,7 @@ const I18N = {
     settings_fuel_consumption_label:'Verbrauch (L/100km)', settings_margin_label:'Sicherheitsmarge (Minuten)',
     settings_avg_speed_label:'Durchschnittliche Stadtgeschwindigkeit (km/h)',
     settings_here_key_shared_active:'Verbesserte Adressgenauigkeit aktiv', settings_lunch_label:'Mittagspause',
-    settings_lunch_none:'Keine', settings_lunch_30:'30 Minuten', settings_lunch_60:'1 Stunde',
+    settings_maxday_label:'Max. Termine pro Tag', settings_maxday_none:'Keine Begrenzung', settings_maxday_hint:'Verteilt die Termine gleichmäßiger über die Woche. Ohne Begrenzung legt der Plan sie auf weniger Tage, um Kilometer zu sparen.', settings_lunch_none:'Keine', settings_lunch_30:'30 Minuten', settings_lunch_60:'1 Stunde',
     settings_add_block:'Blockierung hinzufügen', settings_maps_title:'Karten &amp; Routing',
     settings_maps_osrm:'OpenStreetMap · OSRM', settings_maps_osrm_sub:'Geocoding &amp; Routen ohne API-Schlüssel — kostenlos',
     settings_install_desc:'Um RoutePal als App auf iPhone/iPad zu installieren, öffne es in <strong>Safari</strong> und tippe auf <strong>Teilen → Zum Home-Bildschirm</strong>.',
@@ -2139,7 +2141,11 @@ const Scheduler = {
       }
       km += this.travelEstKm(prevId, prevAddr, 'home', homeAddr, d);
     }
-    return { placed: this.countTotal(schedule), km };
+    // Appointments beyond the user's daily limit, summed over the week.
+    const cap = settings && settings.maxPerDay|0;
+    let over = 0;
+    if(cap) for(const d of (settings.workDays||[])) over += Math.max(0, (schedule[d]||[]).length - cap);
+    return { placed: this.countTotal(schedule), km, over };
   },
 
   // Not worse = at least as many lessons placed, and not meaningfully further
@@ -2147,6 +2153,7 @@ const Scheduler = {
   // placing the same number never does.
   notWorse(after, before){
     if(after.placed !== before.placed) return after.placed > before.placed;
+    if((after.over||0) !== (before.over||0)) return (after.over||0) < (before.over||0);
     return after.km <= before.km + 0.1;
   },
 
@@ -2658,7 +2665,23 @@ const Scheduler = {
   },
 
   // findSlotFixed: find earliest valid slot (exact travel gap, no 5-min rounding)
+  // True when this day already holds as many appointments as the user allows
+  // (settings.maxPerDay). Slots the student is already in don't count, so a
+  // move within the same day is never blocked by itself.
+  _dayFull(student, existing, settings){
+    const cap = settings && settings.maxPerDay|0;
+    if(!cap) return false;
+    let n = 0;
+    for(const e of existing){
+      const ids = this.occupantIds(e);
+      if(ids.includes(student.id)) continue;
+      n++;
+    }
+    return n >= cap;
+  },
+
   findSlotFixed(student, day, existing, settings, dur){
+    if(this._dayFull(student, existing, settings)) return null;
     const margin = (settings.travelMargin ?? 2);
     const dayH=settings.dayHours[day]; if(!dayH) return null;
     const av=student.availability[day]; if(!av||!av.on) return null;
@@ -2868,6 +2891,8 @@ const Scheduler = {
             if(!av||!av.on) continue;
             // Never give the same student two slots on the same day (unless forceMerge)
             if(!student.forceMerge && (schedule[altDay]||[]).some(s=>s.studentId===slot.studentId)) continue;
+            // Respect the user's daily limit: moving here would add one to altDay.
+            if((settings.maxPerDay|0) && (schedule[altDay]||[]).length >= (settings.maxPerDay|0)) continue;
             const dayWithout=slots.filter((_,i)=>i!==si);
             const altWith=[...(schedule[altDay]||[]),slot];
             const altReordered=tryAssignDay(altDay,altWith);
@@ -3076,6 +3101,7 @@ const Scheduler = {
 
   // Find slot with explicit duration override
   findSlotDur(student, day, existing, settings, dur){
+    if(this._dayFull(student, existing, settings)) return null;
     const margin = (settings.travelMargin ?? 3);
     const dayH = settings.dayHours[day];
     if(!dayH) return null;
@@ -4408,6 +4434,46 @@ const Scheduler = {
    * only improve the result — so a move that pays under compaction alone is
    * one that certainly pays.
    */
+  /**
+   * Bring every day down to the user's limit (settings.maxPerDay) by moving
+   * lessons to days that still have room. Each move goes through relocateBest,
+   * so it keeps every constraint and everyone placed; among the legal moves the
+   * cheapest one (drive + idle time) is made first. Days that cannot be relieved
+   * stay as they are: placing everyone matters more than the limit.
+   */
+  rebalanceDays(schedule, students, settings, budgetMs = 15000){
+    const cap = settings.maxPerDay|0;
+    if(!cap) return { moved: 0 };
+    const t0 = Date.now();
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const weekCost = (sch) => (settings.workDays || []).reduce((sum, d) =>
+      sum + this.dayCost((sch[d] || []).slice()
+        .sort((x,y) => this.toMin(x.start) - this.toMin(y.start)), d, settings), 0);
+    let moved = 0;
+    for(let round = 0; round < 40 && Date.now() - t0 < budgetMs; round++){
+      const over = (settings.workDays || []).filter(d => (schedule[d] || []).length > cap);
+      if(!over.length) break;
+      const ctx = { byId, weekCost,
+        before: new Set(this.verifySchedule(schedule, students, settings)),
+        placed: this.countTotal(schedule) };
+      let best = null;
+      for(const from of over){
+        for(const lesson of (schedule[from] || [])){
+          if(lesson.merged || lesson.isGroup) continue;
+          for(const to of settings.workDays){
+            if(to === from || (schedule[to] || []).length >= cap) continue;
+            const r = this.relocateBest(schedule, students, settings, lesson, from, to, ctx);
+            if(r && (!best || r.cost < best.cost)) best = r;
+          }
+        }
+      }
+      if(!best) break;
+      for(const d of Object.keys(best.trial)) schedule[d] = best.trial[d];
+      moved++;
+    }
+    return { moved };
+  },
+
   relocateBest(schedule, students, settings, lesson, fromDay, toDay, ctx, out){
     // `out.reason` says WHY when the answer is no: a refusal nobody can explain
     // looks exactly like a bug, and is the hardest kind to report.
@@ -4418,6 +4484,7 @@ const Scheduler = {
     const av = st.availability && st.availability[toDay];
     if(!av || !av.on){ say('unavailable'); return null; }
     if((schedule[toDay] || []).some(x => this.occupantIds(x).includes(st.id))){ say('already'); return null; }
+    if((settings.maxPerDay|0) && (schedule[toDay] || []).length >= (settings.maxPerDay|0)){ say('full'); return null; }
     const target = (schedule[toDay] || []).slice()
       .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
 
@@ -7001,6 +7068,7 @@ const App = {
       const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
       if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
       Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);
+      Scheduler.rebalanceDays(state.schedule, state.students, state.settings);
     }catch(e){}
 
     if(state._schedulingCancelled) return cancelledCleanup();
@@ -7073,6 +7141,10 @@ const App = {
         (i)=> schedProgress(94 + i, t('phase_refine_title'), t('phase_refine_sub'), '🧩'));
       console.info(`refineWeek: +${w.chains.added} lessons by chains, strings ${w.strings.improved?'kept':'no gain'} (${w.strings.iters} tries), ${w.moves.relocate} moved and ${w.moves.swap} swapped between days`);
     }catch(e){ console.warn('refineWeek failed', e); }
+
+    // The passes above optimise kilometres and may pack days again; bring
+    // every day back within the user's daily limit as the last word.
+    try{ Scheduler.rebalanceDays(state.schedule, state.students, state.settings); }catch(e){}
 
     // Verify constraints — surfaced to the user, not just the console, so a
     // scheduling bug that violates someone's availability doesn't ship silently.
@@ -10622,6 +10694,13 @@ const App = {
             <option value="60" ${st.lunchBreak===60?'selected':''}>${t('settings_lunch_60')}</option>
           </select>
         </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label>${t('settings_maxday_label')}</label>
+          <select id="set-maxday">
+            ${[0,3,4,5,6,8].map(n=>`<option value="${n}" ${(st.maxPerDay||0)===n?'selected':''}>${n?n:t('settings_maxday_none')}</option>`).join('')}
+          </select>
+          <div class="settings-sub">${t('settings_maxday_hint')}</div>
+        </div>
       </div>
 
       <div class="section-title">${t('settings_blocked')}</div>
@@ -10853,6 +10932,7 @@ const App = {
     // λόγος να πάψει να δουλεύει κάτι που δούλευε.
     s.hereApiKey = s.hereApiKey || '';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
+    s.maxPerDay = Number(document.getElementById('set-maxday')?.value)||0;
 
     // If home address changed, use the coord already resolved by autocomplete/
     // map-picker selection if we have one — avoids an extra geocode round-trip
@@ -11186,7 +11266,7 @@ const App = {
 
     // Settings that shape the schedule stay. Who the user is, where they live,
     // their keys and their sync code go.
-    const keep = ['workDays','dayHours','travelMode','travelMargin','travelBuffer','lunchBreak',
+    const keep = ['workDays','dayHours','travelMode','travelMargin','travelBuffer','lunchBreak','maxPerDay',
       'avgCitySpeedKmh','endFlexMin','profession','defaultLessonDuration','language'];
     const settings = {};
     keep.forEach(k => { if(state.settings[k] !== undefined) settings[k] = state.settings[k]; });
