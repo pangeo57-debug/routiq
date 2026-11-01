@@ -4759,19 +4759,21 @@ describe('the map library comes from this site, and the day map zooms to the sto
       'Athens as home must not stretch the view');
   });
 
-  test('with no stop positions at all the view falls back to whatever there is', () => {
+  test('with no stop positions the map still opens, on home', () => {
     const app = loadApp();
     app.setState({ settings: settings(), jobs: [], students: [], schedule: {}, coords: { home: { lat: 38.24, lon: 21.73 } } });
-    let fitted = null;
+    let view = null, fitted = null;
     app.ctx.L = {
-      map: () => ({ remove() {}, fitBounds() {} }), tileLayer: () => ({ addTo() {} }),
+      map: () => ({ remove() {}, fitBounds(x) { fitted = x; }, setView(c, z) { view = [c, z]; } }), tileLayer: () => ({ addTo() {} }),
       polyline: () => ({ addTo() {} }), divIcon: (o) => o, marker: () => ({ addTo() {} }),
-      latLngBounds: (x) => { fitted = x; return x; },
+      latLngBounds: (x) => x,
     };
     app.ctx.document.getElementById = (id) => id === 'day-map' ? {} : null;
     app.App._drawDayMap({ stops: [{ job: { id: 'nowhere', name: 'X' } }] });
-    assert.equal(JSON.stringify(fitted), JSON.stringify([[38.24, 21.73]]));
+    assert.equal(fitted, null);
+    assert.equal(JSON.stringify(view), JSON.stringify([[38.24, 21.73], 14]));
   });
+
 });
 
 describe('refineWeek: fit the lessons that are out, then win the kilometres back', () => {
@@ -5090,5 +5092,161 @@ describe('one note, several errands: each becomes its own box', () => {
     app.App.quickNoteAdd();
     assert.equal(app.state.jobs.length, 0);
     assert.equal(got.name, 'οδοντίατρος');
+  });
+});
+
+
+describe('a map on every schedule view, a neutral start, and fewer settings', () => {
+  const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  function mapWorld(coords) {
+    const app = loadApp();
+    app.setState({ settings: settings(), jobs: [], students: [], schedule: {}, coords });
+    const calls = { view: null, fitted: null, markers: [], lines: 0 };
+    app.ctx.L = {
+      map: () => ({ remove() {}, fitBounds(x) { calls.fitted = x; }, setView(c, z) { calls.view = [c, z]; } }),
+      tileLayer: () => ({ addTo() {} }), polyline: () => ({ addTo() { calls.lines++; } }), divIcon: (o) => o,
+      marker: (ll, o) => ({ addTo() { calls.markers.push(o.icon.html.replace(/<[^>]*>/g, '').trim()); } }),
+      latLngBounds: (x) => x,
+    };
+    app.ctx.document.getElementById = (id) => ['day-map', 'week-map'].includes(id) ? {} : null;
+    return { app, calls };
+  }
+
+  test('with no home and nothing planned the map opens on the town, not blank', () => {
+    const { app, calls } = mapWorld({});
+    app.App._drawStopsMap('day-map', [], { line: true });
+    assert.equal(JSON.stringify(calls.view), JSON.stringify([[38.2466, 21.7346], 12]));
+    assert.equal(calls.lines, 0, 'no line with nowhere to go');
+  });
+
+  test('before planning, the day map shows the day\'s jobs, unnumbered and unjoined', () => {
+    const { app, calls } = mapWorld({ home: { lat: 38.24, lon: 21.73 }, j1: { lat: 38.25, lon: 21.74 } });
+    app.state.planDate = '2026-11-02';
+    app.state.jobs = [{ id: 'j1', name: 'A', date: '2026-11-02' }, { id: 'j2', name: 'B', date: '2026-11-03' }];
+    app.App._drawDayMap(null);
+    assert.equal(JSON.stringify(calls.markers), JSON.stringify(['🏠', '•']));
+    assert.equal(calls.lines, 0);
+  });
+
+  test('the week map numbers the chosen day\'s lessons in time order', () => {
+    const { app, calls } = mapWorld({ home: { lat: 38.24, lon: 21.73 }, a: { lat: 38.25, lon: 21.74 }, b: { lat: 38.26, lon: 21.72 } });
+    app.state.scheduleDay = 2;
+    app.state.schedule = { 2: [slot('b', '17:00', '18:00'), slot('a', '15:00', '16:00')] };
+    app.App._drawWeekMap();
+    assert.equal(JSON.stringify(calls.markers), JSON.stringify(['🏠', '1', '2']));
+    assert.equal(calls.lines, 1);
+  });
+
+  test('the weekly screen and the day screen both always have a map container', () => {
+    assert.match(src, /<div id="week-map"/);
+    assert.match(src, /<div id="day-map" style="margin:0 16px 12px;height:210px/);
+    assert.match(src, /this\._drawWeekMap\(\)/);
+  });
+
+  test('a new user starts as "other" — clients and appointments, not students', () => {
+    const app = loadApp();
+    assert.equal(app.defaultSettings().profession, 'other');
+    app.setState({ settings: { ...app.defaultSettings(), profession: undefined } });
+    assert.equal(app.getLabels().clients, 'Πελάτες');
+    assert.match(src, /\$\{p\.value==='other'\?'selected':''\}/, 'the welcome screen preselects "other"');
+  });
+
+  test('settings show fuel consumption and price, and none of speed, map correction, travel mode or keys', () => {
+    for (const gone of ['id="set-speed"', 'id="set-time-factor"', 'id="set-mode"', "t('settings_maps')", 'settings_here_key_shared_active'])
+      assert.ok(!src.slice(src.indexOf('renderSettings(')).split('saveSettings(')[0].includes(gone), `${gone} must not be on the screen`);
+    assert.match(src, /id="set-fuel"/);
+    assert.match(src, /id="set-fuel-price"/);
+  });
+
+  test('the fuel cost uses the price the person set, 1.80 until they do', () => {
+    const app = loadApp();
+    app.setState({ settings: settings() });
+    assert.equal(app.App.fuelPrice(), 1.8);
+    app.state.settings.fuelPrice = 1.95;
+    assert.equal(app.App.fuelPrice(), 1.95);
+    app.state.settings.fuelPrice = 0;
+    assert.equal(app.App.fuelPrice(), 1.8, 'zero is not a price');
+    app.state.settings.fuelPrice = -2;
+    assert.equal(app.App.fuelPrice(), 1.8, 'nor is a negative number');
+    assert.ok(!/\*1\.8\)/.test(src), 'no hard-coded 1.8 left in a cost');
+  });
+
+  test('saving settings keeps a speed set earlier, and stores a new fuel price', async () => {
+    const app = loadApp();
+    app.setState({ settings: { ...settings(), avgCitySpeedKmh: 19 }, students: [], schedule: {} });
+    const v = { 'set-fuel': '6.5', 'set-fuel-price': '1.92', 'set-margin': '3', 'set-name': '', 'set-home': 'x' };
+    app.ctx.document.getElementById = (id) => (id in v) ? { value: v[id] } : null;
+    app.ctx.document.querySelectorAll = () => [];
+    app.Storage.loadSettings = () => ({});
+    app.Toast.show = () => {};
+    for (const f of ['renderSettings', 'runAndNotify', 'geocodeAll', 'renderHome', 'renderSchedule']) if (app.App[f]) app.App[f] = async () => {};
+    try { await app.App.saveSettings(); } catch (e) { /* rendering after save needs the DOM */ }
+    assert.equal(app.state.settings.avgCitySpeedKmh, 19);
+    assert.equal(app.state.settings.fuelPrice, 1.92);
+    assert.equal(app.state.settings.travelMode, 'car');
+  });
+
+  test('the day names no map provider; it warns only when times are rough', () => {
+    const day = src.slice(src.indexOf('renderDayPlanner(){'), src.indexOf('renderDayPlanner(){') + 12000);
+    assert.ok(!day.includes("t('day_times_' + plan.timesFrom)"), 'no "HERE / OpenStreetMap" line');
+    assert.match(day, /plan\.timesFrom === 'estimate'/);
+  });
+});
+
+describe('refineWeek respects the daily limit (maxPerDay)', () => {
+  test('no step takes a day above the limit, or makes an over-full day fuller', async () => {
+    for (const seed of [1, 2, 3, 4]) {
+      const sts = Array.from({ length: 16 }, (_, i) => student('s' + i, { days: [1, 2, 3, 4], lessonsPerWeek: 1 }));
+      const cfg = settings({ workDays: [1, 2, 3, 4], maxPerDay: 4 });
+      const app = loadApp({ seed });
+      const sch = await runPipeline(app, sts, cfg, cityCoords(sts), { refine: 0 });
+      const S = app.Scheduler;
+      const before = Object.fromEntries(cfg.workDays.map(d => [d, (sch[d] || []).length]));
+      await S.refineWeek(sch, sts, cfg, 2500);
+      for (const d of cfg.workDays) {
+        const n = (sch[d] || []).length;
+        assert.ok(n <= Math.max(4, before[d]), `seed ${seed}: day ${d} went from ${before[d]} to ${n}`);
+        if (before[d] > 4) assert.ok(n <= before[d], `seed ${seed}: an over-full day ${d} grew`);
+      }
+      assert.equal(auditSchedule(S, sch, sts, cfg).length, 0);
+    }
+  });
+
+  test('a chain can still bring a lesson into a full day by sending one out', async () => {
+    const cfg = settings({ workDays: [1, 2], maxPerDay: 1,
+      dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } });
+    const A = student('A', { days: [1] }), B = student('B', { days: [1, 2] });
+    const sts = [A, B];
+    const app = loadApp();
+    app.setState({ students: sts, settings: cfg, coords: cityCoords(sts) });
+    const S = app.Scheduler;
+    const sch = { 1: [slot('B', '15:00', '16:00')], 2: [] };
+    const r = await S.ejectionChains(sch, sts, cfg, 2000);
+    assert.equal(r.added, 1);
+    assert.equal(JSON.stringify([sch[1].length, sch[2].length]), '[1,1]');
+  });
+
+  test('the limit in the settings handed to refineWeek is the one obeyed', async () => {
+    const H = { lat: 38.2466, lon: 21.7346 };
+    const cfg = settings({ workDays: [1, 2], maxPerDay: 1 });
+    const A = student('A', { days: [1] }), B = student('B', { days: [1, 2] });
+    const sts = [A, B];
+    const app = loadApp();
+    // B lives next door to A: without a limit, Monday is by far the cheaper home for B.
+    app.setState({ students: sts, settings: { ...cfg, maxPerDay: 0 },
+      coords: { home: H, A: { lat: H.lat + 0.03, lon: H.lon }, B: { lat: H.lat + 0.0301, lon: H.lon } } });
+    const S = app.Scheduler;
+    const sch = { 1: [slot('A', '15:00', '16:00')], 2: [] };
+    await S.refineWeek(sch, sts, cfg, 1500);
+    assert.equal(S.countTotal(sch), 2, 'B is placed');
+    assert.equal(sch[1].length, 1, 'but not on Monday, which is at its limit of one');
+  });
+
+  test('with no limit set nothing changes', () => {
+    const app = loadApp();
+    app.setState({ settings: settings() });
+    const S = app.Scheduler, st = student('X', { days: [1] });
+    const full = { 1: Array.from({ length: 9 }, (_, i) => slot('y' + i, '15:00', '16:00')) };
+    assert.equal(S._canTake(st, 1, full), true);
   });
 });

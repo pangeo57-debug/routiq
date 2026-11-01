@@ -129,3 +129,36 @@ describe('each trade gets its own list of services', () => {
     assert.equal(app.subjectLabel('unknown_key'), 'unknown_key', 'and nothing may render blank');
   });
 });
+
+describe('messages use the words of the person\'s specialty', () => {
+  const { loadApp } = require('./harness');
+  test('a new user reads clients and appointments, a tutor students and lessons', () => {
+    const app = loadApp();
+    app.setState({ settings: { ...app.defaultSettings() } });
+    assert.equal(app.t('students_empty_title'), 'Δεν υπάρχουν πελάτες');
+    app.state.settings.profession = 'tutor';
+    assert.equal(app.t('students_empty_title'), 'Δεν υπάρχουν μαθητές');
+  });
+  test('a value passed by the caller wins over the specialty word', () => {
+    const app = loadApp();
+    app.setState({ settings: { ...app.defaultSettings(), profession: 'tutor' } });
+    assert.equal(app.tf('students_add_btn', { client: 'Μαθητή' }), 'Προσθήκη Μαθητή');
+    assert.equal(app.t('students_add_btn'), 'Προσθήκη μαθητής', 'and without one the specialty word fills it');
+  });
+  test('a word at the start of a sentence gets its capital', () => {
+    const app = loadApp();
+    app.setState({ settings: { ...app.defaultSettings(), language: 'en', profession: 'physiotherapy' } });
+    app.I18N.en.__probe = '{Sessions} and {sessions}';
+    assert.equal(app.t('__probe'), 'Sessions and sessions');
+  });
+  test('no Greek or English message names students or lessons outright any more', () => {
+    const app = loadApp();
+    const allowed = /^(profession_|onboarding_role_|settings_test_algo|confirm_test_students|toast_test_students|nav_students|students_title)/;
+    for (const lang of ['el', 'en']) {
+      for (const [k, v] of Object.entries(app.I18N[lang])) {
+        if (allowed.test(k) || typeof v !== 'string') continue;
+        assert.ok(!/μαθητ|Μαθητ|μάθημα|Μάθημα|μαθήματ|Μαθήματ|\bstudents?\b|\bStudents?\b|\blessons?\b|\bLessons?\b/.test(v), `${lang}.${k}: ${v}`);
+      }
+    }
+  });
+});
