@@ -23,6 +23,7 @@ import * as Sync from './sync.js';
 const HERE_HOSTS = {
   geocode:     'https://geocode.search.hereapi.com/v1/geocode',
   autosuggest: 'https://autosuggest.search.hereapi.com/v1/autosuggest',
+  discover:    'https://discover.search.hereapi.com/v1/discover',
   revgeocode:  'https://revgeocode.search.hereapi.com/v1/revgeocode',
   matrix:      'https://matrix.router.hereapi.com/v8/matrix',
 };
@@ -38,6 +39,7 @@ const OSM_HOSTS = {
 const ALLOWED_PARAMS = {
   geocode:     ['q', 'limit', 'lang'],
   autosuggest: ['q', 'at', 'limit', 'lang'],
+  discover:    ['q', 'at', 'limit', 'lang'],
   revgeocode:  ['at', 'lang'],
   search:      ['q', 'format', 'limit', 'addressdetails', 'namedetails', 'viewbox', 'bounded'],
   reverse:     ['format', 'lat', 'lon', 'addressdetails', 'zoom'],

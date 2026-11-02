@@ -5250,3 +5250,130 @@ describe('refineWeek respects the daily limit (maxPerDay)', () => {
     assert.equal(S._canTake(st, 1, full), true);
   });
 });
+
+describe('finding a place by name or kind, and taking a Google Maps link', () => {
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings({ homeAddress: 'Πλατεία Γεωργίου 1, Πάτρα', hereApiKey: 'k' }), students: [], jobs: [],
+      coords: { home: { lat: 38.2466, lon: 21.7346 } } });
+    return app;
+  }
+  const flush = () => new Promise(r => setTimeout(r, 0));
+
+  test('Discover results are asked for when there is no house number, and kept even when no word matches', async () => {
+    const app = world();
+    const asked = [];
+    // A street whose name contains the word: it matches, and would push out a shop that does not.
+    app.App._searchHere = async () => [{ name: 'Φανοποιού, Αθήνα', _matchText: 'Φανοποιού Αθήνα', lat: 37.9, lon: 23.7 }];
+    app.App._geocodeHereForSuggest = async () => [];
+    app.App._discoverHere = async (v) => { asked.push(v); return [
+      { name: 'Car Body Νικολάου, Κορίνθου 45, Πάτρα', poiName: 'Car Body Νικολάου', _place: true, _category: 'Φανοποιείο',
+        _matchText: 'Car Body Νικολάου Φανοποιείο', lat: 38.25, lon: 21.74 }]; };
+    let shown = null;
+    app.App._renderSuggestions = (box, list) => { shown = list; };
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.ctx.setTimeout = (f) => f();
+    app.App.onAddrInput('φανοποιου', 'jb-addr-suggest');
+    for (let i = 0; i < 5; i++) await flush();
+    assert.deepStrictEqual(asked, ['φανοποιου']);
+    assert.ok(shown && shown.some(x => x.poiName === 'Car Body Νικολάου'), JSON.stringify(shown));
+  });
+
+  test('with a house number Discover is not asked: it is an address', async () => {
+    const app = world();
+    let asked = 0;
+    app.App._searchHere = async () => [];
+    app.App._geocodeHereForSuggest = async () => [];
+    app.App._discoverHere = async () => { asked++; return []; };
+    app.App._renderSuggestions = () => {};
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.ctx.setTimeout = (f) => f();
+    app.App.onAddrInput('Κορίνθου 45', 'jb-addr-suggest');
+    for (let i = 0; i < 5; i++) await flush();
+    assert.equal(asked, 0);
+  });
+
+  test('_discoverHere asks the Discover endpoint near home and maps shops with their category', async () => {
+    const app = world();
+    let url = null;
+    app.Router._fetch = async (u) => { url = u; return { ok: true, json: async () => ({ items: [
+      { title: 'Κομμωτήριο Μαρία', position: { lat: 38.25, lng: 21.74 },
+        address: { label: 'Κομμωτήριο Μαρία, Ρήγα Φεραίου 5, Πάτρα', street: 'Ρήγα Φεραίου', houseNumber: '5', city: 'Πάτρα' },
+        categories: [{ name: 'Κομμωτήριο' }] },
+      { title: 'no position' }] }) }; };
+    const r = await app.App._discoverHere('κομμωτηριο μαρια', 'k');
+    const q = new (require('url').URL)(url);
+    assert.equal(q.hostname, 'discover.search.hereapi.com');
+    assert.equal(q.searchParams.get('at'), '38.2466,21.7346');
+    assert.equal(r.length, 1);
+    assert.equal(r[0]._place, true);
+    assert.equal(r[0]._category, 'Κομμωτήριο');
+    assert.match(r[0].name, /^Κομμωτήριο Μαρία, Ρήγα Φεραίου 5/);
+  });
+
+  test('Google Maps links: the pin is read, the short link is recognised, anything else is not a link', () => {
+    const A = loadApp().App;
+    assert.equal(JSON.stringify(A.parseMapsLink('https://www.google.com/maps/place/X/@38.2,21.7,17z/data=!4m6!3d38.24661!4d21.73462')),
+      JSON.stringify({ lat: 38.24661, lon: 21.73462 }), 'the pin (!3d!4d), not the view (@)');
+    assert.equal(JSON.stringify(A.parseMapsLink('https://maps.google.com/?q=38.25,21.74')), JSON.stringify({ lat: 38.25, lon: 21.74 }));
+    assert.equal(A.parseMapsLink('https://maps.app.goo.gl/AbCdEf'), 'short');
+    assert.equal(A.parseMapsLink('Γούναρη 58, Πάτρα'), null);
+    assert.equal(A.parseMapsLink('https://example.com/@38.2,21.7'), null, 'only Google Maps links');
+    assert.equal(A.parseMapsLink('https://www.google.com/maps/@95.0,21.7,12z'), null, 'no position that cannot exist');
+  });
+
+  test('pasting a full link fills the field with the address at that point and keeps the exact position', async () => {
+    const app = world();
+    app.App._reverseGeocode = async () => 'Κορίνθου 45, Πάτρα';
+    const picked = [];
+    app.App.selectAddr = (name, lat, lon, box) => picked.push([name, lat, lon, box]);
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.App.onAddrInput('https://www.google.com/maps/place/X/data=!3d38.25!4d21.74', 'jb-addr-suggest');
+    await flush(); await flush();
+    assert.equal(JSON.stringify(picked), JSON.stringify([['Κορίνθου 45, Πάτρα', 38.25, 21.74, 'jb-addr-suggest']]));
+  });
+
+  test('a short link explains what to do instead of searching for the link text', () => {
+    const app = world();
+    const box = { style: {}, innerHTML: '' };
+    let searched = false;
+    app.App._searchHere = async () => { searched = true; return []; };
+    app.ctx.document.getElementById = () => box;
+    app.App.onAddrInput('https://maps.app.goo.gl/AbCdEf', 'jb-addr-suggest');
+    assert.match(box.innerHTML, /σύντομος σύνδεσμος/);
+    assert.equal(searched, false);
+  });
+
+  test('"Find in Google Maps" opens a search for the name with the town, or the app on iPhone', () => {
+    const app = world();
+    const opened = [];
+    app.ctx.window.open = (u) => opened.push(u);
+    app.ctx.window.location = { href: '' };
+    app.Toast.show = () => {};
+    const v = { 'jb-addr': '', 'jb-name': 'Κομμωτήριο Μαρία' };
+    app.ctx.document.getElementById = (id) => (id in v) ? { value: v[id] } : null;
+    app.ctx.navigator = { userAgent: 'Android', platform: '' };
+    app.App.findInGoogleMaps('jb-addr', 'jb-name');
+    const q = new (require('url').URL)(opened[0]);
+    assert.equal(q.searchParams.get('query'), 'Κομμωτήριο Μαρία, Πάτρα');
+    app.ctx.navigator = { userAgent: 'iPhone', platform: '' };
+    app.App.findInGoogleMaps('jb-addr', 'jb-name');
+    assert.ok(app.ctx.window.location.href.startsWith('comgooglemaps://?q='));
+  });
+
+  test('with nothing typed it asks for a name instead of opening an empty search', () => {
+    const app = world();
+    const shown = [];
+    app.ctx.window.open = () => { throw new Error('should not open'); };
+    app.Toast.show = (m, k) => shown.push(k);
+    app.ctx.document.getElementById = () => ({ value: '' });
+    app.App.findInGoogleMaps('jb-addr', 'jb-name');
+    assert.deepStrictEqual(shown, ['info']);
+  });
+
+  test('both forms have the button', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /App\.findInGoogleMaps\('st-addr','st-name'\)/);
+    assert.match(src, /App\.findInGoogleMaps\('jb-addr','jb-name'\)/);
+  });
+});

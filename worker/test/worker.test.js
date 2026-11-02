@@ -292,3 +292,11 @@ describe('creating a space has its own, much tighter budget', () => {
     assert.equal(lookup.status, 200, 'someone who created spaces can still use the app');
   });
 });
+
+describe('Discover goes through the proxy like autosuggest', () => {
+  test('the discover endpoint and its parameters are allowed, and nothing else is passed on', async () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'index.js'), 'utf8');
+    assert.match(src, /discover:\s+'https:\/\/discover\.search\.hereapi\.com\/v1\/discover'/);
+    assert.match(src, /discover:\s+\['q', 'at', 'limit', 'lang'\]/);
+  });
+});
