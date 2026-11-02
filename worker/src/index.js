@@ -61,9 +61,17 @@ const LIMITS = {
   // day and fill the database with rows nobody will ever read. A person needs
   // a handful of these in a lifetime.
   createsPerDay: 5,
-  // Google lookups per person per month. The free tier is shared by
-  // everyone; this keeps one person from spending it.
-  googlePerMonth: 50,
+  // Google, per person per month. A professional with ~30 clients needs
+  // Google for the few addresses HERE has no house number for, two or three
+  // requests each while typing; renewals (by place id, once a month per such
+  // address) have their own allowance so a position is never dropped because
+  // the searches ran out.
+  googlePerMonth: 30,
+  googleRenewPerMonth: 100,
+  // All users together, per month: under Google's 10,000 free lookups. Past
+  // it the app quietly falls back to HERE and nothing is billed. Raise it
+  // (GOOGLE_MONTHLY_CAP) once there is revenue to pay for more.
+  googleMonthlyCap: 9500,
   matrixPointsMax: 120, // HERE's own matrix limit for the sync endpoint
   bodyBytesMax: 32 * 1024,
   qMaxLength: 300,
@@ -133,14 +141,25 @@ async function rateLimit(env, clientId, now, kind) {
   return { ok: true, minute: m + 1, day: d + 1 };
 }
 
-/** One more Google lookup for this person this month, or not. */
-async function googleAllowance(env, clientId, now) {
+/**
+ * One more Google lookup this month, or not: within the person's own
+ * allowance (searches and renewals counted apart) and within everyone's
+ * monthly ceiling.
+ */
+async function googleAllowance(env, clientId, now, kind = 'search') {
   if (!env.RATE) return { ok: true, skipped: true };
-  const d = new Date(now);
-  const key = `rl:g:${clientId}:${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
-  const n = Number(await env.RATE.get(key)) || 0;
-  if (n >= LIMITS.googlePerMonth) return { ok: false, used: n };
-  await env.RATE.put(key, String(n + 1), { expirationTtl: 40 * 86400 });
+  const d = new Date(now), month = `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
+  const mine = `rl:g${kind === 'renew' ? 'r' : ''}:${clientId}:${month}`;
+  const all = `rl:gall:${month}`;
+  const cap = Number(env.GOOGLE_MONTHLY_CAP) || LIMITS.googleMonthlyCap;
+  const per = kind === 'renew' ? LIMITS.googleRenewPerMonth : LIMITS.googlePerMonth;
+  const [n, total] = (await Promise.all([env.RATE.get(mine), env.RATE.get(all)])).map(x => Number(x) || 0);
+  if (n >= per) return { ok: false, used: n, scope: 'person' };
+  if (total >= cap) return { ok: false, used: total, scope: 'all' };
+  await Promise.all([
+    env.RATE.put(mine, String(n + 1), { expirationTtl: 40 * 86400 }),
+    env.RATE.put(all, String(total + 1), { expirationTtl: 40 * 86400 }),
+  ]);
   return { ok: true, used: n + 1 };
 }
 
@@ -224,7 +243,7 @@ async function handle(request, env, ctx) {
     if (clean.error) return json({ error: clean.error }, 400, cors);
     if (!clean.params.get('address') && !clean.params.get('place_id'))
       return json({ error: 'address or place_id required' }, 400, cors);
-    const month = await googleAllowance(env, clientId, Date.now());
+    const month = await googleAllowance(env, clientId, Date.now(), clean.params.get('place_id') ? 'renew' : 'search');
     if (!month.ok) return json({ error: 'monthly allowance used', scope: 'google-month' }, 429, cors);
     clean.params.set('key', env.GOOGLE_API_KEY);
     const res = await fetch(`${GOOGLE_HOSTS[action]}?${clean.params.toString()}`);

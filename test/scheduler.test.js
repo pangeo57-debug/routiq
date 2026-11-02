@@ -5556,3 +5556,75 @@ describe('house numbers: Google as the fallback, "I am here", and honest positio
     assert.equal(await app.Router.geocodeGoogle('x'), null, 'API_BASE is empty in this build');
   });
 });
+
+describe('one student, lessons of different lengths in a week', () => {
+  test('durOf names the length still missing, longest first, and changes nothing for one length', () => {
+    const S = loadApp().Scheduler;
+    const st = student('a', { lessonsPerWeek: 2, lessonDuration: 120, durations: [90, 120] });
+    assert.equal(S.durOf(st, {}), 120);
+    assert.equal(S.durOf(st, { 1: [slot('a', '15:00', '17:00')] }), 90);
+    assert.equal(S.durOf(st, { 1: [slot('a', '15:00', '16:30')] }), 120);
+    const plain = student('b', { lessonDuration: 60, lessonsPerWeek: 3 });
+    assert.equal(S.durOf(plain, { 1: [slot('b', '15:00', '16:00')] }), 60);
+    assert.equal(S.hasMixedDurations(student('c', { durations: [60, 60] })), false, 'equal lengths are not mixed');
+  });
+
+  test('the full pipeline gives one student a two-hour and a ninety-minute lesson', async () => {
+    for (const seed of [1, 2, 3]) {
+      const sts = [student('mix', { days: [1, 2, 3], lessonsPerWeek: 2, lessonDuration: 120, durations: [120, 90] }),
+        ...Array.from({ length: 8 }, (_, i) => student('s' + i, { days: [1, 2, 3], lessonsPerWeek: 1 + (i % 2) }))];
+      const cfg = settings({ workDays: [1, 2, 3] });
+      const app = loadApp({ seed });
+      const sch = await runPipeline(app, sts, cfg, cityCoords(sts), { refine: 800 });
+      const S = app.Scheduler;
+      const mine = Object.values(sch).flat().filter(x => x.studentId === 'mix')
+        .map(x => S.toMin(x.end) - S.toMin(x.start)).sort((a, b) => b - a);
+      assert.deepStrictEqual(mine, [120, 90], `seed ${seed}`);
+      assert.equal(auditSchedule(S, sch, sts, cfg).length, 0, `seed ${seed}: ${auditSchedule(S, sch, sts, cfg)}`);
+    }
+  });
+
+  test('when only the shorter fits, it is the shorter that is placed, and the longer is reported missing', async () => {
+    // Monday 15:00-16:30 only: room for the 90, never for the 120.
+    const mix = student('mix', { days: [1], window: { start: '15:00', end: '16:30' }, lessonsPerWeek: 2, lessonDuration: 120, durations: [120, 90] });
+    const cfg = settings({ workDays: [1] });
+    const app = loadApp();
+    const sch = await runPipeline(app, [mix], cfg, cityCoords([mix]), { refine: 300 });
+    const S = app.Scheduler;
+    const lens = Object.values(sch).flat().map(x => S.toMin(x.end) - S.toMin(x.start));
+    assert.deepStrictEqual(lens, [90]);
+    assert.equal(S.durOf(mix, sch), 120, 'what is still missing is the two-hour one');
+  });
+
+  test('a mixed student is never merged into a block or paired', async () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const a = student('a', { lessonsPerWeek: 2, lessonDuration: 120, durations: [120, 90], subject: 'X' });
+    const b = student('b', { lessonsPerWeek: 2, lessonDuration: 120, subject: 'X' });
+    assert.equal(S.pairViability(a, b, settings(), {}), null);
+    const forced = { ...a, forceMerge: true, mergeMode: 'always' };
+    const sch = await runPipeline(app, [forced], settings({ workDays: [1, 2] }), cityCoords([forced]), { refine: 200 });
+    const mine = Object.values(sch).flat();
+    assert.ok(mine.length >= 1);
+    for (const sl of mine) assert.ok(!sl.merged, 'no merged block');
+  });
+
+  test('the form reads "120, 90" into lengths, the count and the longest, and ignores one or equal lengths', () => {
+    const A = loadApp().App;
+    assert.equal(JSON.stringify(A.parseDurations('120, 90')), '[120,90]');
+    assert.equal(JSON.stringify(A.parseDurations('120 90 60')), '[120,90,60]');
+    assert.equal(A.parseDurations('90'), null);
+    assert.equal(A.parseDurations('60, 60'), null);
+    assert.equal(A.parseDurations(''), null);
+    assert.equal(JSON.stringify(A.parseDurations('5, 1000')), '[15,480]', 'clamped to sensible lengths');
+  });
+
+  test('the independent audit catches a lesson of a length nobody asked for', () => {
+    const app = loadApp();
+    const st = student('mix', { days: [1], lessonsPerWeek: 2, lessonDuration: 120, durations: [120, 90] });
+    const cfg = settings({ workDays: [1] });
+    app.setState({ students: [st], settings: cfg, coords: cityCoords([st]) });
+    const errs = auditSchedule(app.Scheduler, { 1: [slot('mix', '15:00', '16:00')] }, [st], cfg);
+    assert.ok(errs.some(e => /60-minute lesson/.test(e)), errs.join('; '));
+  });
+});

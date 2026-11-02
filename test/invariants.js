@@ -101,6 +101,20 @@ function auditSchedule(Scheduler, schedule, students, settings) {
       errs.push(`${st.name}: ${n} lessons scheduled, only ${st.lessonsPerWeek} requested`);
   }
 
+  // A student with lessons of different lengths gets exactly those lengths,
+  // each at most as often as it was asked for — never a 120 turned into a 90.
+  for (const st of students) {
+    if (!Array.isArray(st.durations) || st.durations.length < 2) continue;
+    const left = st.durations.map(Number);
+    for (const d of settings.workDays) for (const sl of (schedule[d] || [])) {
+      if (sl.studentId !== st.id || sl.isGroup) continue;
+      const len = S.toMin(sl.end) - S.toMin(sl.start);
+      const i = left.indexOf(len);
+      if (i < 0) errs.push(`${st.name}: a ${len}-minute lesson, but the lengths asked for are ${st.durations.join(', ')}`);
+      else left.splice(i, 1);
+    }
+  }
+
   return [...new Set(errs)];
 }
 

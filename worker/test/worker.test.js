@@ -361,3 +361,38 @@ describe('Google geocoding: a hidden key, a monthly allowance, nothing cached', 
     for (const k of env.CACHE._store.keys()) assert.ok(!/google|Ψαρών/.test(k), `cached: ${k}`);
   });
 });
+
+
+describe('Google allowances: searches, renewals and everyone together', () => {
+  const GKEY = 'g';
+  const ask = (env, q, ip = '1.2.3.4') => W.handle(new Request('https://api.test/google/geocode?' + q,
+    { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }), env, {});
+  test('renewals have their own allowance, so a spent search allowance never drops a position', async () => {
+    const env = makeEnv({ GOOGLE_API_KEY: GKEY });
+    stubFetch({ body: '{}' });
+    for (let i = 0; i < W.LIMITS.googlePerMonth; i++) await ask(env, 'address=a' + i);
+    assert.equal((await ask(env, 'address=more')).status, 429);
+    assert.equal((await ask(env, 'place_id=P1')).status, 200, 'a renewal still goes through');
+  });
+  test('renewals stop at their own limit', async () => {
+    const env = makeEnv({ GOOGLE_API_KEY: GKEY });
+    stubFetch({ body: '{}' });
+    // Start one short of the limit (a hundred requests in a minute would hit the per-minute limit first).
+    const d = new Date(), month = `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
+    await env.RATE.put(`rl:gr:1.2.3.4:${month}`, String(W.LIMITS.googleRenewPerMonth - 1));
+    assert.equal((await ask(env, 'place_id=P1')).status, 200);
+    assert.equal((await ask(env, 'place_id=P2')).status, 429);
+  });
+  test('everyone together stops at the monthly ceiling, which can be raised', async () => {
+    const env = makeEnv({ GOOGLE_API_KEY: GKEY, GOOGLE_MONTHLY_CAP: '5' });
+    const calls = stubFetch({ body: '{}' });
+    for (let i = 0; i < 5; i++) assert.equal((await ask(env, 'address=x', '10.0.0.' + i)).status, 200);
+    assert.equal((await ask(env, 'address=x', '10.0.0.99')).status, 429, 'a new person, but the month is spent');
+    assert.equal(calls.length, 5);
+  });
+  test('the defaults stay under Google\'s free 10,000 a month', () => {
+    assert.ok(W.LIMITS.googleMonthlyCap < 10000);
+    assert.equal(W.LIMITS.googlePerMonth, 30);
+    assert.equal(W.LIMITS.googleRenewPerMonth, 100);
+  });
+});
