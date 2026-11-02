@@ -5140,7 +5140,7 @@ describe('a map on every schedule view, a neutral start, and fewer settings', ()
 
   test('the weekly screen and the day screen both always have a map container', () => {
     assert.match(src, /<div id="week-map"/);
-    assert.match(src, /<div id="day-map" style="margin:0 16px 12px;height:210px/);
+    assert.match(src, /<div id="day-map" style="margin:0 16px 12px;height:/);
     assert.match(src, /this\._drawWeekMap\(\)/);
   });
 
@@ -5638,5 +5638,52 @@ describe('one student, lessons of different lengths in a week', () => {
     app.setState({ students: [st], settings: cfg, coords: cityCoords([st]) });
     const errs = auditSchedule(app.Scheduler, { 1: [slot('mix', '15:00', '16:00')] }, [st], cfg);
     assert.ok(errs.some(e => /60-minute lesson/.test(e)), errs.join('; '));
+  });
+});
+
+
+describe('found on a phone: new users, a stuck button, the week map', () => {
+  const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+
+  test('finishing the welcome gives working hours, so the first client can be saved', () => {
+    const app = loadApp();
+    app.setState({ settings: { ...app.defaultSettings() }, coords: {}, students: [] });
+    app.ctx.document.getElementById = (id) => id === 'ob-addr' ? { value: 'Πλατεία Γεωργίου 1, Πάτρα' } : null;
+    for (const f of ['updateNavLabels', 'renderHome', 'registerSW']) app.App[f] = () => {};
+    app.App._obFinish();
+    for (const d of app.state.settings.workDays) assert.ok(app.state.settings.dayHours[d], `day ${d} has hours`);
+    const av = app.App.computeAvailabilityFromExceptions([]);
+    assert.ok(Object.values(av).some(x => x.on), 'a new client is free on some day');
+  });
+
+  test('hours already set are not overwritten by the welcome', () => {
+    const app = loadApp();
+    app.setState({ settings: { ...app.defaultSettings(), dayHours: { 1: { start: '15:00', end: '22:00' } } }, coords: {}, students: [] });
+    app.ctx.document.getElementById = () => null;
+    for (const f of ['updateNavLabels', 'renderHome', 'registerSW']) app.App[f] = () => {};
+    app.App._obFinish();
+    assert.equal(app.state.settings.dayHours[1].start, '15:00');
+  });
+
+  test('a client that cannot be saved gives the Save button back', () => {
+    const app = loadApp();
+    app.setState({ settings: { ...app.defaultSettings(), dayHours: {} }, students: [], coords: {} });
+    const btn = { disabled: false, style: {}, textContent: 'Αποθήκευση' };
+    const v = { 'st-name': 'Νίκος', 'st-addr': 'Μαιζώνος 1' };
+    app.ctx.document.getElementById = (id) => (id in v) ? { value: v[id] } : null;
+    app.ctx.document.querySelector = () => btn;
+    app.Toast.show = () => {};
+    app.App.saveStudent();
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.textContent, 'Αποθήκευση');
+  });
+
+  test('changing the day redraws the week map', () => {
+    const L = src.slice(src.indexOf('  switchDay(d){'), src.indexOf('  switchDay(d){') + 1400);
+    assert.match(L, /this\.renderDaySlots\(\);\s*\/\/[^\n]*\n\s*try\{ this\._drawWeekMap\(\); \}/);
+  });
+
+  test('on a touch screen every tappable chip is at least 36px high', () => {
+    assert.match(src, /@media \(pointer: coarse\)\{\s*button\.chip, \.chip\[onclick\]\{ min-height:36px;/);
   });
 });

@@ -205,6 +205,15 @@ nav{
   .topbar .logo{ display:none; }   /* the sidebar already carries it */
 }
 
+/* A finger needs a bigger target than a mouse pointer: on touch screens every
+   tappable chip and tab is at least 36px high (the look on a laptop is unchanged). */
+@media (pointer: coarse){
+  button.chip, .chip[onclick]{ min-height:36px; min-width:36px; display:inline-flex; align-items:center; justify-content:center; }
+  button{ min-height:36px; }
+  .day-tab{ min-height:36px; }
+  .btn-icon{ min-width:40px; min-height:40px; }
+}
+
 /* CARDS */
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:0 16px 12px}
 .card-sm{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px}
@@ -8966,6 +8975,8 @@ const App = {
     const availabilityExceptions = this._editingExceptions||[];
     const availability = this.computeAvailabilityFromExceptions(availabilityExceptions);
     if(!Object.values(availability).some(av=>av.on)){
+      // The button was already set to "Saving…": give it back, or the form is stuck.
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.style.opacity=''; saveBtn.textContent=t('btn_save'); }
       Toast.show(t('toast_select_day'),'error'); return
     }
 
@@ -9194,7 +9205,7 @@ const App = {
           onclick="App.setPlanDate(App.shiftDate(1))">${esc(t('day_tomorrow'))}</button>
       </div>
 
-      <div id="day-map" style="margin:0 16px 12px;height:210px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg3)"></div>
+      <div id="day-map" style="margin:0 16px 12px;height:clamp(150px,22vh,240px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg3)"></div>
       <div style="padding:0 16px 12px">
         <div style="display:flex;gap:8px">
           <input type="text" id="qn-text" style="flex:1" autocomplete="off"
@@ -9817,7 +9828,7 @@ const App = {
         </div>
       </div>
       ${this._modeTabsHtml()}
-      <div id="week-map" style="margin:0 16px 12px;height:200px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg3)"></div>
+      <div id="week-map" style="margin:0 16px 12px;height:clamp(150px,22vh,240px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg3)"></div>
       ${state.scheduleAttempts.length > 0 ? `
 <div style="padding:0 16px 8px">
   <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;letter-spacing:.5px">${t('schedule_random_placement_label')}</div>
@@ -9875,6 +9886,8 @@ const App = {
       if(t.textContent.trim().startsWith(DAYS[d])) t.classList.add('active');
     });
     this.renderDaySlots();
+    // The map shows the chosen day: it has to follow the tab.
+    try{ this._drawWeekMap(); }catch(e){ console.warn('week map failed', e); }
   },
 
   // Touch-friendly alternative to native HTML5 drag-and-drop, which only
@@ -12183,6 +12196,11 @@ const App = {
     const addr = document.getElementById('ob-addr')?.value?.trim();
     state.settings.profession = this._obProf || 'other';
     state.settings.defaultLessonDuration = this._obDur || 60;
+    // Working hours to start from. Without any, every client's availability
+    // came out empty and the first client could not be saved at all.
+    // A wide day is the safe default: it only allows, it never forbids.
+    const dh = state.settings.dayHours || (state.settings.dayHours = {});
+    for(const d of (state.settings.workDays || [1,2,3,4,5])) if(!dh[d]) dh[d] = { start: '09:00', end: '21:00' };
     if(addr) state.settings.homeAddress = addr;
     if(this._obCoord){ state.coords['home'] = this._obCoord; Storage.saveCoords(state.coords); }
     Storage.saveSettings(state.settings);
