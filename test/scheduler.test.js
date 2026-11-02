@@ -5551,6 +5551,16 @@ describe('house numbers: Google as the fallback, "I am here", and honest positio
     assert.match(src.slice(src.indexOf('async _ensureDayCoords(date){')), /^async _ensureDayCoords\(date\)\{\s*try\{ await this\.refreshGoogleCoords\(\); \}/);
   });
 
+  test('the same text asks Google once per session', async () => {
+    const app = world();
+    let n = 0;
+    app.Router._google = async () => { n++; return { lat: 1, lon: 1, precise: true }; };
+    await app.Router.geocodeGoogle('Ψαρών 11, Αραχωβίτικα');
+    await app.Router.geocodeGoogle('ψαρων 11, αραχωβιτικα');
+    await app.Router.geocodeGoogle('Ψαρών 12, Αραχωβίτικα');
+    assert.equal(n, 2, 'accents and case do not make a new question');
+  });
+
   test('Router._google reads Google\'s answer and calls nothing without the Worker', async () => {
     const app = world();
     assert.equal(await app.Router.geocodeGoogle('x'), null, 'API_BASE is empty in this build');
@@ -5580,6 +5590,8 @@ describe('one student, lessons of different lengths in a week', () => {
       const mine = Object.values(sch).flat().filter(x => x.studentId === 'mix')
         .map(x => S.toMin(x.end) - S.toMin(x.start)).sort((a, b) => b - a);
       assert.deepStrictEqual(mine, [120, 90], `seed ${seed}`);
+      for (const x of Object.values(sch).flat().filter(x => x.studentId === 'mix'))
+        assert.equal(x.duration, S.toMin(x.end) - S.toMin(x.start), `seed ${seed}: the duration shown matches the lesson`);
       assert.equal(auditSchedule(S, sch, sts, cfg).length, 0, `seed ${seed}: ${auditSchedule(S, sch, sts, cfg)}`);
     }
   });

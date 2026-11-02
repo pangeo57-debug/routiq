@@ -6070,7 +6070,18 @@ const Router = {
         label: it.formatted_address || '', precise: types.some(x => ['street_address', 'premise', 'subpremise'].includes(x)) };
     }catch(e){ return null; }
   },
-  geocodeGoogle(address){ return this._google({ address }); },
+  // Typing "Ψαρών 11", deleting a letter and typing it again must not spend
+  // two of the person's monthly Google lookups: the answer is remembered for
+  // this session only (well inside Google's 30 days), never stored.
+  geocodeGoogle(address){
+    const key = normalizeSearchText(String(address || '')).trim();
+    this._gcache = this._gcache || new Map();
+    if(this._gcache.has(key)) return this._gcache.get(key);
+    const p = this._google({ address });
+    this._gcache.set(key, p);
+    if(this._gcache.size > 100) this._gcache.delete(this._gcache.keys().next().value);
+    return p;
+  },
   googlePlace(placeId){ return placeId ? this._google({ place_id: placeId }) : Promise.resolve(null); },
 
   async geocodeHere(address, key){
