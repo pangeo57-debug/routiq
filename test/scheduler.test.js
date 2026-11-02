@@ -5687,3 +5687,82 @@ describe('found on a phone: new users, a stuck button, the week map', () => {
     assert.match(src, /@media \(pointer: coarse\)\{\s*button\.chip, \.chip\[onclick\]\{ min-height:36px;/);
   });
 });
+
+describe('home is today: next stop, the day in order, add in one line, tick off', () => {
+  function world(todayISO) {
+    const app = loadApp();
+    app.setState({ settings: settings({ workDays: [1, 2, 3, 4, 5] }), students: [], jobs: [],
+      coords: { home: { lat: 38.2466, lon: 21.7346 } }, schedule: {} });
+    app.App.todayISO = () => todayISO;
+    app.Toast.show = () => {};
+    return app;
+  }
+  const MON = '2026-11-02';
+
+  test('the agenda mixes the week\'s lessons, jobs and errands by time, undated last and done at the end', () => {
+    const app = world(MON);
+    app.state.schedule = { 1: [slot('a', '17:00', '18:00', { studentName: 'Άννα' }), slot('b', '15:00', '16:00', { studentName: 'Βασίλης' })] };
+    app.state.jobs = [
+      { id: 'j1', name: 'Φαρμακείο', date: MON, kind: 'errand' },
+      { id: 'j2', name: 'Τράπεζα', date: MON, kind: 'errand', window: { start: '11:00', end: '11:30' } },
+      { id: 'j3', name: 'Ταχυδρομείο', date: MON, kind: 'errand', done: true, window: { start: '09:00', end: '09:30' } },
+      { id: 'j4', name: 'Αύριο', date: '2026-11-03', kind: 'errand' },
+    ];
+    const order = app.App._todayAgenda().map(x => x.title);
+    assert.equal(JSON.stringify(order), JSON.stringify(['Τράπεζα', 'Βασίλης', 'Άννα', 'Φαρμακείο', 'Ταχυδρομείο']));
+  });
+
+  test('a planned day gives its jobs the planned times', () => {
+    const app = world(MON);
+    app.state.jobs = [{ id: 'j1', name: 'Λέβητας', date: MON }];
+    app.state.dayPlan = { date: MON, stops: [{ job: app.state.jobs[0], start: '10:20', end: '11:20' }] };
+    const [x] = app.App._todayAgenda();
+    assert.equal(x.time, '10:20'); assert.equal(x.kind, 'job');
+  });
+
+  test('typing on the home screen adds errands for today at once, no form', () => {
+    const app = world(MON);
+    let forms = 0;
+    app.App.openJobDrawer = () => { forms++; };
+    app.App.renderHome = () => {};
+    app.ctx.document.getElementById = (id) => id === 'home-qn' ? { value: 'φαρμακείο' } : null;
+    app.App.homeQuickAdd();
+    assert.equal(forms, 0);
+    assert.equal(app.state.jobs.length, 1);
+    assert.equal(app.state.jobs[0].name, 'Φαρμακείο');
+    assert.equal(app.state.jobs[0].date, MON);
+    assert.equal(app.state.jobs[0].kind, 'errand');
+    assert.equal(app.state.scheduleMode, undefined, 'the schedule tab the person had is left as it was');
+  });
+
+  test('a day word still wins: "αύριο τράπεζα" is for tomorrow', () => {
+    const app = world(MON);
+    app.App.renderHome = () => {};
+    app.ctx.document.getElementById = (id) => id === 'home-qn' ? { value: 'αύριο τράπεζα και φούρνος' } : null;
+    app.App.homeQuickAdd();
+    assert.equal(JSON.stringify(app.state.jobs.map(j => [j.name, j.date])), JSON.stringify([['Τράπεζα', '2026-11-03'], ['Φούρνος', '2026-11-03']]));
+  });
+
+  test('ticking a job done is saved, drops the old plan, and ticking again undoes it', () => {
+    const app = world(MON);
+    app.state.jobs = [{ id: 'j1', name: 'Φαρμακείο', date: MON, kind: 'errand' }];
+    app.state.dayPlan = { date: MON, stops: [] };
+    app.state.currentScreen = 'home';
+    let saved = 0; app.Storage.saveJobs = () => { saved++; };
+    app.App.renderHome = () => {};
+    app.App.toggleJobDone('j1');
+    assert.equal(app.state.jobs[0].done, true); assert.equal(saved, 1); assert.equal(app.state.dayPlan, null);
+    app.App.toggleJobDone('j1');
+    assert.equal(app.state.jobs[0].done, false);
+  });
+
+  test('the home screen shows the next stop, the map and the add box; no statistics cards', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
+    assert.match(home, /class="next-card"/);
+    assert.match(home, /id="home-map"/);
+    assert.match(home, /id="home-qn"/);
+    const render = src.slice(src.indexOf('  renderHome(){'), src.indexOf('  _todayAgenda(){'));
+    assert.ok(!/stat-card/.test(render), 'the six statistics cards are gone');
+  });
+});
