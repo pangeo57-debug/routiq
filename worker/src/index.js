@@ -28,6 +28,13 @@ const HERE_HOSTS = {
   matrix:      'https://matrix.router.hereapi.com/v8/matrix',
 };
 
+// Google is the fallback for a house number HERE does not know. Its terms
+// forbid keeping its answers beyond 30 days, so nothing from it is cached
+// here, and each person gets a small monthly allowance (LIMITS.googlePerMonth).
+const GOOGLE_HOSTS = {
+  geocode: 'https://maps.googleapis.com/maps/api/geocode/json',
+};
+
 const OSM_HOSTS = {
   search:  'https://nominatim.openstreetmap.org/search',
   reverse: 'https://nominatim.openstreetmap.org/reverse',
@@ -41,6 +48,7 @@ const ALLOWED_PARAMS = {
   autosuggest: ['q', 'at', 'limit', 'lang'],
   discover:    ['q', 'at', 'limit', 'lang'],
   revgeocode:  ['at', 'lang'],
+  google_geocode: ['address', 'place_id', 'language', 'region'],
   search:      ['q', 'format', 'limit', 'addressdetails', 'namedetails', 'viewbox', 'bounded'],
   reverse:     ['format', 'lat', 'lon', 'addressdetails', 'zoom'],
 };
@@ -53,6 +61,9 @@ const LIMITS = {
   // day and fill the database with rows nobody will ever read. A person needs
   // a handful of these in a lifetime.
   createsPerDay: 5,
+  // Google lookups per person per month. The free tier is shared by
+  // everyone; this keeps one person from spending it.
+  googlePerMonth: 50,
   matrixPointsMax: 120, // HERE's own matrix limit for the sync endpoint
   bodyBytesMax: 32 * 1024,
   qMaxLength: 300,
@@ -120,6 +131,17 @@ async function rateLimit(env, clientId, now, kind) {
     env.RATE.put(dayKey, String(d + 1), { expirationTtl: 90000 }),
   ]);
   return { ok: true, minute: m + 1, day: d + 1 };
+}
+
+/** One more Google lookup for this person this month, or not. */
+async function googleAllowance(env, clientId, now) {
+  if (!env.RATE) return { ok: true, skipped: true };
+  const d = new Date(now);
+  const key = `rl:g:${clientId}:${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
+  const n = Number(await env.RATE.get(key)) || 0;
+  if (n >= LIMITS.googlePerMonth) return { ok: false, used: n };
+  await env.RATE.put(key, String(n + 1), { expirationTtl: 40 * 86400 });
+  return { ok: true, used: n + 1 };
 }
 
 /** Values that reach an upstream URL, checked rather than trusted. */
@@ -194,6 +216,22 @@ async function handle(request, env, ctx) {
   }
 
   const [, group, action] = url.pathname.split('/');
+
+  // ---- Google (fallback geocoding) ------------------------------------------
+  if (group === 'google' && GOOGLE_HOSTS[action]) {
+    if (!env.GOOGLE_API_KEY) return json({ error: 'not configured' }, 503, cors);
+    const clean = cleanParams('google_' + action, url);
+    if (clean.error) return json({ error: clean.error }, 400, cors);
+    if (!clean.params.get('address') && !clean.params.get('place_id'))
+      return json({ error: 'address or place_id required' }, 400, cors);
+    const month = await googleAllowance(env, clientId, Date.now());
+    if (!month.ok) return json({ error: 'monthly allowance used', scope: 'google-month' }, 429, cors);
+    clean.params.set('key', env.GOOGLE_API_KEY);
+    const res = await fetch(`${GOOGLE_HOSTS[action]}?${clean.params.toString()}`);
+    const text = await res.text();
+    return new Response(text, { status: res.status,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', ...stripPrivate(cors) } });
+  }
 
   // ---- HERE ---------------------------------------------------------------
   if (group === 'here') {

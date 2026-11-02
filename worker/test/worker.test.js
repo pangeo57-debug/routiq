@@ -300,3 +300,64 @@ describe('Discover goes through the proxy like autosuggest', () => {
     assert.match(src, /discover:\s+\['q', 'at', 'limit', 'lang'\]/);
   });
 });
+
+describe('Google geocoding: a hidden key, a monthly allowance, nothing cached', () => {
+  const GKEY = 'google-secret-do-not-leak';
+  test('the key goes upstream only, and the answer comes back as is', async () => {
+    const calls = stubFetch({ body: '{"status":"OK","results":[]}' });
+    const res = await W.handle(req('https://api.test/google/geocode?address=Ψαρών%2011&language=el&region=gr'),
+      makeEnv({ GOOGLE_API_KEY: GKEY }), {});
+    const text = await res.text();
+    assert.equal(res.status, 200);
+    assert.ok(!text.includes(GKEY));
+    for (const [, v] of res.headers) assert.ok(!String(v).includes(GKEY));
+    assert.equal(calls.length, 1);
+    const u = new URL(calls[0].url);
+    assert.equal(u.hostname, 'maps.googleapis.com');
+    assert.equal(u.searchParams.get('key'), GKEY);
+    assert.equal(u.searchParams.get('address'), 'Ψαρών 11');
+  });
+
+  test('without a key it says so, and calls nobody', async () => {
+    const calls = stubFetch();
+    const res = await W.handle(req('https://api.test/google/geocode?address=x'), makeEnv(), {});
+    assert.equal(res.status, 503);
+    assert.equal(calls.length, 0);
+  });
+
+  test('a lookup by place_id is allowed, a lookup with nothing is not', async () => {
+    stubFetch({ body: '{"status":"OK","results":[]}' });
+    const env = makeEnv({ GOOGLE_API_KEY: GKEY });
+    assert.equal((await W.handle(req('https://api.test/google/geocode?place_id=ChIJabc'), env, {})).status, 200);
+    assert.equal((await W.handle(req('https://api.test/google/geocode?language=el'), env, {})).status, 400);
+  });
+
+  test('parameters outside the list never reach Google', async () => {
+    const calls = stubFetch({ body: '{}' });
+    await W.handle(req('https://api.test/google/geocode?address=x&key=stolen&callback=evil'), makeEnv({ GOOGLE_API_KEY: GKEY }), {});
+    const u = new URL(calls[0].url);
+    assert.equal(u.searchParams.get('key'), GKEY, 'the caller cannot choose the key');
+    assert.equal(u.searchParams.get('callback'), null);
+  });
+
+  test('each person has a monthly allowance; beyond it Google is not asked', async () => {
+    const env = makeEnv({ GOOGLE_API_KEY: GKEY });
+    const calls = stubFetch({ body: '{}' });
+    for (let i = 0; i < W.LIMITS.googlePerMonth; i++)
+      assert.equal((await W.handle(req('https://api.test/google/geocode?address=x' + i), env, {})).status, 200);
+    const over = await W.handle(req('https://api.test/google/geocode?address=y'), env, {});
+    assert.equal(over.status, 429);
+    assert.equal(calls.length, W.LIMITS.googlePerMonth);
+    // A different person still has theirs.
+    const other = await W.handle(new Request('https://api.test/google/geocode?address=z',
+      { headers: { Origin: ORIGIN, 'CF-Connecting-IP': '9.9.9.9' } }), env, {});
+    assert.equal(other.status, 200);
+  });
+
+  test('Google answers are never written to the cache', async () => {
+    const env = makeEnv({ GOOGLE_API_KEY: GKEY });
+    stubFetch({ body: '{"status":"OK"}' });
+    await W.handle(req('https://api.test/google/geocode?address=Ψαρών%2011'), env, {});
+    for (const k of env.CACHE._store.keys()) assert.ok(!/google|Ψαρών/.test(k), `cached: ${k}`);
+  });
+});

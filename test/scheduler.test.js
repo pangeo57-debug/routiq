@@ -3928,7 +3928,7 @@ describe('the job form finds addresses the way the student form does', () => {
 
   test('the address field has a suggestion list, keyboard handling and a map pin', () => {
     const at = src.indexOf('id="jb-addr"');
-    const chunk = src.slice(at - 200, at + 1400);
+    const chunk = src.slice(at - 200, at + 3200);
     assert.match(chunk, /onAddrInput\(this\.value,'jb-addr-suggest'\)/);
     assert.match(chunk, /onAddrKey\(event,'jb-addr-suggest'\)/);
     assert.match(chunk, /id="jb-addr-suggest"/);
@@ -3978,7 +3978,8 @@ describe('the job form finds addresses the way the student form does', () => {
     app.App._mapPickerCoord = { lat: 38.3, lon: 21.8 };
     app.App._mapPickerAddress = 'Κορίνθου 10, Πάτρα';
     app.App.confirmMapPicker();
-    assert.equal(JSON.stringify(app.App._jobAddrPendingCoord), JSON.stringify({ lat: 38.3, lon: 21.8 }));
+    assert.equal(JSON.stringify(app.App._jobAddrPendingCoord), JSON.stringify({ lat: 38.3, lon: 21.8, src: 'pin' }),
+      'a pin the person placed is marked as theirs');
     assert.equal(app.App._addrPendingCoord, null, 'not the student form\'s slot');
   });
 
@@ -5375,5 +5376,183 @@ describe('finding a place by name or kind, and taking a Google Maps link', () =>
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
     assert.match(src, /App\.findInGoogleMaps\('st-addr','st-name'\)/);
     assert.match(src, /App\.findInGoogleMaps\('jb-addr','jb-name'\)/);
+  });
+});
+
+
+describe('house numbers: Google as the fallback, "I am here", and honest positions', () => {
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings({ homeAddress: 'Ψαρών 11, Αραχωβίτικα', hereApiKey: 'k' }), students: [], jobs: [],
+      coords: { home: { lat: 38.3293, lon: 21.8422 } } });
+    app.Toast.show = () => {};
+    return app;
+  }
+  const flush = () => new Promise(r => setTimeout(r, 0));
+  const inputs = (app, v) => { const els = {}; app.ctx.document.getElementById = (id) => (id in v) ? (els[id] = els[id] || { value: v[id], style: {} }) : { style: {}, innerHTML: '' }; return els; };
+
+  test('Google is asked only when HERE has no house number, with the home town, and goes first', async () => {
+    const app = world();
+    const asked = [];
+    app.App._searchHere = async () => [{ name: 'Ψαρών, Αραχωβίτικα', _matchText: 'Ψαρών Αραχωβίτικα', lat: 38.33, lon: 21.84 }];
+    app.App._geocodeHereForSuggest = async () => [];
+    app.App._discoverHere = async () => [];
+    app.Router.geocodeGoogle = async (q) => { asked.push(q); return { lat: 38.3301, lon: 21.8431, placeId: 'P1', label: 'Ψαρών 11, Αραχωβίτικα 265 04', precise: true }; };
+    let shown = null;
+    app.App._renderSuggestions = (b, list) => { shown = list; };
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.ctx.setTimeout = (f) => f();
+    app.App.onAddrInput('Ψαρών 11', 'addr-suggest');
+    for (let i = 0; i < 6; i++) await flush();
+    assert.deepStrictEqual(asked, ['Ψαρών 11, Αραχωβίτικα']);
+    assert.equal(shown[0]._src, 'google');
+    assert.equal(shown[0].placeId, 'P1');
+  });
+
+  test('a Google answer that is only the street adds nothing', async () => {
+    const app = world();
+    app.App._searchHere = async () => [{ name: 'Ψαρών, Αραχωβίτικα', _matchText: 'Ψαρών Αραχωβίτικα', lat: 38.33, lon: 21.84 }];
+    app.App._geocodeHereForSuggest = async () => [];
+    app.App._discoverHere = async () => [];
+    app.Router.geocodeGoogle = async () => ({ lat: 38.33, lon: 21.84, placeId: 'S', label: 'Ψαρών, Αραχωβίτικα', precise: false });
+    let shown = null;
+    app.App._renderSuggestions = (b, list) => { shown = list; };
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.ctx.setTimeout = (f) => f();
+    app.App.onAddrInput('Ψαρών 11', 'addr-suggest');
+    for (let i = 0; i < 6; i++) await flush();
+    assert.ok(!shown.some(r => r._src === 'google'), 'a street from Google is no better than the street from HERE');
+  });
+
+  test('HERE knowing the number means Google is not asked', async () => {
+    const app = world();
+    let asked = 0;
+    app.App._searchHere = async () => [];
+    app.App._geocodeHereForSuggest = async () => [{ name: 'Ψαρών 11, Αραχωβίτικα', _precise: true, lat: 38.33, lon: 21.84 }];
+    app.App._discoverHere = async () => [];
+    app.Router.geocodeGoogle = async () => { asked++; return null; };
+    app.App._renderSuggestions = () => {};
+    app.ctx.document.getElementById = () => ({ style: {}, innerHTML: '' });
+    app.ctx.setTimeout = (f) => f();
+    app.App.onAddrInput('Ψαρών 11', 'addr-suggest');
+    for (let i = 0; i < 6; i++) await flush();
+    assert.equal(asked, 0);
+  });
+
+  test('picking Google\'s answer keeps the person\'s own words, and the position with its date and place id', () => {
+    const app = world();
+    const els = inputs(app, { 'st-addr': 'Ψαρών 11' });
+    app.App.updateStudentLocationMapMarker = () => {};
+    app.App.selectAddr('Ψαρών 11, Αραχωβίτικα 265 04', 38.3301, 21.8431, 'addr-suggest', { _src: 'google', placeId: 'P1' });
+    assert.equal(els['st-addr'].value, 'Ψαρών 11', 'not Google\'s formatted address');
+    const c = app.App._addrPendingCoord;
+    assert.equal(c.src, 'google'); assert.equal(c.placeId, 'P1'); assert.ok(Date.now() - c.at < 5000);
+  });
+
+  test('a street-only answer for an address with a number is marked as on the street', () => {
+    const app = world();
+    inputs(app, { 'st-addr': 'Ψαρών 11' });
+    app.App.updateStudentLocationMapMarker = () => {};
+    app.App.selectAddr('Ψαρών, Αραχωβίτικα', 38.33, 21.84, 'addr-suggest', { name: 'Ψαρών, Αραχωβίτικα' });
+    assert.equal(app.App._addrPendingCoord.approx, true);
+    app.App.selectAddr('Ψαρών 11, Αραχωβίτικα', 38.33, 21.84, 'addr-suggest', { _precise: true });
+    assert.equal(app.App._addrPendingCoord.approx, undefined, 'an exact answer is not marked');
+  });
+
+  test('"I am here" keeps the typed address, stores the GPS point as the person\'s own, and says how accurate', () => {
+    const app = world();
+    const els = inputs(app, { 'jb-addr': 'Ψαρών 11' });
+    const toasts = [];
+    app.Toast.show = (m) => toasts.push(m);
+    app.ctx.navigator = { geolocation: { getCurrentPosition: (ok) => ok({ coords: { latitude: 38.33012, longitude: 21.84315, accuracy: 8 } }) } };
+    app.App.hereNow('jb-addr');
+    assert.equal(els['jb-addr'].value, 'Ψαρών 11');
+    assert.equal(JSON.stringify(app.App._jobAddrPendingCoord), JSON.stringify({ lat: 38.33012, lon: 21.84315, src: 'gps' }));
+    assert.ok(toasts.some(m => /±8/.test(m)));
+  });
+
+  test('"I am here" with an empty field fills it from the point', async () => {
+    const app = world();
+    const els = inputs(app, { 'jb-addr': '' });
+    app.App._reverseGeocode = async () => 'Ψαρών 11, Αραχωβίτικα, Ρίο, 26504';
+    app.ctx.navigator = { geolocation: { getCurrentPosition: (ok) => ok({ coords: { latitude: 38.33, longitude: 21.84, accuracy: 10 } }) } };
+    app.App.hereNow('jb-addr');
+    await flush(); await flush();
+    assert.equal(els['jb-addr'].value, 'Ψαρών 11, Αραχωβίτικα, Ρίο');
+  });
+
+  test('"I am here" on the home address saves home at once', () => {
+    const app = world();
+    inputs(app, { 'set-home': 'Ψαρών 11' });
+    let saved = null;
+    app.App.commitHomeLocation = (c, text) => { saved = [c, text]; };
+    app.ctx.navigator = { geolocation: { getCurrentPosition: (ok) => ok({ coords: { latitude: 38.33, longitude: 21.84, accuracy: 5 } }) } };
+    app.App.hereNow('set-home');
+    assert.equal(saved[0].src, 'gps'); assert.equal(saved[1], 'Ψαρών 11');
+  });
+
+  test('no permission or no GPS is said plainly, and nothing changes', () => {
+    const app = world();
+    const kinds = [];
+    app.Toast.show = (m, k) => kinds.push([m, k]);
+    inputs(app, { 'jb-addr': 'x' });
+    app.ctx.navigator = { geolocation: { getCurrentPosition: (ok, bad) => bad({ code: 1 }) } };
+    app.App.hereNow('jb-addr');
+    app.ctx.navigator = {};
+    app.App.hereNow('jb-addr');
+    assert.equal(app.App._jobAddrPendingCoord, null);
+    assert.ok(kinds.some(([m, k]) => k === 'error' && /άδεια/.test(m)));
+    assert.ok(kinds.some(([m, k]) => k === 'error' && /δεν δίνει θέση/.test(m)));
+  });
+
+  test('Google positions are renewed after 28 days and deleted at 30 if they cannot be', async () => {
+    const app = world();
+    const day = 86400000, now = Date.UTC(2026, 10, 30);
+    app.state.coords = {
+      fresh: { lat: 1, lon: 1, src: 'google', placeId: 'F', at: now - 10 * day },
+      old:   { lat: 2, lon: 2, src: 'google', placeId: 'O', at: now - 29 * day },
+      dead:  { lat: 3, lon: 3, src: 'google', placeId: 'D', at: now - 31 * day },
+      mine:  { lat: 4, lon: 4, src: 'gps' },
+    };
+    const asked = [];
+    app.Router.googlePlace = async (id) => { asked.push(id); return id === 'O' ? { lat: 2.5, lon: 2.5, placeId: 'O' } : null; };
+    app.Storage.saveCoords = () => {};
+    await app.App.refreshGoogleCoords(now);
+    assert.deepStrictEqual(asked.sort(), ['D', 'O'], 'only those past 28 days are asked');
+    assert.equal(app.state.coords.old.lat, 2.5); assert.equal(app.state.coords.old.at, now);
+    assert.equal(app.state.coords.dead, undefined, 'not renewed by day 30: gone');
+    assert.equal(app.state.coords.fresh.at, now - 10 * day);
+    assert.equal(app.state.coords.mine.lat, 4, 'the person\'s own position is never touched');
+  });
+
+  test('a 29-day-old position that cannot be renewed is kept until day 30', async () => {
+    const app = world();
+    const day = 86400000, now = Date.UTC(2026, 10, 30);
+    app.state.coords = { x: { lat: 2, lon: 2, src: 'google', placeId: 'X', at: now - 29 * day } };
+    app.Router.googlePlace = async () => null;
+    app.Storage.saveCoords = () => {};
+    await app.App.refreshGoogleCoords(now);
+    assert.equal(app.state.coords.x.lat, 2);
+  });
+
+  test('clients and jobs show whether their position is on the street or temporary', () => {
+    const app = world();
+    app.state.coords = { a: { lat: 1, lon: 1, approx: true }, g: { lat: 1, lon: 1, src: 'google', at: 1 }, m: { lat: 1, lon: 1, src: 'gps' } };
+    assert.match(app.App._locationNote('a'), /θέση στην οδό/);
+    assert.match(app.App._locationNote('g'), /προσωρινή θέση/);
+    assert.equal(app.App._locationNote('m'), '');
+    assert.equal(app.App._locationNote('none'), '');
+  });
+
+  test('every address field has the "I am here" button, and the refresh runs before each plan', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    for (const id of ['st-addr', 'jb-addr', 'set-home', 'ob-addr']) assert.ok(src.includes(`App.hereNow('${id}')`), id);
+    assert.match(src.slice(src.indexOf('async runAndNotify()')), /await this\.refreshGoogleCoords\(\)/);
+    assert.match(src.slice(src.indexOf('async _ensureDayCoords(date){')), /^async _ensureDayCoords\(date\)\{\s*try\{ await this\.refreshGoogleCoords\(\); \}/);
+  });
+
+  test('Router._google reads Google\'s answer and calls nothing without the Worker', async () => {
+    const app = world();
+    assert.equal(await app.Router.geocodeGoogle('x'), null, 'API_BASE is empty in this build');
   });
 });

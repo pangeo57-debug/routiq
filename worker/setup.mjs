@@ -142,6 +142,15 @@ async function main() {
   } else {
     warn('no .dev.vars found — run `npx wrangler secret put HERE_API_KEY` yourself');
   }
+  // Optional: a Google key for house numbers HERE does not know.
+  const gm = existsSync(devVars) && readFileSync(devVars, 'utf8').match(/GOOGLE_API_KEY\s*=\s*(.+)/);
+  if (gm && gm[1].trim()) {
+    execFileSync('npx', ['--yes', 'wrangler@latest', 'secret', 'put', 'GOOGLE_API_KEY'],
+      { cwd: here, input: gm[1].trim() + '\n', encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
+    ok('Google key uploaded from .dev.vars');
+  } else {
+    warn('no GOOGLE_API_KEY in .dev.vars — house numbers come from HERE only');
+  }
 
   step(6, 'Deploying');
   const out = wrangler(['deploy'], { quiet: true });
