@@ -5839,6 +5839,17 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
     assert.equal(app.state.scheduleMode, undefined, 'the schedule tab the person had is left as it was');
   });
 
+  test('with "Tomorrow" chosen on home, what is typed goes to tomorrow; a day word still wins', () => {
+    const app = world(MON);
+    app.App.renderHome = () => {};
+    app.state.homeDay = 1;
+    app.ctx.document.getElementById = (id) => id === 'home-qn' ? { value: 'φαρμακείο' } : null;
+    app.App.homeQuickAdd();
+    assert.equal(app.state.jobs[0].date, '2026-11-03');
+    assert.equal(app.App._todayAgenda(app.App.homeDateISO()).length, 1);
+    assert.equal(app.App._todayAgenda().length, 0, 'today is still empty');
+  });
+
   test('a day word still wins: "αύριο τράπεζα" is for tomorrow', () => {
     const app = world(MON);
     app.App.renderHome = () => {};
@@ -5860,14 +5871,15 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
     assert.equal(app.state.jobs[0].done, false);
   });
 
-  test('the home screen shows the next stop, the map and the add box; no statistics cards', () => {
+  test('the home screen shows the next stop, the map, the day tools and the statistics', () => {
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
     const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
     assert.match(home, /class="next-card"/);
     assert.match(home, /id="home-map"/);
     assert.match(home, /id="home-qn"/);
-    const render = src.slice(src.indexOf('  renderHome(){'), src.indexOf('  _todayAgenda(){'));
-    assert.ok(!/stat-card/.test(render), 'the six statistics cards are gone');
+    assert.match(home, /App\.setHomeDay\(1\)/, 'tomorrow is one tap away');
+    assert.match(home, /App\.homePlan\(\)/, 'plan the day from home');
+    assert.match(home, /_homeStatsHtml\(/, 'the statistics are back below the day');
   });
 });
 

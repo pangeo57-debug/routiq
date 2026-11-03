@@ -7660,8 +7660,8 @@ const App = {
 
   // Home shows today or tomorrow: organising tomorrow is the usual evening job.
   homeDateISO(){
-    const d = new Date(); d.setDate(d.getDate() + (state.homeDay === 1 ? 1 : 0));
-    return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+    const today = this.todayISO();
+    return state.homeDay === 1 ? QuickNote._addDays(today, 1) : today;
   },
   setHomeDay(n){ state.homeDay = n === 1 ? 1 : 0; this.renderHome(); },
 
