@@ -145,6 +145,31 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
   #sched-bar::after,#sched-icon{animation:none!important;transition:none!important}
 }
 
+/* THE + BUTTON: opens its choices in an arc */
+.nav-fab-slot{flex:1;display:flex;justify-content:center}
+.nav-fab{width:58px;height:58px;margin-top:-28px;border-radius:50%;border:4px solid var(--bg);background:var(--green);color:#fff;
+  display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;box-shadow:0 6px 18px rgba(5,150,105,.4);
+  transition:transform .22s ease,background .2s;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.nav-fab b{font-size:30px;font-weight:400;line-height:1;transition:transform .22s ease}
+.nav-fab.open{background:var(--text)}
+.nav-fab.open b{transform:rotate(45deg)}
+.nav-fab-label{display:none}
+.fab-menu{position:fixed;inset:0;z-index:99;background:rgba(15,23,42,.38);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .2s}
+.fab-menu.open{opacity:1;pointer-events:auto}
+.fab-item{position:fixed;width:74px;height:74px;margin:-37px 0 0 -37px;border-radius:50%;border:none;background:var(--bg2);color:var(--text);
+  box-shadow:0 8px 22px rgba(0,0,0,.2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;
+  transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0;transition:transform .28s cubic-bezier(.3,1.35,.5,1),opacity .18s;
+  transition-delay:var(--delay,0s)}
+.fab-menu.open .fab-item{transform:translate(0,0) scale(1);opacity:1}
+.fab-item:active{transform:scale(.92)!important}
+.fab-item span{font-size:10.5px;font-weight:700;margin-top:3px;max-width:68px;text-align:center;line-height:1.1;font-family:'DM Sans',sans-serif}
+.fab-item.first{background:var(--green);color:#fff}
+#fab-sheet textarea{width:100%;min-height:96px;font-size:16px;resize:vertical}
+.fab-mic.on{background:var(--red)!important;color:#fff!important;animation:fabpulse 1s infinite}
+@keyframes fabpulse{50%{box-shadow:0 0 0 8px rgba(220,38,38,.2)}}
+@media (prefers-reduced-motion:reduce){.fab-item,.nav-fab,.nav-fab b{transition:none}}
+
 /* NAV */
 nav{
   position:fixed;bottom:0;left:50%;transform:translateX(-50%);
@@ -218,7 +243,12 @@ nav{
 .btn,.chip[onclick],button.chip,.nav-btn,.day-tab,.agenda-check{transition:transform .12s ease, background .15s ease}
 .btn:active,.chip[onclick]:active,button.chip:active,.day-tab:active,.agenda-check:active{transform:scale(.96)}
 .nav-btn.active svg{transform:scale(1.15) translateY(-1px)}
-@media (min-width:1100px){ .toast-container{ bottom:24px; } }
+@media (min-width:1100px){ .toast-container{ bottom:24px; }
+  .nav-fab-slot{flex:none;display:block;margin:4px 0 10px}
+  .nav-fab{width:100%;height:auto;margin:0;border:none;border-radius:12px;padding:12px 14px;justify-content:flex-start;box-shadow:none}
+  .nav-fab b{font-size:22px}
+  .nav-fab-label{display:inline;font-weight:700;font-size:14px}
+}
 
 /* TODAY (home) */
 .hero-compact{padding-top:calc(env(safe-area-inset-top, 0px) + 20px);padding-bottom:12px}
@@ -654,6 +684,9 @@ input[type=time]{color-scheme:light}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
       <span id="nav-clients-label">Μαθητές</span><!-- updated by App.updateNavLabels() -->
     </button>
+    <div class="nav-fab-slot"><button class="nav-fab" id="nav-fab" type="button" aria-label="+"
+      onclick="App.fabClick(event)" onpointerdown="App.fabPress()" onpointerup="App.fabRelease()" onpointerleave="App.fabRelease()"
+      oncontextmenu="return false"><b>＋</b><span class="nav-fab-label" id="nav-fab-label"></span></button></div>
     <button class="nav-btn" data-screen="schedule" onclick="App.nav('schedule')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       <span id="nav-schedule-label">Πρόγραμμα</span>
@@ -667,6 +700,10 @@ input[type=time]{color-scheme:light}
       <span id="nav-settings-label">Ρυθμίσεις</span>
     </button>
   </nav>
+</div>
+<div class="fab-menu" id="fab-menu" onclick="if(event.target===this)App.fabClose()"></div>
+<div class="overlay" id="fab-sheet-overlay" onclick="if(event.target===this)App.fabSheetClose()">
+  <div class="drawer" id="fab-sheet"><div class="drawer-handle"></div><div id="fab-sheet-body"></div></div>
 </div>
 
 <!-- DRAWERS -->
@@ -1103,7 +1140,7 @@ const I18N = {
     schedule_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', schedule_optimize:'Βελτιστοποίηση με χάρτη (OpenStreetMap)',
     schedule_optimized_done:'Βελτιστοποίηση ολοκληρώθηκε', schedule_unplaced_students:'χωρίς πλήρες πρόγραμμα',
     route_title:'Διαδρομή', route_calc:'Υπολογισμός', route_no_route:'Καμία διαδρομή',
-    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', km_incl_return:'μαζί με επιστροφή',
+    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
     route_distance:'απόσταση', route_travel:'Ταξίδι', route_fuel:'Καύσιμα', route_stops:'Σειρά στάσεων',
     route_real:'Πραγματική', route_estimated:'Εκτιμώμενη', route_arrival:'Άφιξη',
     settings_title:'Ρυθμίσεις', settings_profession:'Ειδικότητα', settings_personal:'Προσωπικά', settings_name:'Όνομα',
@@ -1293,7 +1330,7 @@ const I18N = {
     schedule_no_lessons_day:'Nothing scheduled this day', schedule_optimize:'Optimize with map (OpenStreetMap)',
     schedule_optimized_done:'Optimization complete', schedule_unplaced_students:'not fully scheduled',
     route_title:'Route', route_calc:'Calculate', route_no_route:'No route',
-    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', km_incl_return:'incl. drive home',
+    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
     route_distance:'distance', route_travel:'Travel', route_fuel:'Fuel', route_stops:'Stop order',
     route_real:'Real', route_estimated:'Estimated', route_arrival:'Arrival',
     settings_title:'Settings', settings_profession:'Specialty', settings_personal:'Personal', settings_name:'Name',
@@ -1483,7 +1520,7 @@ const I18N = {
     schedule_no_lessons_day:'Aucun cours ce jour', schedule_optimize:'Optimiser avec carte (OpenStreetMap)',
     schedule_optimized_done:'Optimisation terminée', schedule_unplaced_students:"élève(s) sans programme complet",
     route_title:'Itinéraire', route_calc:'Calculer', route_no_route:'Aucun itinéraire',
-    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', km_incl_return:'retour compris',
+    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
     route_distance:'distance', route_travel:'Trajet', route_fuel:'Carburant', route_stops:'Ordre des arrêts',
     route_real:'Réelle', route_estimated:'Estimée', route_arrival:'Arrivée',
     settings_title:'Réglages', settings_profession:'Spécialité', settings_personal:'Personnel', settings_name:'Nom',
@@ -1673,7 +1710,7 @@ const I18N = {
     schedule_no_lessons_day:'Keine Stunden an diesem Tag', schedule_optimize:'Mit Karte optimieren (OpenStreetMap)',
     schedule_optimized_done:'Optimierung abgeschlossen', schedule_unplaced_students:'Schüler ohne vollständigen Plan',
     route_title:'Route', route_calc:'Berechnen', route_no_route:'Keine Route',
-    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', km_incl_return:'inkl. Rückfahrt',
+    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
     route_distance:'Entfernung', route_travel:'Fahrt', route_fuel:'Kraftstoff', route_stops:'Reihenfolge der Stopps',
     route_real:'Tatsächliche', route_estimated:'Geschätzte', route_arrival:'Ankunft',
     settings_title:'Einstellungen', settings_profession:'Fachgebiet', settings_personal:'Persönlich', settings_name:'Name',
@@ -6598,6 +6635,7 @@ const App = {
   },
 
   nav(screen){
+    this.fabClose();
     this.destroyMaps();
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -6722,7 +6760,7 @@ const App = {
     const el = document.getElementById('nav-clients-label');
     if(el) el.textContent = L.clients;
     const map = {
-      'nav-home-label':'nav_home','nav-schedule-label':'nav_schedule','nav-route-label':'nav_route','nav-settings-label':'nav_settings',
+      'nav-home-label':'nav_home','nav-fab-label':'fab_new','nav-schedule-label':'nav_schedule','nav-route-label':'nav_route','nav-settings-label':'nav_settings',
       'drawer-student-title':'drawer_new_prefix','drawer-student-cancel-btn':'btn_cancel','drawer-student-save-btn':'btn_save',
       'drawer-block-title':'block_drawer_title','drawer-block-cancel-btn':'btn_cancel','drawer-block-save-btn':'btn_save',
       'confirm-title':'confirm_title','confirm-cancel-btn':'btn_cancel','confirm-ok-btn':'btn_delete',
@@ -7721,11 +7759,6 @@ const App = {
         </div>
         <button class="btn btn-primary" id="home-plan" style="margin-left:auto;padding:8px 14px" onclick="App.homePlan()" ${toPlan ? '' : 'disabled'}>🧭 ${esc(t('day_plan_btn'))}</button>
       </div>
-      <div style="padding:0 16px 12px;display:flex;gap:8px">
-        <input type="text" id="home-qn" style="flex:1" autocomplete="off" placeholder="${esc(t('home_add_ph'))}"
-          onkeydown="if(event.key==='Enter')App.homeQuickAdd()">
-        <button class="btn btn-primary" style="padding:8px 14px" onclick="App.homeQuickAdd()" aria-label="${esc(t('qn_add'))}">＋</button>
-      </div>
       <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span>${isToday ? t('home_today_label') : esc(t('day_tomorrow'))} · ${esc(this.prettyDate(date))}</span>
         <span style="display:flex;gap:6px">
@@ -7749,7 +7782,7 @@ const App = {
 
   // Add from the home screen: errands go straight in as boxes, no form.
   homeQuickAdd(){
-    const box = document.getElementById('home-qn');
+    const box = document.getElementById('fab-qn');
     const text = box ? box.value.trim() : '';
     if(!text) return;
     const known = [...(state.jobs || []).map(j => j.name), ...(state.students || []).map(s => s.name)];
@@ -7762,6 +7795,142 @@ const App = {
     finally{ state.scheduleMode = mode; }
     if(box) box.value = '';
     this.renderHome();
+  },
+
+  // ── The + button ────────────────────────────────────────────────────────
+  // One tap opens the choices in an arc above it (a list beside it on a
+  // laptop); holding it starts dictation straight away. The screen you are
+  // on decides which choice comes first.
+  _fabItems(){
+    const L = getLabels();
+    const all = {
+      errand: { icon: '🛍️', label: t('fab_errand'), run: () => this.fabSheetOpen() },
+      job:    { icon: '📌', label: t('fab_job'), run: () => { this.nav('schedule'); state.scheduleMode = 'day'; this.renderSchedule(); this.openJobDrawer(null); } },
+      client: { icon: '👤', label: L.client, run: () => { this.nav('students'); this.openStudentDrawer(null); } },
+      voice:  { icon: '🎤', label: t('fab_voice'), run: () => this.fabVoice() },
+      plan:   { icon: '🧭', label: t('fab_plan'), run: () => { this.nav('home'); this.homePlan(); } },
+    };
+    const order = state.currentScreen === 'students' ? ['client', 'errand', 'job', 'voice', 'plan']
+      : state.currentScreen === 'schedule' ? ['job', 'errand', 'client', 'voice', 'plan']
+      : ['errand', 'job', 'client', 'voice', 'plan'];
+    return order.map(k => ({ key: k, ...all[k] }));
+  },
+  fabIsOpen(){ const m = document.getElementById('fab-menu'); return !!(m && m.classList.contains('open')); },
+  fabToggle(){ this.fabIsOpen() ? this.fabClose() : this.fabOpen(); },
+  fabOpen(){
+    const menu = document.getElementById('fab-menu'), fab = document.getElementById('nav-fab');
+    if(!menu || !fab) return;
+    const r = fab.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const items = this._fabItems(), W = window.innerWidth, side = W >= 1100;
+    const n = items.length, R = 132, pad = 44;
+    // The arc is centred on the screen and sits clear above the bar, whatever
+    // slot the button has; the items still fly out of the button itself.
+    const navTop = (document.querySelector('nav')?.getBoundingClientRect().top) || cy;
+    const ax = W / 2, ay = navTop - 52;
+    menu.innerHTML = items.map((it, i) => {
+      let x, y;
+      if(side){ x = r.right + 60; y = r.top + 40 + i * 84; }
+      else {
+        const a = (-162 + i * (144 / (n - 1))) * Math.PI / 180;     // an upward arc, left to right
+        x = Math.min(W - pad, Math.max(pad, ax + R * Math.cos(a)));
+        y = ay + R * Math.sin(a) + R * 0.32;
+      }
+      return `<button class="fab-item${i === 0 ? ' first' : ''}" style="left:${x}px;top:${y}px;--dx:${cx - x}px;--dy:${cy - y}px;--delay:${i * 0.025}s"
+        onclick="App.fabRun('${it.key}')">${it.icon}<span>${esc(it.label)}</span></button>`;
+    }).join('');
+    menu.offsetWidth;                         // lay out the closed state first, so it animates open
+    menu.classList.add('open'); fab.classList.add('open');
+  },
+  fabClose(){
+    document.getElementById('fab-menu')?.classList.remove('open');
+    document.getElementById('nav-fab')?.classList.remove('open');
+  },
+  fabRun(key){
+    const it = this._fabItems().find(x => x.key === key);
+    this.fabClose();
+    if(it) it.run();
+  },
+  fabPress(){
+    clearTimeout(this._fabTimer);
+    this._fabLong = false;
+    this._fabTimer = setTimeout(() => { this._fabLong = true; this.fabClose(); this.fabVoice(); }, 550);
+  },
+  fabRelease(){ clearTimeout(this._fabTimer); },
+  fabClick(e){
+    if(this._fabLong){ this._fabLong = false; if(e) e.preventDefault(); return; }
+    this.fabToggle();
+  },
+
+  // A short sheet to type (or say) what has to be done; it goes in as boxes,
+  // for today or tomorrow, like the line that used to sit on the home screen.
+  fabSheetOpen(){
+    const body = document.getElementById('fab-sheet-body');
+    if(!body) return;
+    const tomorrow = state.homeDay === 1;
+    body.innerHTML = `
+      <div style="padding:4px 20px 20px">
+        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:12px">${esc(t('fab_errand_title'))}</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <button class="chip ${!tomorrow ? 'chip-blue' : 'chip-gray'}" style="border:none;cursor:pointer" onclick="App.fabSetDay(0)">${esc(t('day_today'))}</button>
+          <button class="chip ${tomorrow ? 'chip-blue' : 'chip-gray'}" style="border:none;cursor:pointer" onclick="App.fabSetDay(1)">${esc(t('day_tomorrow'))}</button>
+        </div>
+        <textarea id="fab-qn" autocomplete="off" placeholder="${esc(t('home_add_ph'))}"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();App.fabSheetAdd()}"></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-secondary fab-mic" id="fab-mic" style="flex:0 0 56px;font-size:20px" onclick="App.fabVoice()" aria-label="${esc(t('fab_voice'))}">🎤</button>
+          <button class="btn btn-primary" style="flex:1" onclick="App.fabSheetAdd()">${esc(t('qn_add'))}</button>
+        </div>
+        <p style="font-size:12px;color:var(--text3);margin-top:10px">${esc(t('fab_errand_hint'))}</p>
+      </div>`;
+    document.getElementById('fab-sheet-overlay')?.classList.add('open');
+    setTimeout(() => document.getElementById('fab-qn')?.focus(), 250);
+  },
+  fabSetDay(n){
+    const box = document.getElementById('fab-qn'), text = box ? box.value : '';
+    state.homeDay = n === 1 ? 1 : 0;
+    this.fabSheetOpen();
+    const again = document.getElementById('fab-qn'); if(again) again.value = text;
+  },
+  fabSheetClose(){
+    this._fabStopVoice();
+    document.getElementById('fab-sheet-overlay')?.classList.remove('open');
+  },
+  fabSheetAdd(){
+    const box = document.getElementById('fab-qn');
+    if(!box || !box.value.trim()) return;
+    this._fabStopVoice();
+    this.homeQuickAdd();
+    this.fabSheetClose();
+    if(state.currentScreen !== 'home') this.nav('home');
+  },
+  // Dictation where the browser offers it; otherwise the keyboard's own
+  // microphone does the same job.
+  fabVoice(){
+    if(!document.getElementById('fab-sheet-overlay')?.classList.contains('open')) this.fabSheetOpen();
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const box = document.getElementById('fab-qn'), mic = document.getElementById('fab-mic');
+    if(this._fabRec){ this._fabStopVoice(); return; }
+    if(!SR){ Toast.show(t('fab_voice_none'), 'info', 5000); box?.focus(); return; }
+    try{
+      const rec = new SR();
+      rec.lang = { el: 'el-GR', en: 'en-US', fr: 'fr-FR', de: 'de-DE' }[state.settings.language] || 'el-GR';
+      rec.interimResults = true; rec.continuous = false;
+      const start = box ? box.value.trim() : '';
+      rec.onresult = (e) => {
+        const said = Array.from(e.results).map(x => x[0].transcript).join(' ').trim();
+        if(box) box.value = (start ? start + ', ' : '') + said;
+      };
+      rec.onerror = (e) => { if(e && e.error === 'not-allowed') Toast.show(t('fab_voice_denied'), 'error', 6000); };
+      rec.onend = () => { this._fabRec = null; document.getElementById('fab-mic')?.classList.remove('on'); };
+      rec.start();
+      this._fabRec = rec;
+      mic?.classList.add('on');
+    }catch(e){ this._fabRec = null; Toast.show(t('fab_voice_none'), 'info', 5000); }
+  },
+  _fabStopVoice(){
+    try{ this._fabRec && this._fabRec.stop(); }catch(e){}
+    this._fabRec = null;
+    document.getElementById('fab-mic')?.classList.remove('on');
   },
 
   toggleJobDone(id){

@@ -5829,7 +5829,7 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
     let forms = 0;
     app.App.openJobDrawer = () => { forms++; };
     app.App.renderHome = () => {};
-    app.ctx.document.getElementById = (id) => id === 'home-qn' ? { value: 'φαρμακείο' } : null;
+    app.ctx.document.getElementById = (id) => id === 'fab-qn' ? { value: 'φαρμακείο' } : null;
     app.App.homeQuickAdd();
     assert.equal(forms, 0);
     assert.equal(app.state.jobs.length, 1);
@@ -5843,7 +5843,7 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
     const app = world(MON);
     app.App.renderHome = () => {};
     app.state.homeDay = 1;
-    app.ctx.document.getElementById = (id) => id === 'home-qn' ? { value: 'φαρμακείο' } : null;
+    app.ctx.document.getElementById = (id) => id === 'fab-qn' ? { value: 'φαρμακείο' } : null;
     app.App.homeQuickAdd();
     assert.equal(app.state.jobs[0].date, '2026-11-03');
     assert.equal(app.App._todayAgenda(app.App.homeDateISO()).length, 1);
@@ -5853,7 +5853,7 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
   test('a day word still wins: "αύριο τράπεζα" is for tomorrow', () => {
     const app = world(MON);
     app.App.renderHome = () => {};
-    app.ctx.document.getElementById = (id) => id === 'home-qn' ? { value: 'αύριο τράπεζα και φούρνος' } : null;
+    app.ctx.document.getElementById = (id) => id === 'fab-qn' ? { value: 'αύριο τράπεζα και φούρνος' } : null;
     app.App.homeQuickAdd();
     assert.equal(JSON.stringify(app.state.jobs.map(j => [j.name, j.date])), JSON.stringify([['Τράπεζα', '2026-11-03'], ['Φούρνος', '2026-11-03']]));
   });
@@ -5876,10 +5876,35 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
     const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
     assert.match(home, /class="next-card"/);
     assert.match(home, /id="home-map"/);
-    assert.match(home, /id="home-qn"/);
+    assert.ok(!/id="home-qn"/.test(home), 'adding moved to the + button');
+    assert.match(src, /id="nav-fab"/);
     assert.match(home, /App\.setHomeDay\(1\)/, 'tomorrow is one tap away');
     assert.match(home, /App\.homePlan\(\)/, 'plan the day from home');
     assert.match(home, /_homeStatsHtml\(/, 'the statistics are back below the day');
+  });
+});
+
+describe('the + button: choices in an arc, the screen decides the first', () => {
+  test('home starts with an errand, clients with a client, the schedule with an appointment', () => {
+    const app = loadApp();
+    app.setState({ settings: settings(), students: [], jobs: [], coords: {}, schedule: {} });
+    const first = (screen) => { app.state.currentScreen = screen; return app.App._fabItems().map(x => x.key); };
+    assert.equal(first('home')[0], 'errand');
+    assert.equal(first('students')[0], 'client');
+    assert.equal(first('schedule')[0], 'job');
+    for (const s of ['home', 'students', 'schedule', 'route', 'settings'])
+      assert.equal(JSON.stringify(first(s).slice().sort()), JSON.stringify(['client', 'errand', 'job', 'plan', 'voice']), s + ': always the same five');
+  });
+
+  test('a long press is not also a tap: it opens dictation, not the menu', () => {
+    const app = loadApp();
+    app.setState({ settings: settings(), students: [], jobs: [], coords: {}, schedule: {} });
+    let toggled = 0; app.App.fabToggle = () => { toggled++; };
+    app.App._fabLong = true;
+    app.App.fabClick({ preventDefault() {} });
+    assert.equal(toggled, 0);
+    app.App.fabClick({ preventDefault() {} });
+    assert.equal(toggled, 1, 'the next ordinary tap opens it');
   });
 });
 
