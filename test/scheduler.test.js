@@ -5766,3 +5766,54 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
     assert.ok(!/stat-card/.test(render), 'the six statistics cards are gone');
   });
 });
+
+describe('reminders: the phone calendar, and notifications while the app runs', () => {
+  const MON = '2026-11-02';
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings(), students: [], jobs: [], coords: {}, schedule: {} });
+    app.App.todayISO = () => MON;
+    return app;
+  }
+  test('the calendar file has one event per timed, open item, with a 15-minute alarm', () => {
+    const app = world();
+    const ics = app.App.buildICS([
+      { id: 'j1', title: 'Φαρμακείο, Κορίνθου', address: 'Κορίνθου 5, Πάτρα', time: '09:30', end: '10:00' },
+      { id: 'j2', title: 'Χωρίς ώρα' }, { id: 'j3', title: 'Έγινε', time: '11:00', done: true }], MON, 15);
+    assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 1);
+    assert.match(ics, /DTSTART:20261102T093000\r\n/);
+    assert.match(ics, /DTEND:20261102T100000\r\n/);
+    assert.match(ics, /TRIGGER:-PT15M/);
+    assert.match(ics, /SUMMARY:Φαρμακείο\\, Κορίνθου/, 'commas are escaped');
+    assert.match(ics, /^BEGIN:VCALENDAR\r\n[\s\S]*END:VCALENDAR\r\n$/);
+  });
+  test('an item without an end gets half an hour', () => {
+    const ics = world().App.buildICS([{ id: 'a', title: 'x', time: '23:45' }], MON, 15);
+    assert.match(ics, /DTEND:20261102T001500|DTEND:20261102T241500/);
+  });
+  test('reminders are set only with permission, only for what is still ahead, 15 minutes early', () => {
+    const app = world();
+    app.state.jobs = [
+      { id: 'past', name: 'Past', date: MON, window: { start: '08:00', end: '08:30' } },
+      { id: 'soon', name: 'Soon', date: MON, window: { start: '10:30', end: '11:00' } },
+      { id: 'done', name: 'Done', date: MON, done: true, window: { start: '12:00', end: '12:30' } },
+      { id: 'later', name: 'Later', date: MON, window: { start: '21:00', end: '21:30' } },
+      { id: 'far',  name: 'Far',  date: MON, window: { start: '23:50', end: '23:55' } }];   // more than 12 hours out
+    const timers = [];
+    app.ctx.setTimeout = (f, ms) => { timers.push(ms); return timers.length; };
+    app.ctx.clearTimeout = () => {};
+    app.ctx.Notification = { permission: 'denied' };
+    assert.equal(app.App.scheduleReminders(new Date(2026, 10, 2, 10, 0)), 0);
+    app.ctx.Notification = { permission: 'granted' };
+    const n = app.App.scheduleReminders(new Date(2026, 10, 2, 10, 0));
+    assert.equal(n, 2);
+    assert.equal(timers[0], 15 * 60000, '10:30 - 15 min = 10:15, a quarter of an hour from 10:00');
+    assert.equal(timers[1], (20 * 60 + 45 - 600) * 60000);
+  });
+  test('the home screen offers the calendar, and reminders while permission is still to be asked', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
+    assert.match(home, /App\.exportCalendar\(\)/);
+    assert.match(home, /Notification\.permission === 'default'[\s\S]*App\.enableReminders\(\)/);
+  });
+});
