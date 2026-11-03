@@ -5952,6 +5952,82 @@ describe('every home button does something', () => {
   });
 });
 
+describe('before and after: the same rules, the same distances, only the planning differs', () => {
+  const DATE = '2026-11-02';
+  const dayWorld = (pts, extra = {}) => {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '20:00' } } });
+    const coords = { home: { lat: 38.2466, lon: 21.7346 } };
+    const jobs = pts.map((c, i) => { coords['j' + i] = c; return { id: 'j' + i, name: 'J' + i, date: DATE, address: 'a' + i, durationMin: 20, ...(extra[i] || {}) }; });
+    app.setState({ settings: cfg, coords, students: [], jobs, schedule: {} });
+    return { app, S: app.Scheduler, cfg, coords, jobs };
+  };
+  // East, west, east, west: the typed order zig-zags across town.
+  const zig = [{ lat: 38.25, lon: 21.80 }, { lat: 38.25, lon: 21.67 }, { lat: 38.26, lon: 21.81 }, { lat: 38.26, lon: 21.66 }];
+
+  test('the "before" is the order typed; the plan saves what that zig-zag wastes', async () => {
+    const { S, cfg, coords, jobs } = dayWorld(zig);
+    const p = await S.planDay(jobs, cfg, coords, DATE, { hours: { start: '09:00', end: '20:00' }, errand: true, budgetMs: 800 });
+    assert.equal(p.before.kind, 'typed');
+    assert.equal(p.before.stops, 4); assert.equal(p.after.stops, 4);
+    assert.ok(p.after.km < p.before.km * 0.8, `${p.after.km} vs ${p.before.km}`);
+    // the before is exactly the typed order laid out, measured by the same function
+    const { clients } = S._dayFrame(jobs, 1, cfg, { start: '09:00', end: '20:00' }, true);
+    const laid = S.relayoutDay(clients.map(c => S._lessonSlot(c, c.lessonDuration)), 1, clients, cfg);
+    assert.equal(JSON.stringify(laid.map(x => x.studentId)), '["j0","j1","j2","j3"]');
+    assert.equal(p.before.km.toFixed(6), S.dayKm(laid, 1, cfg).toFixed(6));
+  });
+
+  test('an order that cannot work falls back to the order of time, never a bad one', () => {
+    const { S, cfg, jobs } = dayWorld(zig, { 3: { window: { start: '09:00', end: '09:40' } } });
+    const { clients } = S._dayFrame(jobs, 1, cfg, { start: '09:00', end: '20:00' }, true);
+    const b = S.dayBaseline(clients, cfg, 1);
+    assert.equal(b.kind, 'time');
+    assert.equal(b.slots[0].studentId, 'j3', 'the 9:00 job goes first');
+  });
+
+  test('the plan is never worse than the typed order', async () => {
+    // Typed in a straight line out of town; the "planner" is made to zig-zag.
+    const pts = [{ lat: 38.25, lon: 21.75 }, { lat: 38.25, lon: 21.78 }, { lat: 38.25, lon: 21.81 }, { lat: 38.25, lon: 21.84 }];
+    const { S, cfg, coords, jobs } = dayWorld(pts);
+    const frame = S._dayFrame(jobs, 1, cfg, { start: '09:00', end: '20:00' }, true);
+    const bad = S.relayoutDay([0, 3, 1, 2].map(i => S._lessonSlot(frame.clients[i], 20)), 1, frame.clients, frame.cfg);
+    S.runMultiAttempt = async () => ({ schedule: { 1: bad } });
+    S.alnsOptimize = async () => {}; S.tidyDays = () => {}; S.compactDays = () => {}; S.enforceConstraints = () => {};
+    const p = await S.planDay(jobs, cfg, coords, DATE, { hours: { start: '09:00', end: '20:00' }, errand: true });
+    assert.equal(JSON.stringify(p.stops.map(x => x.job.id)), '["j0","j1","j2","j3"]', 'the typed order is kept');
+    assert.equal(p.after.km.toFixed(6), p.before.km.toFixed(6));
+  });
+
+  test('the saving is before minus after; more stops fitted is said, not turned into km', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({ fuelConsumption: 10, fuelPrice: 2 }), students: [], jobs: [], coords: {}, schedule: {} });
+    const s = app.App.savingsOf({ before: { km: 30, drive: 50, idle: 10, stops: 5 }, after: { km: 20, drive: 35, idle: 0, stops: 5 } });
+    assert.equal(s.km, 10); assert.equal(s.minutes, 25); assert.equal(s.eur.toFixed(2), '2.00'); assert.equal(Math.round(s.pct), 33);
+    const m = app.App.savingsOf({ before: { km: 30, drive: 50, idle: 0, stops: 5 }, after: { km: 40, drive: 60, idle: 0, stops: 6 } });
+    assert.equal(m.same, false); assert.equal(m.more, 1); assert.equal(m.km, 0);
+  });
+
+  test('the week keeps its first plain placement as the "before"', async () => {
+    const app = loadApp({ seed: 2 });
+    const sts = Array.from({ length: 6 }, (_, i) => student('s' + i, { lessonsPerWeek: 1 }));
+    const cfg = settings();
+    app.setState({ coords: cityCoords(sts), students: sts, settings: cfg });
+    const r = await app.Scheduler.runMultiAttempt(sts, cfg, cityCoords(sts), 2, false);
+    assert.ok(r._baseline, 'kept');
+    assert.equal(app.Scheduler.countTotal(r._baseline), 6);
+  });
+
+  test('records stay on the device, one per date, and the latest week', () => {
+    const app = loadApp();
+    app.setState({ settings: settings(), students: [], jobs: [], coords: {}, schedule: {} });
+    let saved = null; app.Storage.saveSavings = (v) => { saved = v; };
+    app.App.recordSavings('day', DATE + '|errands', { before: { km: 1 }, after: { km: 1 } });
+    app.App.recordSavings('week', null, { before: { km: 2 }, after: { km: 1 } });
+    assert.ok(saved.days[DATE + '|errands']); assert.equal(saved.week.before.km, 2);
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {

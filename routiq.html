@@ -1053,7 +1053,7 @@ const QuickNote = {
 // STORAGE
 // ============================================================
 const Storage = {
-  KEYS: { settings:'rp_settings', students:'rp_students', schedule:'rp_schedule', coords:'rp_coords', jobs:'rp_jobs' },
+  KEYS: { settings:'rp_settings', students:'rp_students', schedule:'rp_schedule', coords:'rp_coords', jobs:'rp_jobs', savings:'rp_savings' },
   get(k){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):null }catch(e){return null} },
   // A failed write used to be swallowed silently, which is the worst possible
   // outcome for an app whose data lives ONLY on this device: the user is told
@@ -1082,6 +1082,9 @@ const Storage = {
   saveCoords(c){ this.set(this.KEYS.coords,c) },
   loadJobs(){ const j = this.get(this.KEYS.jobs); return Array.isArray(j) ? j : [] },
   saveJobs(j){ return this.set(this.KEYS.jobs, j) },
+  // Before/after records: { week: {...}, days: { 'YYYY-MM-DD|kind': {...} } }.
+  loadSavings(){ const v = this.get(this.KEYS.savings); return v && typeof v === 'object' ? { week: v.week || null, days: v.days || {} } : { week: null, days: {} }; },
+  saveSavings(v){ return this.set(this.KEYS.savings, v) },
   clear(){ Object.values(this.KEYS).forEach(k=>localStorage.removeItem(k)) }
 };
 
@@ -1140,7 +1143,7 @@ const I18N = {
     schedule_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', schedule_optimize:'Βελτιστοποίηση με χάρτη (OpenStreetMap)',
     schedule_optimized_done:'Βελτιστοποίηση ολοκληρώθηκε', schedule_unplaced_students:'χωρίς πλήρες πρόγραμμα',
     route_title:'Διαδρομή', route_calc:'Υπολογισμός', route_no_route:'Καμία διαδρομή',
-    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
+    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
     route_distance:'απόσταση', route_travel:'Ταξίδι', route_fuel:'Καύσιμα', route_stops:'Σειρά στάσεων',
     route_real:'Πραγματική', route_estimated:'Εκτιμώμενη', route_arrival:'Άφιξη',
     settings_title:'Ρυθμίσεις', settings_profession:'Ειδικότητα', settings_personal:'Προσωπικά', settings_name:'Όνομα',
@@ -1330,7 +1333,7 @@ const I18N = {
     schedule_no_lessons_day:'Nothing scheduled this day', schedule_optimize:'Optimize with map (OpenStreetMap)',
     schedule_optimized_done:'Optimization complete', schedule_unplaced_students:'not fully scheduled',
     route_title:'Route', route_calc:'Calculate', route_no_route:'No route',
-    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
+    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
     route_distance:'distance', route_travel:'Travel', route_fuel:'Fuel', route_stops:'Stop order',
     route_real:'Real', route_estimated:'Estimated', route_arrival:'Arrival',
     settings_title:'Settings', settings_profession:'Specialty', settings_personal:'Personal', settings_name:'Name',
@@ -1520,7 +1523,7 @@ const I18N = {
     schedule_no_lessons_day:'Aucun cours ce jour', schedule_optimize:'Optimiser avec carte (OpenStreetMap)',
     schedule_optimized_done:'Optimisation terminée', schedule_unplaced_students:"élève(s) sans programme complet",
     route_title:'Itinéraire', route_calc:'Calculer', route_no_route:'Aucun itinéraire',
-    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
+    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
     route_distance:'distance', route_travel:'Trajet', route_fuel:'Carburant', route_stops:'Ordre des arrêts',
     route_real:'Réelle', route_estimated:'Estimée', route_arrival:'Arrivée',
     settings_title:'Réglages', settings_profession:'Spécialité', settings_personal:'Personnel', settings_name:'Nom',
@@ -1710,7 +1713,7 @@ const I18N = {
     schedule_no_lessons_day:'Keine Stunden an diesem Tag', schedule_optimize:'Mit Karte optimieren (OpenStreetMap)',
     schedule_optimized_done:'Optimierung abgeschlossen', schedule_unplaced_students:'Schüler ohne vollständigen Plan',
     route_title:'Route', route_calc:'Berechnen', route_no_route:'Keine Route',
-    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
+    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
     route_distance:'Entfernung', route_travel:'Fahrt', route_fuel:'Kraftstoff', route_stops:'Reihenfolge der Stopps',
     route_real:'Tatsächliche', route_estimated:'Geschätzte', route_arrival:'Ankunft',
     settings_title:'Einstellungen', settings_profession:'Fachgebiet', settings_personal:'Persönlich', settings_name:'Name',
@@ -2319,7 +2322,7 @@ const Scheduler = {
     // actually fits better with everyone else naturally wins via placed/km below.
     const hasAutoMerge = students.some(s=>s.mergeMode==='auto');
 
-    let best=null;
+    let best=null, firstPlain=null;
     for(let i=0;i<attempts;i++){
       // Each attempt's backtracking search runs fully synchronously (it's a
       // real recursive search, not easily interruptible mid-search) — but
@@ -2335,6 +2338,9 @@ const Scheduler = {
         order = order.map(s => s.mergeMode==='auto' ? {...s, forceMerge:mergeOn} : s);
       }
       const result = this.scheduleAll(order, settings, backtrackMs, repairMs);
+      // The "before" of the week: the first plain placement, before any
+      // reordering — what simple scheduling without optimisation gives.
+      if(i === 0) firstPlain = JSON.parse(JSON.stringify(result.schedule));
       if(hasRealCoords) this.geoOptimize(result.schedule, order, settings, coords);
       const placed = this.countTotal(result.schedule);
       const km = totalKm(result.schedule);
@@ -2351,6 +2357,7 @@ const Scheduler = {
       return { schedule: empty, unplaced: [], success: true, _attempts: 0 };
     }
     best.result._attempts = attempts;
+    best.result._baseline = firstPlain;
     return best.result;
   },
 
@@ -3705,10 +3712,18 @@ const Scheduler = {
     this.tidyDays(r.schedule, clients, cfg);
     this.compactDays(r.schedule, clients, cfg);
 
-    const placed = (r.schedule[day] || []).slice()
+    let placed = (r.schedule[day] || []).slice()
       .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+    // The person's own order is the "before". The plan is never allowed to be
+    // worse than it: if their order fits as many and costs less, it is the plan.
+    const base = this.dayBaseline(clients, cfg, day);
+    if(base && (base.slots.length > placed.length ||
+        (base.slots.length === placed.length && this.dayCost(base.slots, day, cfg) < this.dayCost(placed, day, cfg) - 1e-9)))
+      placed = base.slots;
     const summary = this._daySummary(placed, list, clients, cfg, dh, day, dateISO, unlocated);
     summary.errand = !!o.errand;
+    summary.before = base ? { kind: base.kind, km: base.km, drive: base.drive, idle: base.idle, stops: base.stops } : null;
+    summary.after = this.measureDay(placed, day, cfg);
     return summary;
   },
 
@@ -3777,6 +3792,8 @@ const Scheduler = {
     if(next.issues.length) return { ok: false, reason: 'illegal', issues: next.issues };
     next.timesFrom = plan.timesFrom;
     next.errand = !!plan.errand;
+    next.before = plan.before || null;
+    next.after = this.measureDay(laid, plan.day, cfg);
     return { ok: true, plan: next };
   },
 
@@ -4331,6 +4348,54 @@ const Scheduler = {
   //
   // A quarter less waiting for 1% more driving; no week worse; 45 adds nothing.
   IDLE_KM_PER_MIN: 0.5,
+
+  // ── Before / after ──────────────────────────────────────────────────────
+  // The two sides are always measured by the same functions, on the same
+  // travel data and the same rules, so the difference is the planning alone.
+  dayDriveMin(slots, day, settings){
+    if(!slots.length) return 0;
+    const homeAddr = (settings && settings.homeAddress) || '';
+    let min = 0, prevId = 'home', prevAddr = homeAddr, prevSl = null;
+    let leaveAt = this.toMin(slots[0].start);
+    for(const s of slots){
+      const same = prevSl && (prevSl.studentId === s.studentId || (prevSl.groupCode && prevSl.groupCode === s.groupCode));
+      if(!same) min += this.travelEstMin(prevId, prevAddr, s.studentId, s.address, day, leaveAt);
+      prevId = s.studentId; prevAddr = s.address; prevSl = s; leaveAt = this.toMin(s.end);
+    }
+    return min + this.travelEstMin(prevId, prevAddr, 'home', homeAddr, day, leaveAt);
+  },
+  measureDay(slots, day, settings){
+    const s = (slots || []).slice().sort((a, b) => this.toMin(a.start) - this.toMin(b.start));
+    return { km: this.dayKm(s, day, settings), drive: this.dayDriveMin(s, day, settings),
+             idle: this.dayIdle(s, day, settings), stops: s.length };
+  },
+  measureWeek(schedule, settings){
+    const out = { km: 0, drive: 0, idle: 0, stops: 0 };
+    for(const d of (settings.workDays || [])){
+      const m = this.measureDay((schedule && schedule[d]) || [], d, settings);
+      out.km += m.km; out.drive += m.drive; out.idle += m.idle;
+    }
+    out.stops = this.countTotal(schedule || {});
+    return out;
+  },
+  // The day as the person would have driven it: in the order they wrote the
+  // jobs down. If that order cannot work (a fixed time ends up too late), the
+  // next most natural order: by the time each one has to be done. Never a
+  // random or a deliberately bad order — that would only inflate the saving.
+  dayBaseline(clients, cfg, day){
+    if(!clients.length) return null;
+    const lay = (cs) => this.relayoutDay(cs.map(c => this._lessonSlot(c, c.lessonDuration)), day, clients, cfg);
+    let kind = 'typed', laid = lay(clients);
+    if(!laid){
+      // By when each one opens, and among equals by when it closes: a job that
+      // must be done by 9:40 goes before one that can wait all day.
+      const win = (c) => { const w = c.availability && c.availability[day] && c.availability[day].windows; return w && w[0] ? w[0] : [0, 1440]; };
+      kind = 'time'; laid = lay(clients.slice().sort((a, b) => (win(a)[0] - win(b)[0]) || (win(a)[1] - win(b)[1])));
+    }
+    if(!laid) return null;
+    return { kind, slots: laid, ...this.measureDay(laid, day, cfg) };
+  },
+
   dayCost(slots, day, settings){
     return this.dayKm(slots, day, settings)
          + this.dayIdle(slots, day, settings) * this.IDLE_KM_PER_MIN;
@@ -6552,6 +6617,7 @@ const App = {
       state.schedule = Storage.loadSchedule();
       state.coords   = Storage.loadCoords();
     state.jobs = Storage.loadJobs();
+    state.savings = Storage.loadSavings();
     } catch(e) {
       localStorage.clear();
       state.settings = defaultSettings();
@@ -7560,6 +7626,13 @@ const App = {
       }
       state.scheduleKmBefore = km;
       state._keptPreviousSchedule = keptPrevious;
+      try{
+        if(r && r._baseline){
+          const b = Scheduler.measureWeek(r._baseline, state.settings), a = Scheduler.measureWeek(state.schedule, state.settings);
+          b.km = await this._kmOf(r._baseline); a.km = km;       // the km the person reads, both sides
+          this.recordSavings('week', null, { kind: 'plain', before: b, after: a });
+        }
+      }catch(e){ console.warn('before/after failed', e); }
       Scheduler.flexSync(state.schedule, state.students);
       if(flexBackup.length) Storage.saveStudents(state.students);
 
@@ -7823,6 +7896,47 @@ const App = {
     finally{ state.scheduleMode = mode; }
     if(box) box.value = '';
     this.renderHome();
+  },
+
+  // ── Before / after ──────────────────────────────────────────────────────
+  // Kept on the device: the latest week, and one record per planned date.
+  recordSavings(scope, key, rec){
+    if(!state.savings) state.savings = { week: null, days: {} };
+    const r = { ...rec, at: new Date().toISOString() };
+    if(scope === 'week') state.savings.week = r;
+    else state.savings.days[key] = r;
+    Storage.saveSavings(state.savings);
+    return r;
+  },
+  // Saving = before minus after. Kilometres only when both sides have the same
+  // stops: fitting more in is said separately, never turned into kilometres.
+  savingsOf(rec){
+    if(!rec || !rec.before || !rec.after) return null;
+    const b = rec.before, a = rec.after, fuel = state.settings.fuelConsumption || 7;
+    const same = b.stops === a.stops;
+    const km = same ? b.km - a.km : 0, drive = same ? b.drive - a.drive : 0, idle = same ? b.idle - a.idle : 0;
+    return { same, more: a.stops - b.stops, km, drive, idle, minutes: drive + idle,
+             eur: km / 100 * fuel * this.fuelPrice(), pct: same && b.km > 0 ? km / b.km * 100 : 0 };
+  },
+  _savingsCardHtml(rec, scope){
+    const s = this.savingsOf(rec);
+    if(!s) return '';
+    const b = rec.before, a = rec.after;
+    const label = scope === 'week' ? t('ba_before_week') : (rec.kind === 'time' ? t('ba_before_time') : t('ba_before_typed'));
+    const row = (name, m, strong) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;${strong ? 'font-weight:700' : 'color:var(--text2)'}">
+        <span>${esc(name)}</span><span style="white-space:nowrap">${m.km.toFixed(1)} km · ${Math.round(m.drive)}′ ${esc(t('ba_drive'))}${m.idle >= 1 ? ' · ' + Math.round(m.idle) + '′ ' + esc(t('ba_wait')) : ''}</span></div>`;
+    let verdict;
+    if(!s.same && s.more > 0) verdict = tf('ba_more', { n: s.more });
+    else if(s.km < 0.05 && s.minutes < 1) verdict = t('ba_already_good');
+    else if(s.km < -0.05) verdict = tf('ba_trade', { min: Math.round(s.minutes), km: (-s.km).toFixed(1) });
+    else verdict = tf('ba_saved', { km: Math.max(0, s.km).toFixed(1), min: Math.max(0, Math.round(s.minutes)), eur: Math.max(0, s.eur).toFixed(2), pct: Math.max(0, Math.round(s.pct)) });
+    return `
+      <div class="ba-card" style="margin:0 16px 12px;padding:12px 14px;border-radius:14px;background:var(--bg2);border:1px solid var(--border);font-size:13px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">${esc(t('ba_title'))}</div>
+        ${row(label, b, false)}
+        ${row(t('ba_after'), a, true)}
+        <div style="margin-top:6px;padding-top:8px;border-top:1px solid var(--border);color:var(--green);font-weight:700">${esc(verdict)}</div>
+      </div>`;
   },
 
   // ── The + button ────────────────────────────────────────────────────────
@@ -9750,6 +9864,7 @@ const App = {
             <div class="stat-label">${esc(t('day_driving'))} · ${esc(t('km_incl_return'))}</div></div>
         </div>
         ${plan.stops.length ? `<div style="margin:-6px 16px 12px;font-size:11px;color:var(--text3)">${esc(t('day_map_note'))}</div>` : ''}
+        ${plan.before && plan.after ? this._savingsCardHtml({ kind: plan.before.kind, before: plan.before, after: plan.after }, 'day') : ''}
         ${plan.timesFrom === 'estimate' ? `
           <div style="margin:0 16px 12px;font-size:12px;color:#d97706">⚠ ${esc(t('day_times_estimate'))}</div>` : ''}
         ${plan.hours && plan.hours.assumed ? `
@@ -10154,6 +10269,8 @@ const App = {
       const plan = await Scheduler.planDay(this.jobsFor(date), state.settings, state.coords, date,
         { hours: this.dateHoursFor(date), errand });
       if(plan){ plan.timesFrom = source; plan.errand = errand; }
+      if(plan && plan.before && plan.after)
+        this.recordSavings('day', date + '|' + (errand ? 'errands' : 'day'), { kind: plan.before.kind, before: plan.before, after: plan.after });
       state.dayPlan = plan;
       if(render) this.renderDayPlanner();
       if(plan.unplanned.length) Toast.show(tf('day_unplanned',{n:plan.unplanned.length}),'error',7000);
@@ -10375,6 +10492,7 @@ const App = {
           <div class="progress-fill" style="width:${total?placed/total*100:0}%"></div>
         </div>
       </div>
+      ${state.savings && state.savings.week ? this._savingsCardHtml(state.savings.week, 'week') : ''}
       ${this.renderUnplaced(result.unplaced)}
       <div class="day-tabs" id="day-tabs">
         ${state.settings.workDays.map(d=>`
