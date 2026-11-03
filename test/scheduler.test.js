@@ -5908,6 +5908,50 @@ describe('the + button: choices in an arc, the screen decides the first', () => 
   });
 });
 
+describe('every home button does something', () => {
+  const MON = '2026-11-02';
+  function world() {
+    const app = loadApp();
+    app.setState({ settings: settings(), students: [student('c0')], jobs: [], coords: {}, schedule: {} });
+    app.App.todayISO = () => MON;
+    const calls = [];
+    for (const f of ['nav', 'openStudentDrawer', 'openJobDrawer', 'renderSchedule', 'switchDay', 'planTheDay', 'renderHome'])
+      app.App[f] = (...a) => { calls.push([f, ...a]); return f === 'planTheDay' ? Promise.resolve() : undefined; };
+    return { app, calls };
+  }
+  test('a lesson opens its client; an errand opens its form on the errands day', () => {
+    const { app, calls } = world();
+    app.App.homeOpen('lesson', 'c0');
+    assert.ok(calls.some(c => c[0] === 'openStudentDrawer' && c[1] === 'c0'));
+    app.state.jobs = [{ id: 'j1', name: 'Φαρμακείο', date: MON, kind: 'errand' }];
+    app.App.homeOpen('errand', 'j1');
+    assert.equal(app.state.scheduleMode, 'errands'); assert.equal(app.state.planDate, MON);
+    assert.ok(calls.some(c => c[0] === 'openJobDrawer' && c[1] === 'j1'));
+  });
+  test('plan: errands first, else the work jobs, else a message instead of nothing', async () => {
+    const { app, calls } = world();
+    const shown = []; app.Toast.show = (m) => shown.push(m);
+    await app.App.homePlan();
+    assert.equal(calls.filter(c => c[0] === 'planTheDay').length, 0);
+    assert.equal(shown.length, 1, 'says how to add');
+    app.state.jobs = [{ id: 'w1', name: 'Λέβητας', date: MON }];
+    let modeSeen = null; app.App.planTheDay = async () => { modeSeen = app.state.scheduleMode; };
+    await app.App.homePlan();
+    assert.equal(modeSeen, 'day');
+    app.state.jobs.push({ id: 'e1', name: 'Τράπεζα', date: MON, kind: 'errand' });
+    await app.App.homePlan();
+    assert.equal(modeSeen, 'errands');
+    assert.equal(app.state.scheduleMode, undefined, 'the schedule tab is left as it was');
+  });
+  test('the statistics open where they come from', () => {
+    const { app, calls } = world();
+    app.App.homeGo('students'); app.App.homeGo('route'); app.App.homeGo('today');
+    const navs = calls.filter(c => c[0] === 'nav').map(c => c[1]);
+    assert.equal(JSON.stringify(navs), JSON.stringify(['students', 'route', 'schedule']));
+    assert.ok(calls.some(c => c[0] === 'switchDay' && c[1] === 1), 'today: Monday');
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {
