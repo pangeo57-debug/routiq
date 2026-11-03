@@ -2076,10 +2076,13 @@ describe('a long gap survives only if nobody can go in it', () => {
       'a shared session cannot be moved by considering one occupant');
   });
 
-  test('refuses a move that leaves a bigger hole behind than it fills', () => {
+  test('refuses a move whose saving in waiting does not pay for its driving', () => {
     const app = loadApp();
     const { cfg, sts, sched } = badTradeWeek(app);
     const S = app.Scheduler;
+    // Priced at 15 km an hour of waiting, this trade (90' closed, 70' opened,
+    // ~7 km more) loses. At today's 30 km it wins: see the next test.
+    S.IDLE_KM_PER_MIN = 0.25;
     // The premise: it IS legal, so the refusal is about price and not rules.
     const legal = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('17:30')));
     assert.ok(legal.some(c => c.studentId === 'mover'), 'the fixture must make the move legal');
@@ -2088,6 +2091,19 @@ describe('a long gap survives only if nobody can go in it', () => {
       'a tidier Monday is not worth a Tuesday with a hole nobody can close');
     assert.equal(JSON.stringify(sched), before);
   });
+  test('at 30 km an hour of waiting, a trade that lowers the week\'s waiting is taken', () => {
+    // The owner's priority: closed idle time is worth a few more kilometres.
+    const app = loadApp();
+    const { cfg, sts, sched } = badTradeWeek(app);
+    const S = app.Scheduler;
+    assert.equal(S.IDLE_KM_PER_MIN, 0.5);
+    const idle = (sch) => cfg.workDays.reduce((a, d) => a + S.dayIdle(sch[d], d, cfg), 0);
+    const before = idle(sched);
+    const r = S.fillGaps(sched, sts, cfg);
+    assert.equal(r.moved.length, 1);
+    assert.ok(idle(sched) < before, `waiting ${idle(sched)} must be below ${before}`);
+  });
+
 
   test('a detour of several kilometres is now worth it to close a long gap', () => {
     // 'mover' can fill Monday's hole (18:20 is when 'late' starts) but lives a
@@ -3006,6 +3022,7 @@ describe('a change is judged, and left, gathered up', () => {
     const app = loadApp();
     const { cfg, sts, sched } = badTradeWeek(app);
     const S = app.Scheduler;
+    S.IDLE_KM_PER_MIN = 0.25;          // the price at which this candidate loses
     const legal = Array.from(S.gapCandidates(sched, sts, cfg, 1, S.toMin('16:00'), S.toMin('17:30')));
     assert.ok(legal.some(c => c.studentId === 'mover'), 'the fixture must make the move legal');
     const before = JSON.stringify(sched);

@@ -4189,7 +4189,18 @@ const Scheduler = {
   // Beyond it nothing further is gained and the kilometres keep rising: the
   // gaps that remain are ones somebody's availability forces, which no price
   // can close. Same lessons placed and no violations at every setting.
-  IDLE_KM_PER_MIN: 0.25,
+  //
+  // Raised to thirty at the owner's request — closing idle time matters more
+  // to them than a few kilometres. With the passes added since (relocation,
+  // refineWeek), 15 paired weeks of 7-13 clients measured:
+  //
+  //    km/hour   waiting   gaps 30min+   driving    lessons
+  //      15       121 min      1         1147.0 km    214
+  //      30        89          1         1158.6       214   <- here
+  //      45        89          1         1158.6       214
+  //
+  // A quarter less waiting for 1% more driving; no week worse; 45 adds nothing.
+  IDLE_KM_PER_MIN: 0.5,
   dayCost(slots, day, settings){
     return this.dayKm(slots, day, settings)
          + this.dayIdle(slots, day, settings) * this.IDLE_KM_PER_MIN;
