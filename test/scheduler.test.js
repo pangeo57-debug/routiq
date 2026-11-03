@@ -46,6 +46,7 @@ async function runPipeline(app, students, cfg, coords, { budget = 800, refine = 
   if (f.moved.length) S.compactDays(r.schedule, students, cfg);
   S.relocateForTime(r.schedule, students, cfg);
   if (S.refineWeek) await S.refineWeek(r.schedule, students, cfg, refine);
+  if (S.flexFit) await S.flexFit(r.schedule, students, cfg, refine);
   return r.schedule;
 }
 
@@ -5655,6 +5656,92 @@ describe('one student, lessons of different lengths in a week', () => {
     app.setState({ students: [st], settings: cfg, coords: cityCoords([st]) });
     const errs = auditSchedule(app.Scheduler, { 1: [slot('mix', '15:00', '16:00')] }, [st], cfg);
     assert.ok(errs.some(e => /60-minute lesson/.test(e)), errs.join('; '));
+  });
+});
+
+
+describe('flexible weekly time: "4 hours" splits into whatever fits', () => {
+  const lensOf = (S, sch, id) => Object.values(sch).flat().filter(x => x.studentId === id)
+    .map(x => S.toMin(x.end) - S.toMin(x.start)).sort((a, b) => b - a);
+
+  test('starts from the longest pieces, a short scrap joins the last one', () => {
+    const S = loadApp().Scheduler;
+    const st = student('f', { lessonDuration: 120, flexMinutes: 240, minBlock: 60 });
+    S.flexStart(st);
+    assert.equal(JSON.stringify(st.durations), '[120,120]');
+    assert.equal(st.lessonsPerWeek, 2);
+    const odd = student('g', { lessonDuration: 120, flexMinutes: 270, minBlock: 60 });
+    S.flexStart(odd);
+    assert.equal(JSON.stringify(odd.durations), '[120,150]', '30 left over is shorter than the shortest piece');
+    assert.equal(S.flexStart(student('h', { lessonDuration: 60 })), false, 'not flexible: untouched');
+    const form = student('m', { lessonDuration: 60, flexMinutes: 240, minBlock: 60, maxBlock: 120 });
+    S.flexStart(form);
+    assert.equal(JSON.stringify(form.durations), '[120,120]', 'the longest piece, not the one-lesson length, sets the start');
+  });
+
+  test('splits only what is missing, never below the shortest piece', () => {
+    const S = loadApp().Scheduler;
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5] });
+    const st = student('f', { days: [1, 2, 3, 4, 5], lessonDuration: 120, flexMinutes: 240, minBlock: 60 });
+    S.flexStart(st);
+    const sch = { 1: [slot('f', '15:00', '17:00')] };
+    assert.equal(JSON.stringify(S.flexSplit(sch, [st], cfg)), '["f"]');
+    assert.equal(JSON.stringify(st.durations.slice().sort((a, b) => b - a)), '[120,60,60]');
+    S.flexSplit({ 1: [slot('f', '15:00', '17:00')] }, [st], cfg);
+    assert.equal(JSON.stringify(st.durations.slice().sort((a, b) => b - a)), '[120,60,60]', 'a 60 cannot split into two of at least 60');
+    const placedAll = { 1: [slot('f', '15:00', '17:00')], 2: [slot('f', '15:00', '16:00')], 3: [slot('f', '15:00', '16:00')] };
+    assert.equal(S.flexSplit(placedAll, [st], cfg).length, 0, 'nothing missing, nothing split');
+  });
+
+  test('no more pieces than days she is available', () => {
+    const S = loadApp().Scheduler;
+    const st = student('f', { days: [1, 2], lessonDuration: 120, flexMinutes: 240, minBlock: 60 });
+    S.flexStart(st);
+    assert.equal(S.flexSplit({}, [st], settings({ workDays: [1, 2, 3, 4, 5] })).length, 0);
+  });
+
+  test('only one-hour windows on four days: the pipeline gives four one-hour lessons', async () => {
+    for (const seed of [1, 2, 3]) {
+      const app = loadApp({ seed });
+      const S = app.Scheduler;
+      const f = student('f', { days: [1, 2, 3, 4], window: { start: '17:00', end: '18:00' }, lessonDuration: 120, flexMinutes: 240, minBlock: 60 });
+      S.flexStart(f);
+      const sts = [f, ...Array.from({ length: 6 }, (_, i) => student('s' + i, { days: [1, 2, 3, 4], lessonsPerWeek: 1 }))];
+      const cfg = settings({ workDays: [1, 2, 3, 4] });
+      const sch = await runPipeline(app, sts, cfg, cityCoords(sts), { refine: 600 });
+      assert.equal(JSON.stringify(lensOf(S, sch, 'f')), '[60,60,60,60]', `seed ${seed}`);
+      assert.equal(auditSchedule(S, sch, sts, cfg).length, 0, `seed ${seed}: ${auditSchedule(S, sch, sts, cfg)}`);
+    }
+  });
+
+  test('room for two hours on one day and one-hour windows elsewhere: 2+1+1', async () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const f = student('f', { days: [1, 2, 3], lessonDuration: 120, flexMinutes: 240, minBlock: 60,
+      availability: { 1: { on: true, start: '15:00', end: '17:00' }, 2: { on: true, start: '17:00', end: '18:00' }, 3: { on: true, start: '17:00', end: '18:00' } } });
+    S.flexStart(f);
+    const cfg = settings({ workDays: [1, 2, 3] });
+    const sch = await runPipeline(app, [f], cfg, cityCoords([f]), { refine: 400 });
+    assert.equal(JSON.stringify(lensOf(S, sch, 'f')), '[120,60,60]');
+  });
+
+  test('flexSync makes the pieces match the schedule that was kept', () => {
+    const S = loadApp().Scheduler;
+    const st = student('f', { lessonDuration: 120, flexMinutes: 240, minBlock: 60 });
+    S.flexStart(st);
+    S.flexSync({ 1: [slot('f', '15:00', '16:00')] }, [st]);
+    assert.equal(JSON.stringify(st.durations), '[60,120,60]', '60 placed, 180 left as 120 + 60');
+    assert.equal(st.lessonsPerWeek, 3);
+  });
+
+  test('a student without flexible time is untouched by the whole thing', async () => {
+    const app = loadApp();
+    const S = app.Scheduler;
+    const st = student('p', { days: [1, 2], lessonDuration: 120, lessonsPerWeek: 2 });
+    const before = JSON.stringify(st);
+    assert.equal(S.flexSplit({}, [st], settings()).length, 0);
+    S.flexSync({}, [st]);
+    assert.equal(JSON.stringify(st), before);
   });
 });
 
