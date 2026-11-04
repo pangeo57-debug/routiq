@@ -61,11 +61,15 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <style>
 :root {
-  --green: #059669;
-  --blue: #7c3aed;
+  /* Light = palette 5 (emerald), dark = palette 4 (graphite + orange).
+     --green is the accent everywhere (the name predates the dark palette);
+     --on-accent is the text drawn on it. */
+  --green: #059669; --accent-rgb: 5,150,105; --on-accent: #ffffff;
+  --blue: #7c3aed; --accent2-rgb: 124,58,237;
+  --accent3: #f59e0b; --grad2: #0ea5e9;
   --bg: #f7f6f3;
   --bg2: #ffffff;
-  --bg3: #f1f0ed;
+  --bg3: #f0efea;
   --bg4: #e8e7e3;
   --border: #e2e0da;
   --text: #1c1c2e;
@@ -88,17 +92,21 @@
    over the OS preference since it's more specific / comes later). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --green: #10b981; --blue: #a78bfa;
-    --bg: #14141c; --bg2: #1c1c28; --bg3: #23232f; --bg4: #2c2c3a;
-    --border: #34344350; --text: #f0f0f5; --text2: #a3a3b8; --text3: #75758c;
-    --red: #f87171; --orange: #fbbf24; --purple: #a78bfa; --yellow: #facc15;
+    --green: #ff7a1a; --accent-rgb: 255,122,26; --on-accent: #101010;
+    --blue: #3b82f6; --accent2-rgb: 59,130,246;
+    --accent3: #22c55e; --grad2: #e8590c;
+    --bg: #101010; --bg2: #1b1b1b; --bg3: #262626; --bg4: #303030;
+    --border: #2e2e2e; --text: #f5f5f5; --text2: #a3a3a3; --text3: #737373;
+    --red: #f87171; --orange: #fbbf24; --purple: #3b82f6; --yellow: #facc15;
   }
 }
 :root[data-theme="dark"] {
-  --green: #10b981; --blue: #a78bfa;
-  --bg: #14141c; --bg2: #1c1c28; --bg3: #23232f; --bg4: #2c2c3a;
-  --border: #34344350; --text: #f0f0f5; --text2: #a3a3b8; --text3: #75758c;
-  --red: #f87171; --orange: #fbbf24; --purple: #a78bfa; --yellow: #facc15;
+  --green: #ff7a1a; --accent-rgb: 255,122,26; --on-accent: #101010;
+  --blue: #3b82f6; --accent2-rgb: 59,130,246;
+  --accent3: #22c55e; --grad2: #e8590c;
+  --bg: #101010; --bg2: #1b1b1b; --bg3: #262626; --bg4: #303030;
+  --border: #2e2e2e; --text: #f5f5f5; --text2: #a3a3a3; --text3: #737373;
+  --red: #f87171; --orange: #fbbf24; --purple: #3b82f6; --yellow: #facc15;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;font-size:16px;-webkit-tap-highlight-color:transparent}
@@ -133,8 +141,8 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
   width:9px;height:9px;border-radius:50%;background:#0891b2;
   box-shadow:0 0 8px 2px rgba(8,145,178,.55);
 }
-#sched-overlay.done #sched-bar{background:linear-gradient(90deg,#059669,#10b981)}
-#sched-overlay.done #sched-bar::after{background:#10b981;box-shadow:0 0 8px 2px rgba(16,185,129,.55)}
+#sched-overlay.done #sched-bar{background:linear-gradient(90deg,var(--green),var(--grad2))}
+#sched-overlay.done #sched-bar::after{background:var(--green);box-shadow:0 0 8px 2px rgba(var(--accent-rgb),.55)}
 /* Tabular figures: without them the percentage changes width as digits change
    and the whole row twitches once a second. */
 #sched-pct{font-variant-numeric:tabular-nums}
@@ -147,8 +155,8 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
 
 /* THE + BUTTON: opens its choices in an arc */
 .nav-fab-slot{flex:1;display:flex;justify-content:center}
-.nav-fab{width:58px;height:58px;margin-top:-28px;border-radius:50%;border:4px solid var(--bg);background:var(--green);color:#fff;
-  display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;box-shadow:0 6px 18px rgba(5,150,105,.4);
+.nav-fab{width:58px;height:58px;margin-top:-28px;border-radius:50%;border:4px solid var(--bg);background:var(--green);color:var(--on-accent);
+  display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;box-shadow:0 6px 18px rgba(var(--accent-rgb),.4);
   transition:transform .22s ease,background .2s;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 .nav-fab b{font-size:30px;font-weight:400;line-height:1;transition:transform .22s ease}
 .nav-fab.open{background:var(--text)}
@@ -164,11 +172,15 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
 .fab-menu.open .fab-item{transform:translate(0,0) scale(1);opacity:1}
 .fab-item:active{transform:scale(.92)!important}
 .fab-item span{font-size:10.5px;font-weight:700;margin-top:3px;max-width:68px;text-align:center;line-height:1.1;font-family:'DM Sans',sans-serif}
-.fab-item.first{background:var(--green);color:#fff}
+.fab-item.first{background:var(--green);color:var(--on-accent)}
 #fab-sheet textarea{width:100%;min-height:96px;font-size:16px;resize:vertical}
 .fab-mic.on{background:var(--red)!important;color:#fff!important;animation:fabpulse 1s infinite}
 @keyframes fabpulse{50%{box-shadow:0 0 0 8px rgba(220,38,38,.2)}}
 @media (prefers-reduced-motion:reduce){.fab-item,.nav-fab,.nav-fab b{transition:none}}
+
+/* A map is its own stacking context, so its panes (z-index 400) never paint
+   over the bottom bar or the sheets. */
+.leaflet-container{position:relative;z-index:0;isolation:isolate}
 
 /* NAV */
 nav{
@@ -255,15 +267,15 @@ nav{
 .hero-compact .hero-greeting{font-size:13px}
 .hero-date{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-top:2px}
 .next-card{margin:0 16px 12px;padding:16px;border-radius:18px;color:#fff;
-  background:linear-gradient(135deg,var(--green),#0ea5e9);box-shadow:0 8px 24px rgba(5,150,105,.25);animation:slideUp .3s ease}
-.next-card .btn-primary{background:rgba(255,255,255,.95);color:#065f46}
+  background:linear-gradient(135deg,var(--green),var(--grad2));box-shadow:0 8px 24px rgba(var(--accent-rgb),.25);animation:slideUp .3s ease}
+.next-card .btn-primary{background:#fff;color:#1c1c2e}
 .next-label{font-size:12px;font-weight:700;letter-spacing:.4px;opacity:.9;text-transform:uppercase}
 .next-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-top:4px}
 .next-sub{font-size:13px;opacity:.9;margin-top:2px}
 .agenda-row{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:8px;border-radius:14px;
   background:var(--bg2);border:1px solid var(--border);transition:transform .12s ease}
 .agenda-row:active{transform:scale(.98)}
-.agenda-row.next{border-color:var(--green);box-shadow:0 0 0 2px rgba(5,150,105,.15)}
+.agenda-row.next{border-color:var(--green);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.15)}
 .agenda-row.done{opacity:.5}
 .agenda-row.done .agenda-title{text-decoration:line-through}
 .agenda-time{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;min-width:48px;color:var(--green)}
@@ -284,8 +296,8 @@ nav{
   font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;
   transition:all .15s;white-space:nowrap;
 }
-.btn-primary{background:var(--green);color:#fff}
-.btn-primary:hover{background:#047857}
+.btn-primary{background:var(--green);color:var(--on-accent)}
+.btn-primary:hover{filter:brightness(.92)}
 .btn-secondary{background:var(--bg4);color:var(--text);border:1px solid var(--border)}
 .btn-secondary:hover{background:var(--bg3)}
 .btn-danger{background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.25)}
@@ -313,12 +325,12 @@ input[type=time]{color-scheme:light}
 
 /* TAGS / CHIPS */
 .chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid transparent}
-.chip-green{background:rgba(5,150,105,.1);color:var(--green);border-color:rgba(5,150,105,.2)}
-.chip-blue{background:rgba(124,58,237,.1);color:var(--blue);border-color:rgba(124,58,237,.2)}
+.chip-green{background:rgba(var(--accent-rgb),.1);color:var(--green);border-color:rgba(var(--accent-rgb),.2)}
+.chip-blue{background:rgba(var(--accent2-rgb),.1);color:var(--blue);border-color:rgba(var(--accent2-rgb),.2)}
 .chip-red{background:rgba(220,38,38,.1);color:var(--red);border-color:rgba(220,38,38,.2)}
 .chip-orange{background:rgba(217,119,6,.1);color:var(--orange);border-color:rgba(217,119,6,.2)}
 .chip-gray{background:var(--bg4);color:var(--text2);border-color:var(--border)}
-.chip-purple{background:rgba(124,58,237,.1);color:var(--purple);border-color:rgba(124,58,237,.2)}
+.chip-purple{background:rgba(var(--accent2-rgb),.1);color:var(--purple);border-color:rgba(var(--accent2-rgb),.2)}
 .addr-suggest-item:hover,.addr-suggest-item:active{background:var(--bg3)}
 
 /* DAY TOGGLES */
@@ -329,7 +341,7 @@ input[type=time]{color-scheme:light}
   background:var(--bg4);color:var(--text2);font-size:12px;font-weight:600;
   cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;
 }
-.day-toggle.on{background:rgba(5,150,105,.12);border-color:rgba(5,150,105,.4);color:var(--green)}
+.day-toggle.on{background:rgba(var(--accent-rgb),.12);border-color:rgba(var(--accent-rgb),.4);color:var(--green)}
 
 /* STUDENT CARD */
 .student-card{
@@ -367,7 +379,7 @@ input[type=time]{color-scheme:light}
   color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;
   transition:all .15s;white-space:nowrap;
 }
-.day-tab.active{background:rgba(5,150,105,.12);border-color:rgba(5,150,105,.4);color:var(--green)}
+.day-tab.active{background:rgba(var(--accent-rgb),.12);border-color:rgba(var(--accent-rgb),.4);color:var(--green)}
 .day-tab.has-lessons{border-color:var(--border)}
 .slot-block{
   background:var(--bg2);border:1px solid var(--border);
@@ -386,8 +398,8 @@ input[type=time]{color-scheme:light}
 .slot-block.color-8::before{background:#b2f7ef}
 .slot-block.color-9::before{background:#ff9ff3}
 .slot-block.dragging{opacity:0.4;}
-.slot-block.drag-picked{outline:2.5px solid var(--blue,#7c3aed);outline-offset:-2px;box-shadow:0 0 0 4px rgba(124,58,237,.15)}
-.day-tab.drag-over{border:2px solid var(--blue);background:rgba(124,58,237,.12);}
+.slot-block.drag-picked{outline:2.5px solid var(--blue,#7c3aed);outline-offset:-2px;box-shadow:0 0 0 4px rgba(var(--accent2-rgb),.15)}
+.day-tab.drag-over{border:2px solid var(--blue);background:rgba(var(--accent2-rgb),.12);}
 .slot-time{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--text)}
 .slot-name{font-size:14px;font-weight:600;margin-top:2px}
 .slot-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
@@ -408,12 +420,12 @@ input[type=time]{color-scheme:light}
 }
 .stop-num{
   width:28px;height:28px;border-radius:50%;
-  background:rgba(5,150,105,.12);border:1px solid rgba(5,150,105,.3);
+  background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.3);
   color:var(--green);font-size:12px;font-weight:700;
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;font-family:'Syne',sans-serif;
 }
-.stop-num.home{background:rgba(124,58,237,.12);border-color:rgba(124,58,237,.3);color:var(--blue)}
+.stop-num.home{background:rgba(var(--accent2-rgb),.12);border-color:rgba(var(--accent2-rgb),.3);color:var(--blue)}
 .stop-connector{
   width:2px;background:var(--border);
   margin:4px 13px;height:20px;flex-shrink:0;
@@ -445,7 +457,7 @@ input[type=time]{color-scheme:light}
   background:var(--text3);border-radius:50%;
   left:2px;top:2px;transition:.2s;
 }
-.toggle-switch input:checked+.toggle-slider{background:rgba(5,150,105,.15);border-color:rgba(5,150,105,.5)}
+.toggle-switch input:checked+.toggle-slider{background:rgba(var(--accent-rgb),.15);border-color:rgba(var(--accent-rgb),.5)}
 .toggle-switch input:checked+.toggle-slider::before{transform:translateX(20px);background:var(--green)}
 
 /* BLOCKED SLOTS */
@@ -518,9 +530,9 @@ input[type=time]{color-scheme:light}
   box-shadow:0 8px 24px rgba(0,0,0,.15);
   animation:toastIn .25s ease;pointer-events:auto;
 }
-.toast.success{border-color:rgba(5,150,105,.3)}
+.toast.success{border-color:rgba(var(--accent-rgb),.3)}
 .toast.error{border-color:rgba(220,38,38,.3)}
-.toast.info{border-color:rgba(124,58,237,.3)}
+.toast.info{border-color:rgba(var(--accent2-rgb),.3)}
 @keyframes toastIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes toastOut{to{opacity:0;transform:translateY(-12px)}}
 
@@ -540,8 +552,8 @@ input[type=time]{color-scheme:light}
 .stat-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;line-height:1}
 .stat-val span{font-size:14px;font-weight:400;color:var(--text2)}
 .stat-label{font-size:12px;color:var(--text2);margin-top:6px}
-.stat-card.accent-green{border-color:rgba(5,150,105,.2);background:rgba(5,150,105,.05)}
-.stat-card.accent-blue{border-color:rgba(124,58,237,.2);background:rgba(124,58,237,.05)}
+.stat-card.accent-green{border-color:rgba(var(--accent-rgb),.2);background:rgba(var(--accent-rgb),.05)}
+.stat-card.accent-blue{border-color:rgba(var(--accent2-rgb),.2);background:rgba(var(--accent2-rgb),.05)}
 
 /* PROGRESS BAR */
 .progress-bar{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-top:8px}
@@ -566,7 +578,7 @@ input[type=time]{color-scheme:light}
 /* HOME HERO */
 .hero{
   padding:24px 16px 16px;
-  background:linear-gradient(135deg,rgba(5,150,105,.07),rgba(124,58,237,.04));
+  background:linear-gradient(135deg,rgba(var(--accent-rgb),.07),rgba(var(--accent2-rgb),.04));
   border-bottom:1px solid var(--border);margin-bottom:8px;
 }
 .hero-greeting{font-size:13px;color:var(--text2)}
@@ -607,7 +619,7 @@ input[type=time]{color-scheme:light}
 .badge{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:20px;height:20px;padding:0 5px;
-  background:rgba(5,150,105,.12);color:var(--green);
+  background:rgba(var(--accent-rgb),.12);color:var(--green);
   border-radius:10px;font-size:11px;font-weight:700;
   font-family:'Syne',sans-serif;
 }
@@ -617,10 +629,10 @@ input[type=time]{color-scheme:light}
 
 /* MERGED BLOCK */
 .slot-block.merged::before{background:linear-gradient(180deg,var(--green),var(--blue))!important}
-.slot-block.merged{border-color:rgba(5,150,105,.3)}
+.slot-block.merged{border-color:rgba(var(--accent-rgb),.3)}
 .slot-block.group-slot::before{background:repeating-linear-gradient(45deg,var(--purple),var(--purple) 4px,var(--blue) 4px,var(--blue) 8px)!important}
-.slot-block.group-slot{border-color:rgba(124,58,237,.35)}
-.merge-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(5,150,105,.12);color:var(--green);border:1px solid rgba(5,150,105,.3);border-radius:4px;font-size:10px;font-weight:700;padding:2px 6px;font-family:'Syne',sans-serif}
+.slot-block.group-slot{border-color:rgba(var(--accent2-rgb),.35)}
+.merge-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(var(--accent-rgb),.12);color:var(--green);border:1px solid rgba(var(--accent-rgb),.3);border-radius:4px;font-size:10px;font-weight:700;padding:2px 6px;font-family:'Syne',sans-serif}
 
 /* SUGGESTION BANNER */
 .suggestion-item{
@@ -8490,7 +8502,7 @@ const App = {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
     const marker = L.marker([start.lat, start.lon], {
       draggable:true,
-      icon:L.divIcon({className:'',html:'<div style="width:22px;height:22px;background:#059669;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
+      icon:L.divIcon({className:'',html:'<div style="width:22px;height:22px;background:var(--green);border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
     }).addTo(map);
     el._leaflet_marker = marker;
     const onPin = async (lat, lon)=>{
@@ -9957,6 +9969,11 @@ const App = {
   // with opts.line, joined from home and back. With nothing to show, the map
   // still opens — on home, or on the town when there is no home yet — so the
   // screen always has its map.
+  // The theme's accent as a plain colour, for map layers that cannot read CSS.
+  _accent(){
+    try{ const v = getComputedStyle(document.documentElement).getPropertyValue('--green').trim(); return v || '#059669'; }
+    catch(e){ return '#059669'; }
+  },
   _drawStopsMap(elId, stops, opts){
     this._maps = this._maps || {};
     try{ if(this._maps[elId]) this._maps[elId].remove(); }catch(e){}
@@ -9972,10 +9989,10 @@ const App = {
     const ll = pts.map(p => [p.c.lat, p.c.lon]);
     if(opts && opts.line && pts.length > (hasHome ? 1 : 0))
       L.polyline(ll.concat(hasHome ? [[home.lat, home.lon]] : []),
-        { color: '#4f46e5', weight: 3, opacity: .7, dashArray: '6 6' }).addTo(map);
+        { color: this._accent(), weight: 3, opacity: .8, dashArray: '6 6' }).addTo(map);
     pts.forEach(p => {
       L.marker([p.c.lat, p.c.lon], { icon: L.divIcon({ className: '',
-        html: `<div style="background:${p.color || '#4f46e5'};color:#fff;border-radius:50%;width:24px;height:24px;line-height:24px;text-align:center;font-size:12px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">${p.label}</div>`,
+        html: `<div style="background:${p.color || this._accent()};color:${p.color ? '#fff' : 'var(--on-accent)'};border-radius:50%;width:24px;height:24px;line-height:24px;text-align:center;font-size:12px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">${p.label}</div>`,
         iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(map);
     });
     // Zoom to the STOPS. Home is drawn, but a home far from them (or a wrong
@@ -10476,7 +10493,7 @@ const App = {
     ${state.scheduleAttempts.map((r,i)=>{
       const cnt = Scheduler.countTotal(r.schedule);
       const active = i===state.scheduleAttemptIdx;
-      return `<button onclick="App.switchAttempt(${i})" style="flex-shrink:0;padding:5px 10px;border-radius:20px;border:1.5px solid ${active?'var(--blue)':'var(--border)'};background:${active?'rgba(124,58,237,.1)':'var(--bg2)'};color:${active?'var(--blue)':'var(--text2)'};font-size:12px;font-weight:${active?'700':'500'};cursor:pointer">
+      return `<button onclick="App.switchAttempt(${i})" style="flex-shrink:0;padding:5px 10px;border-radius:20px;border:1.5px solid ${active?'var(--blue)':'var(--border)'};background:${active?'rgba(var(--accent2-rgb),.1)':'var(--bg2)'};color:${active?'var(--blue)':'var(--text2)'};font-size:12px;font-weight:${active?'700':'500'};cursor:pointer">
         ${t('schedule_attempt_label')} ${i+1} <span style="opacity:.7">${cnt}</span>
       </button>`;
     }).join('')}
@@ -10937,10 +10954,10 @@ const App = {
             </div>
             <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${u.reason}</div>
             ${u.needed >= 2 ? `
-            <div style="background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:8px;padding:10px;margin-bottom:6px">
+            <div style="background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.2);border-radius:8px;padding:10px;margin-bottom:6px">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                <span style="font-weight:700;font-size:12px;color:#059669">${tf('unplaced_solution_combo',{block:blockH})}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span style="font-weight:700;font-size:12px;color:var(--green)">${tf('unplaced_solution_combo',{block:blockH})}</span>
               </div>
               <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_combo_detail',{needed:u.needed,dur:u.student.lessonDuration,total:blockMin})}</div>
               <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;width:100%" onclick="App.forceMergeAndReschedule('${u.student.id}')">
@@ -10948,10 +10965,10 @@ const App = {
               </button>
             </div>` : ''}
             ${u.suggestionTeacher ? `
-            <div style="background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:10px;margin-bottom:6px">
+            <div style="background:rgba(var(--accent2-rgb),.07);border:1px solid rgba(var(--accent2-rgb),.2);border-radius:8px;padding:10px;margin-bottom:6px">
               <div style="font-weight:700;font-size:12px;color:#7c3aed;margin-bottom:4px">${tf('unplaced_solution_extend_hours',{letter:missing>=2?'B':'A'})}</div>
               <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${tf('unplaced_extend_hours_detail',{day:`<strong>${DAYS_FULL[u.suggestionTeacher.day]}</strong>`,min:`<strong>${u.suggestionTeacher.extensionMin}</strong>`})}</div>
-              <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;width:100%;border-color:rgba(124,58,237,.3)" onclick="App.applyTeacherExtension(${u.suggestionTeacher.day},${u.suggestionTeacher.extensionMin})">
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;width:100%;border-color:rgba(var(--accent2-rgb),.3)" onclick="App.applyTeacherExtension(${u.suggestionTeacher.day},${u.suggestionTeacher.extensionMin})">
                 ${tf('unplaced_extend_hours_btn',{min:u.suggestionTeacher.extensionMin,day:DAYS_FULL[u.suggestionTeacher.day]})}
               </button>
             </div>` : ''}
@@ -11139,7 +11156,7 @@ const App = {
           </div>`).join('')}
       </div>
       ${this.routeFor(state.routeDay)?`
-        <div style="margin:0 16px 8px;background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px">
+        <div style="margin:0 16px 8px;background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.2);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           <span style="font-size:13px;color:#059669;font-weight:600">OpenStreetMap — ${t('route_real_distance')}</span>
         </div>`:''}
@@ -12837,7 +12854,7 @@ const App = {
   _obSelectDur(d, btn){
     this._obDur = d;
     document.querySelectorAll('#ob-dur-grid button').forEach(b=>{ b.style.borderColor='var(--border,#e2e0da)'; b.style.background='var(--bg2,#fff)'; b.style.color='var(--text,#1c1c2e)'; });
-    btn.style.borderColor='#7c3aed'; btn.style.background='rgba(124,58,237,.08)'; btn.style.color='#7c3aed';
+    btn.style.borderColor='#7c3aed'; btn.style.background='rgba(var(--accent2-rgb),.08)'; btn.style.color='#7c3aed';
   },
 
   _obFinish(){
