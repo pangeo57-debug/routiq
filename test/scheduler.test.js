@@ -5873,8 +5873,8 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
 
   test('the home screen shows the next stop, the map, the day tools and the statistics', () => {
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
-    const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
-    assert.match(home, /class="next-card"/);
+    const home = src.slice(src.indexOf('  _homeMapHtml(){'), src.indexOf('  homeQuickAdd(){'));
+    assert.match(home, /next-card/);
     assert.match(home, /id="home-map"/);
     assert.ok(!/id="home-qn"/.test(home), 'adding moved to the + button');
     assert.match(src, /id="nav-fab"/);
@@ -6123,6 +6123,27 @@ describe('the week as a ribbon: areas, and a day that opens in place', () => {
     assert.ok(!/id="day-slots"/.test(app.App._weekRibbonHtml()));
     app.App.toggleWeekDay(2);
     assert.equal(app.state.weekOpen, 2); assert.equal(app.state.scheduleDay, 2);
+  });
+});
+
+describe('home: the map on top, cards that slide, the drive before each stop', () => {
+  const MON = '2026-11-02';
+  test('the next stop leads the cards; each stop shows the drive into it; the day ends at home', () => {
+    const app = loadApp();
+    const sts = [student('a', { address: 'Ψαρών, Ρίο', phone: '6941234567' }), student('b', { address: 'Θεοφράστου, Πάτρα' })];
+    app.setState({ settings: settings(), students: sts, coords: cityCoords(sts), jobs: [], schedule: { 1: [slot('a', '23:40', '23:45'), slot('b', '23:50', '23:55')] } });
+    app.App.todayISO = () => MON; app.state.homeDay = 0;
+    const L = { client: 'Πελάτης', clients: 'Πελάτες', session: 'Ραντεβού', sessions: 'Ραντεβού' };
+    const html = app.App._homeTodayHtml(L, 0, 0, { km: 0 }, []);
+    assert.match(html, /class="home-card next-card main"/);
+    assert.match(html, /href="tel:6941234567"/, 'a call button when there is a number');
+    assert.equal((html.match(/class="agenda-leg"/g) || []).length, 3, 'two drives in, one home');
+    assert.match(html, /2 στάσεις/);
+  });
+  test('"in 13 hours" reads as hours, not 793 minutes', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /inMin < 60 \? tf\('home_in_min'/);
+    assert.match(src, /home_in_hm:'σε \{h\}ω \{m\}′'/);
   });
 });
 
