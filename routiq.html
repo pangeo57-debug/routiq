@@ -225,6 +225,22 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
 .home-timeline{padding:0 0 4px}
 .agenda-leg{font-size:11px;color:var(--text3);padding:2px 0 4px 64px}
 
+/* Clients as a wallet of cards */
+.student-card.wallet-card{--cc:#059669;background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 62%,#000));border:none;border-radius:20px;margin:0 14px -14px;
+  box-shadow:0 -6px 16px rgba(0,0,0,.22);color:#fff;position:relative}
+.student-card.wallet-card:last-child{margin-bottom:12px}
+.student-card.wallet-card:has(.student-body.open){margin-bottom:16px;z-index:2}
+.wallet-card .student-header{padding:14px 16px 28px}
+.wallet-card:last-child .student-header,.wallet-card:has(.student-body.open) .student-header{padding-bottom:14px}
+.wallet-card .student-avatar{background:rgba(255,255,255,.22)!important;color:#fff!important;border:none!important}
+.wallet-card .student-name{color:#fff;font-weight:800;font-size:16px}
+.wallet-card .student-sub{color:rgba(255,255,255,.85)}
+.wallet-card svg[class^="chevron-"]{color:rgba(255,255,255,.8)!important}
+.wallet-placed{font-weight:800;color:#fff}.wallet-placed.short{background:rgba(0,0,0,.25);padding:1px 6px;border-radius:6px}
+.wallet-times{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.wallet-times span{padding:3px 8px;border-radius:999px;background:rgba(0,0,0,.22);font-size:11px;font-weight:700}
+.wallet-card .student-body{background:var(--bg2);color:var(--text);border-top:none;border-radius:0 0 20px 20px;padding-top:12px}
+
 /* Week ribbon */
 #week-ribbon{padding:0 12px 12px}
 .wk-axis{display:flex;gap:8px;align-items:center;margin:0 0 4px;font-size:10px;color:var(--text3)}
@@ -1228,7 +1244,7 @@ const I18N = {
     schedule_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', schedule_optimize:'Βελτιστοποίηση με χάρτη (OpenStreetMap)',
     schedule_optimized_done:'Βελτιστοποίηση ολοκληρώθηκε', schedule_unplaced_students:'χωρίς πλήρες πρόγραμμα',
     route_title:'Διαδρομή', route_calc:'Υπολογισμός', route_no_route:'Καμία διαδρομή',
-    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', home_go:'Πάμε', home_in_min:'σε {n}′', home_in_hm:'σε {h}ω {m}′', home_stops_km:'{n} στάσεις · {km} km', wk_home_at:'σπίτι', swipe_delete:'Διαγραφή', swipe_undo:'Αναίρεση', swipe_deleted:'Διαγράφηκε: {name}.', swipe_refit:'Οι επόμενες ανέβηκαν.', swipe_refit_now:'Οι επόμενες ξαναϋπολογίστηκαν από τις {time}.', swipe_no_refit:'Οι επόμενες έμειναν στις ώρες τους.', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
+    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', wallet_call:'Κλήση', home_go:'Πάμε', home_in_min:'σε {n}′', home_in_hm:'σε {h}ω {m}′', home_stops_km:'{n} στάσεις · {km} km', wk_home_at:'σπίτι', swipe_delete:'Διαγραφή', swipe_undo:'Αναίρεση', swipe_deleted:'Διαγράφηκε: {name}.', swipe_refit:'Οι επόμενες ανέβηκαν.', swipe_refit_now:'Οι επόμενες ξαναϋπολογίστηκαν από τις {time}.', swipe_no_refit:'Οι επόμενες έμειναν στις ώρες τους.', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
     route_distance:'απόσταση', route_travel:'Ταξίδι', route_fuel:'Καύσιμα', route_stops:'Σειρά στάσεων',
     route_real:'Πραγματική', route_estimated:'Εκτιμώμενη', route_arrival:'Άφιξη',
     settings_title:'Ρυθμίσεις', settings_profession:'Ειδικότητα', settings_personal:'Προσωπικά', settings_name:'Όνομα',
@@ -1418,7 +1434,7 @@ const I18N = {
     schedule_no_lessons_day:'Nothing scheduled this day', schedule_optimize:'Optimize with map (OpenStreetMap)',
     schedule_optimized_done:'Optimization complete', schedule_unplaced_students:'not fully scheduled',
     route_title:'Route', route_calc:'Calculate', route_no_route:'No route',
-    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', home_go:'Go', home_in_min:'in {n}′', home_in_hm:'in {h}h {m}′', home_stops_km:'{n} stops · {km} km', wk_home_at:'home', swipe_delete:'Delete', swipe_undo:'Undo', swipe_deleted:'Deleted: {name}.', swipe_refit:'The rest moved up.', swipe_refit_now:'The rest were worked out again from {time}.', swipe_no_refit:'The rest kept their times.', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
+    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', wallet_call:'Call', home_go:'Go', home_in_min:'in {n}′', home_in_hm:'in {h}h {m}′', home_stops_km:'{n} stops · {km} km', wk_home_at:'home', swipe_delete:'Delete', swipe_undo:'Undo', swipe_deleted:'Deleted: {name}.', swipe_refit:'The rest moved up.', swipe_refit_now:'The rest were worked out again from {time}.', swipe_no_refit:'The rest kept their times.', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
     route_distance:'distance', route_travel:'Travel', route_fuel:'Fuel', route_stops:'Stop order',
     route_real:'Real', route_estimated:'Estimated', route_arrival:'Arrival',
     settings_title:'Settings', settings_profession:'Specialty', settings_personal:'Personal', settings_name:'Name',
@@ -1608,7 +1624,7 @@ const I18N = {
     schedule_no_lessons_day:'Aucun cours ce jour', schedule_optimize:'Optimiser avec carte (OpenStreetMap)',
     schedule_optimized_done:'Optimisation terminée', schedule_unplaced_students:"élève(s) sans programme complet",
     route_title:'Itinéraire', route_calc:'Calculer', route_no_route:'Aucun itinéraire',
-    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', home_go:'Y aller', home_in_min:'dans {n}′', home_in_hm:'dans {h} h {m}′', home_stops_km:'{n} arrêts · {km} km', wk_home_at:'maison', swipe_delete:'Supprimer', swipe_undo:'Annuler', swipe_deleted:'Supprimé : {name}.', swipe_refit:'Les suivants ont été avancés.', swipe_refit_now:'Les suivants ont été recalculés à partir de {time}.', swipe_no_refit:'Les suivants gardent leurs horaires.', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
+    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', wallet_call:'Appeler', home_go:'Y aller', home_in_min:'dans {n}′', home_in_hm:'dans {h} h {m}′', home_stops_km:'{n} arrêts · {km} km', wk_home_at:'maison', swipe_delete:'Supprimer', swipe_undo:'Annuler', swipe_deleted:'Supprimé : {name}.', swipe_refit:'Les suivants ont été avancés.', swipe_refit_now:'Les suivants ont été recalculés à partir de {time}.', swipe_no_refit:'Les suivants gardent leurs horaires.', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
     route_distance:'distance', route_travel:'Trajet', route_fuel:'Carburant', route_stops:'Ordre des arrêts',
     route_real:'Réelle', route_estimated:'Estimée', route_arrival:'Arrivée',
     settings_title:'Réglages', settings_profession:'Spécialité', settings_personal:'Personnel', settings_name:'Nom',
@@ -1798,7 +1814,7 @@ const I18N = {
     schedule_no_lessons_day:'Keine Stunden an diesem Tag', schedule_optimize:'Mit Karte optimieren (OpenStreetMap)',
     schedule_optimized_done:'Optimierung abgeschlossen', schedule_unplaced_students:'Schüler ohne vollständigen Plan',
     route_title:'Route', route_calc:'Berechnen', route_no_route:'Keine Route',
-    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', home_go:'Los', home_in_min:'in {n}′', home_in_hm:'in {h}h {m}′', home_stops_km:'{n} Stopps · {km} km', wk_home_at:'zuhause', swipe_delete:'Löschen', swipe_undo:'Rückgängig', swipe_deleted:'Gelöscht: {name}.', swipe_refit:'Die nächsten rücken vor.', swipe_refit_now:'Die nächsten wurden ab {time} neu berechnet.', swipe_no_refit:'Die nächsten behalten ihre Zeiten.', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
+    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', wallet_call:'Anrufen', home_go:'Los', home_in_min:'in {n}′', home_in_hm:'in {h}h {m}′', home_stops_km:'{n} Stopps · {km} km', wk_home_at:'zuhause', swipe_delete:'Löschen', swipe_undo:'Rückgängig', swipe_deleted:'Gelöscht: {name}.', swipe_refit:'Die nächsten rücken vor.', swipe_refit_now:'Die nächsten wurden ab {time} neu berechnet.', swipe_no_refit:'Die nächsten behalten ihre Zeiten.', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
     route_distance:'Entfernung', route_travel:'Fahrt', route_fuel:'Kraftstoff', route_stops:'Reihenfolge der Stopps',
     route_real:'Tatsächliche', route_estimated:'Geschätzte', route_arrival:'Ankunft',
     settings_title:'Einstellungen', settings_profession:'Fachgebiet', settings_personal:'Persönlich', settings_name:'Name',
@@ -8471,15 +8487,23 @@ const App = {
       .join(', ');
     const placed = Scheduler.countPlaced(st.id, state.schedule);
     const avatarColors = ['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
-    const bg = avatarColors[st.color||0];
+    const bg = avatarColors[(st.color||0) % avatarColors.length];
     const initials = esc(st.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
+    // When this client is on the week, as chips on the card: "Δευ 14:30".
+    const times = [];
+    for(const d of (state.settings.workDays || []))
+      for(const sl of (state.schedule[d] || []))
+        if(sl.studentId === st.id || (sl.groupMemberIds || []).includes(st.id) || sl.pairedStudentId === st.id)
+          times.push(`${DAYS[d]} ${sl.start}`);
+    const phone = st.phone ? String(st.phone).replace(/[^\d+]/g, '') : '';
     return `
-      <div class="student-card" id="sc-${st.id}">
+      <div class="student-card wallet-card" id="sc-${st.id}" style="--cc:${bg}">
         <div class="student-header" onclick="App.toggleStudent('${st.id}')">
           <div class="student-avatar" style="background:${bg}20;color:${bg};border:1px solid ${bg}40">${initials}</div>
           <div class="student-info">
             <div class="student-name">${esc(st.name)} ${this._farFromHomeWarning(st.id)} ${this._locationNote(st.id)}</div>
-            <div class="student-sub">${esc(subjectLabel(st.subject))} · ${Scheduler.hasMixedDurations(st) ? st.durations.map(d => d + '′').join(' + ') : st.lessonsPerWeek + t('student_per_week_suffix')} · <span style="color:${placed>=st.lessonsPerWeek?'var(--green)':'var(--orange)'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
+            <div class="student-sub">${esc(subjectLabel(st.subject))} · ${Scheduler.hasMixedDurations(st) ? st.durations.map(d => d + '′').join(' + ') : st.lessonsPerWeek + t('student_per_week_suffix')} · <span class="wallet-placed${placed>=st.lessonsPerWeek?'':' short'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
+            ${times.length ? `<div class="wallet-times">${times.slice(0, 5).map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
@@ -8495,12 +8519,13 @@ const App = {
           })() : ''}
           <div class="student-detail-row"><span class="student-detail-label">${t('student_availability_label')}</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${avDays||'—'}</span></div>
           ${st.notes?`<div class="student-detail-row"><span class="student-detail-label">${t('student_notes_label')}</span><span style="font-size:12px;text-align:right;max-width:200px;color:var(--text2)">${esc(st.notes)}</span></div>`:''}
-          ${placed>0?`
+          ${placed>0 || phone?`
           <div class="student-actions" style="margin-bottom:8px">
-            <button class="btn btn-primary" style="flex:1" onclick="App.openSendSheet('student','${st.id}')">
+            ${phone ? `<a class="btn btn-secondary" style="flex:1;text-decoration:none" href="tel:${esc(phone)}">📞 ${esc(t('wallet_call'))}</a>` : ''}
+            ${placed>0 ? `<button class="btn btn-primary" style="flex:1" onclick="App.openSendSheet('student','${st.id}')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
               ${t('send_times_btn')}
-            </button>
+            </button>` : ''}
           </div>`:''}
           <div class="student-actions">
             <button class="btn btn-secondary" style="flex:1" onclick="App.openStudentDrawer('${st.id}')">

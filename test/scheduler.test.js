@@ -6147,6 +6147,18 @@ describe('home: the map on top, cards that slide, the drive before each stop', (
   });
 });
 
+describe('clients as a wallet of cards', () => {
+  test('each card carries its colour, its times on the week, and a call button when there is a number', () => {
+    const app = loadApp();
+    const a = student('a', { name: 'Κοραλίνα', phone: '694 123 4567', color: 2 });
+    app.setState({ settings: settings({ workDays: [1, 3] }), students: [a], coords: {}, jobs: [], schedule: { 1: [slot('a', '14:30', '15:30')], 3: [slot('a', '15:00', '16:00')] } });
+    const html = app.App.studentCard(a);
+    assert.match(html, /class="student-card wallet-card"[^>]*style="--cc:#d97706"/);
+    assert.match(html, /<span>Δευ 14:30<\/span><span>Τετ 15:00<\/span>/);
+    assert.match(html, /href="tel:6941234567"/);
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {
