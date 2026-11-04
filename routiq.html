@@ -189,6 +189,39 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
 .swipe-bg{position:absolute;inset:0;border-radius:inherit;background:var(--red);color:#fff;display:flex;align-items:center;padding-left:18px;font-weight:700;font-size:13px;z-index:-1}
 .toast-action{margin-left:auto;border:none;background:transparent;color:var(--green);font-weight:800;font-size:14px;padding:6px 8px;cursor:pointer}
 
+/* An element marked hidden stays hidden even if an inline style sets display. */
+[hidden]{display:none!important}
+
+/* Week ribbon */
+#week-ribbon{padding:0 12px 12px}
+.wk-axis{display:flex;gap:8px;align-items:center;margin:0 0 4px;font-size:10px;color:var(--text3)}
+.wk-axis>span:first-child{width:40px}.wk-axis>span:last-child{width:52px}
+.wk-ticks{position:relative;flex:1;height:14px}.wk-ticks em{position:absolute;transform:translateX(-50%);font-style:normal;white-space:nowrap}
+.wk-row{background:var(--bg2);border:1px solid var(--border);border-radius:16px;margin-bottom:8px;overflow:hidden}
+.wk-row.open{border:2px solid var(--green)}
+.wk-head.day-tab{display:flex;gap:8px;align-items:center;padding:10px;border:none;border-radius:0;background:transparent;width:100%;cursor:pointer;min-height:48px}
+.wk-head.day-tab.active{background:transparent}
+.wk-day{width:40px;font-size:13px;flex:none;text-align:left}
+.wk-bar{position:relative;flex:1;height:26px;border-radius:8px;background:var(--bg3)}
+.wk-bar i{position:absolute;top:0;bottom:0;border-radius:7px}
+.wk-km{width:52px;text-align:right;font-size:11px;color:var(--text2);flex:none}
+.wk-body{border-top:1px solid var(--border);padding:10px 0 4px}
+.wk-path{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 12px 6px;font-size:12px}
+.wk-zone{padding:4px 10px;border-radius:999px;font-weight:800}
+.wk-arrow{color:var(--text3)}
+.wk-home{margin-left:auto;color:var(--text2)}
+.wk-legend{display:flex;gap:12px;flex-wrap:wrap;padding:2px 4px;font-size:11px;color:var(--text2)}
+.wk-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.wk-body #day-slots{margin-top:4px}
+/* Inside the ribbon a lesson is one compact line: time, name, length. */
+.wk-body .slot-block{margin:0 10px 0;padding:8px 10px 8px 14px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:0 10px;border-radius:10px}
+.wk-body .slot-time{font-size:13px;font-family:inherit;font-weight:800;white-space:nowrap}
+.wk-body .slot-name{margin:0;font-size:14px}
+.wk-body .slot-meta{margin:0;gap:4px}
+.wk-body .slot-meta .chip{display:none}
+.wk-body .slot-meta .chip:nth-child(2){display:inline-flex;font-size:11px;padding:2px 7px;min-height:0}
+.wk-body .slot-gap{font-size:11px;padding:3px 12px 3px 24px;margin:0;background:transparent;border:none;min-height:0}
+
 /* NAV */
 nav{
   position:fixed;bottom:0;left:50%;transform:translateX(-50%);
@@ -1162,7 +1195,7 @@ const I18N = {
     schedule_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', schedule_optimize:'Βελτιστοποίηση με χάρτη (OpenStreetMap)',
     schedule_optimized_done:'Βελτιστοποίηση ολοκληρώθηκε', schedule_unplaced_students:'χωρίς πλήρες πρόγραμμα',
     route_title:'Διαδρομή', route_calc:'Υπολογισμός', route_no_route:'Καμία διαδρομή',
-    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', swipe_delete:'Διαγραφή', swipe_undo:'Αναίρεση', swipe_deleted:'Διαγράφηκε: {name}.', swipe_refit:'Οι επόμενες ανέβηκαν.', swipe_refit_now:'Οι επόμενες ξαναϋπολογίστηκαν από τις {time}.', swipe_no_refit:'Οι επόμενες έμειναν στις ώρες τους.', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
+    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', wk_home_at:'σπίτι', swipe_delete:'Διαγραφή', swipe_undo:'Αναίρεση', swipe_deleted:'Διαγράφηκε: {name}.', swipe_refit:'Οι επόμενες ανέβηκαν.', swipe_refit_now:'Οι επόμενες ξαναϋπολογίστηκαν από τις {time}.', swipe_no_refit:'Οι επόμενες έμειναν στις ώρες τους.', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
     route_distance:'απόσταση', route_travel:'Ταξίδι', route_fuel:'Καύσιμα', route_stops:'Σειρά στάσεων',
     route_real:'Πραγματική', route_estimated:'Εκτιμώμενη', route_arrival:'Άφιξη',
     settings_title:'Ρυθμίσεις', settings_profession:'Ειδικότητα', settings_personal:'Προσωπικά', settings_name:'Όνομα',
@@ -1352,7 +1385,7 @@ const I18N = {
     schedule_no_lessons_day:'Nothing scheduled this day', schedule_optimize:'Optimize with map (OpenStreetMap)',
     schedule_optimized_done:'Optimization complete', schedule_unplaced_students:'not fully scheduled',
     route_title:'Route', route_calc:'Calculate', route_no_route:'No route',
-    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', swipe_delete:'Delete', swipe_undo:'Undo', swipe_deleted:'Deleted: {name}.', swipe_refit:'The rest moved up.', swipe_refit_now:'The rest were worked out again from {time}.', swipe_no_refit:'The rest kept their times.', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
+    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', wk_home_at:'home', swipe_delete:'Delete', swipe_undo:'Undo', swipe_deleted:'Deleted: {name}.', swipe_refit:'The rest moved up.', swipe_refit_now:'The rest were worked out again from {time}.', swipe_no_refit:'The rest kept their times.', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
     route_distance:'distance', route_travel:'Travel', route_fuel:'Fuel', route_stops:'Stop order',
     route_real:'Real', route_estimated:'Estimated', route_arrival:'Arrival',
     settings_title:'Settings', settings_profession:'Specialty', settings_personal:'Personal', settings_name:'Name',
@@ -1542,7 +1575,7 @@ const I18N = {
     schedule_no_lessons_day:'Aucun cours ce jour', schedule_optimize:'Optimiser avec carte (OpenStreetMap)',
     schedule_optimized_done:'Optimisation terminée', schedule_unplaced_students:"élève(s) sans programme complet",
     route_title:'Itinéraire', route_calc:'Calculer', route_no_route:'Aucun itinéraire',
-    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', swipe_delete:'Supprimer', swipe_undo:'Annuler', swipe_deleted:'Supprimé : {name}.', swipe_refit:'Les suivants ont été avancés.', swipe_refit_now:'Les suivants ont été recalculés à partir de {time}.', swipe_no_refit:'Les suivants gardent leurs horaires.', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
+    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', wk_home_at:'maison', swipe_delete:'Supprimer', swipe_undo:'Annuler', swipe_deleted:'Supprimé : {name}.', swipe_refit:'Les suivants ont été avancés.', swipe_refit_now:'Les suivants ont été recalculés à partir de {time}.', swipe_no_refit:'Les suivants gardent leurs horaires.', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
     route_distance:'distance', route_travel:'Trajet', route_fuel:'Carburant', route_stops:'Ordre des arrêts',
     route_real:'Réelle', route_estimated:'Estimée', route_arrival:'Arrivée',
     settings_title:'Réglages', settings_profession:'Spécialité', settings_personal:'Personnel', settings_name:'Nom',
@@ -1732,7 +1765,7 @@ const I18N = {
     schedule_no_lessons_day:'Keine Stunden an diesem Tag', schedule_optimize:'Mit Karte optimieren (OpenStreetMap)',
     schedule_optimized_done:'Optimierung abgeschlossen', schedule_unplaced_students:'Schüler ohne vollständigen Plan',
     route_title:'Route', route_calc:'Berechnen', route_no_route:'Keine Route',
-    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', swipe_delete:'Löschen', swipe_undo:'Rückgängig', swipe_deleted:'Gelöscht: {name}.', swipe_refit:'Die nächsten rücken vor.', swipe_refit_now:'Die nächsten wurden ab {time} neu berechnet.', swipe_no_refit:'Die nächsten behalten ihre Zeiten.', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
+    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', wk_home_at:'zuhause', swipe_delete:'Löschen', swipe_undo:'Rückgängig', swipe_deleted:'Gelöscht: {name}.', swipe_refit:'Die nächsten rücken vor.', swipe_refit_now:'Die nächsten wurden ab {time} neu berechnet.', swipe_no_refit:'Die nächsten behalten ihre Zeiten.', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
     route_distance:'Entfernung', route_travel:'Fahrt', route_fuel:'Kraftstoff', route_stops:'Reihenfolge der Stopps',
     route_real:'Tatsächliche', route_estimated:'Geschätzte', route_arrival:'Ankunft',
     settings_title:'Einstellungen', settings_profession:'Fachgebiet', settings_personal:'Persönlich', settings_name:'Name',
@@ -10630,21 +10663,108 @@ const App = {
       </div>
       ${state.savings && state.savings.week ? this._savingsCardHtml(state.savings.week, 'week') : ''}
       ${this.renderUnplaced(result.unplaced)}
-      <div class="day-tabs" id="day-tabs">
-        ${state.settings.workDays.map(d=>`
-          <div class="day-tab ${d===state.scheduleDay?'active':''} ${(state.schedule[d]||[]).length>0?'has-lessons':''}"
-               onclick="App.switchDay(${d})"
-               ondragover="event.preventDefault();this.classList.add('drag-over')"
-               ondragleave="this.classList.remove('drag-over')"
-               ondrop="this.classList.remove('drag-over');App._onDayTabDrop(event,${d})">
-            ${DAYS[d]}
-            ${(state.schedule[d]||[]).length>0?`<span class="badge" style="margin-left:4px;font-size:10px">${(state.schedule[d]||[]).length}</span>`:''}
-          </div>`).join('')}
-      </div>
-      <div id="day-slots" style="margin-top:12px"></div>
+      <div id="week-ribbon">${this._weekRibbonHtml()}</div>
     `;
     this.renderDaySlots();
     try{ this._drawWeekMap(); }catch(e){ console.warn('week map failed', e); }
+  },
+
+  // ── The week as a ribbon ───────────────────────────────────────────────
+  // One row per working day: its lessons as blocks along the day, coloured by
+  // the area they are in, and its kilometres. Tapping a day opens it in place:
+  // where the day goes (area to area), when you are home, and its lessons.
+
+  // The place an address is in: "Δημοτική Ενότητα X" if given, else the last
+  // part with letters that is not the country. Street first, place after, is
+  // how every geocoder here writes them.
+  _placeOf(addr){
+    const parts = String(addr || '').split(',').map(x => x.trim()).filter(Boolean);
+    const de = parts.find(p => /^(Δημοτική Ενότητα|Δ\.Ε\.|Municipal Unit)\s+/i.test(p));
+    if(de) return de.replace(/^(Δημοτική Ενότητα|Δ\.Ε\.|Municipal Unit)\s+/i, '').trim();
+    const cands = parts.slice(1).map(p => p.replace(/\d+/g, '').trim())
+      .filter(p => p && /\p{L}/u.test(p) && !/^(Ελλάδα|Greece|Hellas|Griechenland|Grèce)$/i.test(p));
+    return cands.length ? cands[cands.length - 1] : (parts[0] || '');
+  },
+  // Areas of everyone on the list, biggest first. Names that differ only in
+  // their ending (Πάτρα / Πατρέων, Ρίο / Ρίου) are one area.
+  _zones(){
+    const norm = (x) => String(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const same = (a, b) => { let i = 0; while(i < a.length && i < b.length && a[i] === b[i]) i++; return i >= 3 && i >= Math.min(a.length, b.length) - 1 || a === b; };
+    const groups = [];
+    const byId = {};
+    for(const st of (state.students || [])){
+      const name = this._placeOf(st.address); if(!name) continue;
+      const k = norm(name);
+      let g = groups.find(g => same(g.key, k));
+      if(!g){ g = { key: k, names: {}, ids: [] }; groups.push(g); }
+      g.names[name] = (g.names[name] || 0) + 1; g.ids.push(st.id);
+    }
+    groups.sort((a, b) => b.ids.length - a.ids.length);
+    const colours = ['var(--green)', 'var(--blue)', 'var(--accent3)', '#ec4899', '#06b6d4'];
+    groups.forEach((g, i) => {
+      g.name = Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0];
+      g.colour = colours[i] || 'var(--text3)';
+      for(const id of g.ids) byId[id] = g;
+    });
+    return { list: groups, byId };
+  },
+  _weekRibbonHtml(){
+    const Z = this._zones(), many = Z.list.length > 1;
+    const days = state.settings.workDays || [];
+    const sorted = (d) => [...(state.schedule[d] || [])].sort((a, b) => Scheduler.toMin(a.start) - Scheduler.toMin(b.start));
+    let lo = 24 * 60, hi = 0;
+    for(const d of days) for(const sl of (state.schedule[d] || [])){ lo = Math.min(lo, Scheduler.toMin(sl.start)); hi = Math.max(hi, Scheduler.toMin(sl.end)); }
+    if(hi <= lo){ lo = 14 * 60; hi = 22 * 60; }
+    lo = Math.floor(lo / 60) * 60; hi = Math.ceil(hi / 60) * 60;
+    const pct = (m) => ((m - lo) / (hi - lo) * 100).toFixed(2);
+    const zoneOf = (sl) => Z.byId[sl.studentId] || null;
+    const open = state.weekOpen === undefined ? state.scheduleDay : state.weekOpen;
+    const hours = []; for(let h = lo; h <= hi; h += 120) hours.push(h);
+    const legend = many ? `<div class="wk-legend">${Z.list.slice(0, 5).map(g => `<span><i style="background:${g.colour}"></i>${esc(g.name)}</span>`).join('')}</div>` : '';
+    const rows = days.map(d => {
+      const sl = sorted(d), isOpen = open === d;
+      const km = sl.length ? Scheduler.dayKm(sl, d, state.settings) : 0;
+      const bar = sl.map(x => { const z = zoneOf(x);
+        return `<i style="left:${pct(Scheduler.toMin(x.start))}%;width:calc(${(pct(Scheduler.toMin(x.end)) - pct(Scheduler.toMin(x.start))).toFixed(2)}% - 2px);background:${many && z ? z.colour : 'var(--green)'}"></i>`; }).join('');
+      let body = '';
+      if(isOpen){
+        const path = [];
+        for(const x of sl){ const z = zoneOf(x); const n = z ? z.name : '—'; if(path[path.length - 1] !== n) path.push(n); }
+        const last = sl[sl.length - 1];
+        let home = '';
+        if(last){ const back = Scheduler.travelEstMin(last.studentId, last.address, 'home', state.settings.homeAddress || '', d, Scheduler.toMin(last.end));
+          home = Scheduler.toTime(Scheduler.toMin(last.end) + back); }
+        const chip = (n) => { const g = Z.list.find(g => g.name === n); const c = g ? g.colour : 'var(--text3)';
+          return `<span class="wk-zone" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)">${esc(n)}</span>`; };
+        body = `<div class="wk-body">
+          ${sl.length ? `<div class="wk-path">${many ? path.map(chip).join('<span class="wk-arrow">→</span>') : ''}
+            ${home ? `<span class="wk-home">${esc(t('wk_home_at'))} ${esc(home)}</span>` : ''}</div>` : ''}
+          <div id="day-slots"></div></div>`;
+      }
+      return `<div class="wk-row${isOpen ? ' open' : ''}${sl.length ? ' has-lessons' : ''}">
+        <div class="wk-head day-tab${isOpen ? ' active' : ''}" role="button" tabindex="0" onclick="App.toggleWeekDay(${d})"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="this.classList.remove('drag-over');App._onDayTabDrop(event,${d})">
+          <b class="wk-day">${DAYS[d]}</b>
+          <span class="wk-bar">${bar}</span>
+          <span class="wk-km">${sl.length ? km.toFixed(1) + ' km' : '—'}</span>
+        </div>${body}</div>`;
+    }).join('');
+    return `<div class="wk-axis"><span></span><span class="wk-ticks">${hours.map(h => `<em style="left:${pct(h)}%">${h / 60}:00</em>`).join('')}</span><span></span></div>
+      ${rows}${legend}`;
+  },
+  // Tap a day: open it, or close it if it is the open one. With a lesson
+  // picked up (tap-to-move), the tap means "move it here", as the tabs did.
+  toggleWeekDay(d){
+    const cur = state.weekOpen === undefined ? state.scheduleDay : state.weekOpen;
+    if(!_drag && cur === d){
+      state.weekOpen = null;
+      const rib = document.getElementById('week-ribbon');
+      if(rib) rib.innerHTML = this._weekRibbonHtml();
+      return;
+    }
+    this.switchDay(d);
   },
 
   switchDay(d){
@@ -10658,10 +10778,9 @@ const App = {
       return;
     }
     state.scheduleDay = d;
-    document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.day-tab').forEach(t=>{
-      if(t.textContent.trim().startsWith(DAYS[d])) t.classList.add('active');
-    });
+    state.weekOpen = d;
+    const rib = document.getElementById('week-ribbon');
+    if(rib) rib.innerHTML = this._weekRibbonHtml();
     this.renderDaySlots();
     // The map shows the chosen day: it has to follow the tab.
     try{ this._drawWeekMap(); }catch(e){ console.warn('week map failed', e); }

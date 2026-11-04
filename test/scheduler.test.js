@@ -6088,6 +6088,44 @@ describe('swipe right to delete: the day closes the gap', () => {
   });
 });
 
+describe('the week as a ribbon: areas, and a day that opens in place', () => {
+  test('the place of an address, as the geocoders write them', () => {
+    const A = loadApp().App;
+    assert.equal(A._placeOf('Ψαρών, 265 00 Ρίο, Ελλάδα'), 'Ρίο');
+    assert.equal(A._placeOf('Αραχωβίτικα, Δημοτική Ενότητα Ρίου, 265 04'), 'Ρίου');
+    assert.equal(A._placeOf('Θεοφράστου, Πάτρα, 264 43'), 'Πάτρα');
+    assert.equal(A._placeOf('Ανθεμίου 9, Μέσα Αγυιά, Δημοτική Ενότητα Πατρέων, 264 41'), 'Πατρέων');
+    assert.equal(A._placeOf('Ψαρών, Αραχοβίτικα, Ρίο'), 'Ρίο');
+    assert.equal(A._placeOf('Κορίνθου 210'), 'Κορίνθου 210', 'nothing better: the address itself');
+  });
+  test('names that differ only in their ending are one area, named by the commonest form', () => {
+    const app = loadApp();
+    const st = (id, address) => student(id, { address });
+    app.setState({ settings: settings(), students: [st('a', 'Ψαρών, 265 00 Ρίο, Ελλάδα'), st('b', 'Αραχωβίτικα, Δημοτική Ενότητα Ρίου, 265 04'), st('c', 'Ζαΐμη, 265 00 Ρίο, Ελλάδα'),
+      st('d', 'Θεοφράστου, Πάτρα, 264 43'), st('e', 'Ανθεμίου 9, Μέσα Αγυιά, Δημοτική Ενότητα Πατρέων, 264 41')], schedule: {}, coords: {}, jobs: [] });
+    const Z = app.App._zones();
+    assert.equal(JSON.stringify(Z.list.map(g => [g.name, g.ids.length])), '[["Ρίο",3],["Πάτρα",2]]');
+    assert.equal(Z.byId.b.name, 'Ρίο'); assert.equal(Z.byId.e.name, 'Πάτρα');
+  });
+  test('tapping a day opens it with its path and lessons; tapping again closes it', () => {
+    const app = loadApp();
+    const sts = [student('r', { address: 'Ψαρών, 265 00 Ρίο, Ελλάδα' }), student('p', { address: 'Θεοφράστου, Πάτρα, 264 43' })];
+    app.setState({ settings: settings({ workDays: [1, 2] }), students: sts, coords: cityCoords(sts), jobs: [],
+      schedule: { 1: [slot('r', '15:00', '16:00'), slot('p', '16:30', '17:30')], 2: [] }, scheduleDay: 1 });
+    let html = app.App._weekRibbonHtml();
+    assert.match(html, /class="wk-row open has-lessons"/);
+    assert.match(html, /Ρίο<\/span><span class="wk-arrow">→<\/span><span[^>]*>Πάτρα/, 'where the day goes');
+    assert.match(html, /id="day-slots"/);
+    app.ctx.document.getElementById = () => null;
+    app.App.renderDaySlots = () => {}; app.App._drawWeekMap = () => {};
+    app.App.toggleWeekDay(1);
+    assert.equal(app.state.weekOpen, null, 'closed');
+    assert.ok(!/id="day-slots"/.test(app.App._weekRibbonHtml()));
+    app.App.toggleWeekDay(2);
+    assert.equal(app.state.weekOpen, 2); assert.equal(app.state.scheduleDay, 2);
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {
