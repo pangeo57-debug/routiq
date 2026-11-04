@@ -4574,7 +4574,7 @@ describe('errands: the day for people who are not at work', () => {
     const plan = { date: MONDAY, stops: [
       { job: { id: 'e1', name: 'Pharmacy' } }, { job: { id: 'e2', name: 'Bank' } }, { job: { id: 'w1', name: 'Work A' } }] };
     app.App._drawDayMap(plan);
-    assert.deepStrictEqual(marks, ['🏠', '1', '3']);
+    assert.deepStrictEqual(marks, ['', '1', '3']);
     assert.deepStrictEqual(line, [4], 'home, two known stops, and back home');
   });
 
@@ -5143,7 +5143,7 @@ describe('a map on every schedule view, a neutral start, and fewer settings', ()
     app.state.planDate = '2026-11-02';
     app.state.jobs = [{ id: 'j1', name: 'A', date: '2026-11-02' }, { id: 'j2', name: 'B', date: '2026-11-03' }];
     app.App._drawDayMap(null);
-    assert.equal(JSON.stringify(calls.markers), JSON.stringify(['🏠', '•']));
+    assert.equal(JSON.stringify(calls.markers), JSON.stringify(['', '•']));
     assert.equal(calls.lines, 0);
   });
 
@@ -5152,7 +5152,7 @@ describe('a map on every schedule view, a neutral start, and fewer settings', ()
     app.state.scheduleDay = 2;
     app.state.schedule = { 2: [slot('b', '17:00', '18:00'), slot('a', '15:00', '16:00')] };
     app.App._drawWeekMap();
-    assert.equal(JSON.stringify(calls.markers), JSON.stringify(['🏠', '1', '2']));
+    assert.equal(JSON.stringify(calls.markers), JSON.stringify(['', '1', '2']));
     assert.equal(calls.lines, 1);
   });
 
