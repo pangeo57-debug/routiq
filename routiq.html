@@ -182,6 +182,13 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
    over the bottom bar or the sheets. */
 .leaflet-container{position:relative;z-index:0;isolation:isolate}
 
+/* Swipe right to delete a job or errand */
+[data-swipe-job]{touch-action:pan-y;position:relative}
+[data-swipe-job].swiping{transition:none!important;user-select:none;-webkit-user-select:none}
+[data-swipe-job].swipe-out{transition:transform .2s ease,opacity .2s ease!important;transform:translateX(110%)!important;opacity:0}
+.swipe-bg{position:absolute;inset:0;border-radius:inherit;background:var(--red);color:#fff;display:flex;align-items:center;padding-left:18px;font-weight:700;font-size:13px;z-index:-1}
+.toast-action{margin-left:auto;border:none;background:transparent;color:var(--green);font-weight:800;font-size:14px;padding:6px 8px;cursor:pointer}
+
 /* NAV */
 nav{
   position:fixed;bottom:0;left:50%;transform:translateX(-50%);
@@ -1155,7 +1162,7 @@ const I18N = {
     schedule_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', schedule_optimize:'Βελτιστοποίηση με χάρτη (OpenStreetMap)',
     schedule_optimized_done:'Βελτιστοποίηση ολοκληρώθηκε', schedule_unplaced_students:'χωρίς πλήρες πρόγραμμα',
     route_title:'Διαδρομή', route_calc:'Υπολογισμός', route_no_route:'Καμία διαδρομή',
-    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
+    route_no_lessons_day:'Τίποτα προγραμματισμένο αυτή την ημέρα', route_start:'Αφετηρία', route_return:'Επιστροφή', swipe_delete:'Διαγραφή', swipe_undo:'Αναίρεση', swipe_deleted:'Διαγράφηκε: {name}.', swipe_refit:'Οι επόμενες ανέβηκαν.', swipe_refit_now:'Οι επόμενες ξαναϋπολογίστηκαν από τις {time}.', swipe_no_refit:'Οι επόμενες έμειναν στις ώρες τους.', ba_title:'Πριν και μετά', ba_before_typed:'Με τη σειρά που τα έγραψες', ba_before_time:'Με τη σειρά της ώρας', ba_before_week:'Απλή τοποθέτηση, χωρίς βελτίωση', ba_after:'Με το RoutePal', ba_drive:'οδήγηση', ba_wait:'αναμονή', ba_saved:'Γλιτώνεις {km} km και {min}′ (−{pct}%) · ≈ €{eur} καύσιμα', ba_more:'Χωράνε {n} ραντεβού παραπάνω', ba_already_good:'Η σειρά σου ήταν ήδη η καλύτερη', ba_trade:'{min}′ λιγότερη αναμονή, για {km} km παραπάνω', home_plan_empty:'Δεν υπάρχει τίποτα να σχεδιαστεί γι\u2019 αυτή τη μέρα. Πάτα το ＋ για να προσθέσεις.', fab_errand:'Υποχρέωση', fab_job:'Ραντεβού', fab_voice:'Φωνή', fab_plan:'Σχεδίασε', fab_new:'Νέο', fab_errand_title:'Τι πρέπει να κάνεις;', fab_errand_hint:'Γράψε πολλά μαζί με κόμμα: «φαρμακείο, γιατρός 12 Φιλοποίμενος, καφές κέντρο». Το καθένα γίνεται χωριστό κουτί.', fab_voice_none:'Η φωνή δεν υποστηρίζεται εδώ — πάτα το μικρόφωνο του πληκτρολογίου.', fab_voice_denied:'Δεν δόθηκε άδεια για το μικρόφωνο.', km_incl_return:'μαζί με επιστροφή',
     route_distance:'απόσταση', route_travel:'Ταξίδι', route_fuel:'Καύσιμα', route_stops:'Σειρά στάσεων',
     route_real:'Πραγματική', route_estimated:'Εκτιμώμενη', route_arrival:'Άφιξη',
     settings_title:'Ρυθμίσεις', settings_profession:'Ειδικότητα', settings_personal:'Προσωπικά', settings_name:'Όνομα',
@@ -1345,7 +1352,7 @@ const I18N = {
     schedule_no_lessons_day:'Nothing scheduled this day', schedule_optimize:'Optimize with map (OpenStreetMap)',
     schedule_optimized_done:'Optimization complete', schedule_unplaced_students:'not fully scheduled',
     route_title:'Route', route_calc:'Calculate', route_no_route:'No route',
-    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
+    route_no_lessons_day:'Nothing scheduled this day', route_start:'Start', route_return:'Return', swipe_delete:'Delete', swipe_undo:'Undo', swipe_deleted:'Deleted: {name}.', swipe_refit:'The rest moved up.', swipe_refit_now:'The rest were worked out again from {time}.', swipe_no_refit:'The rest kept their times.', ba_title:'Before and after', ba_before_typed:'In the order you wrote them', ba_before_time:'In order of time', ba_before_week:'Plain placement, not optimised', ba_after:'With RoutePal', ba_drive:'driving', ba_wait:'waiting', ba_saved:'You save {km} km and {min}′ (−{pct}%) · ≈ €{eur} fuel', ba_more:'{n} more appointments fit', ba_already_good:'Your order was already the best', ba_trade:'{min}′ less waiting, for {km} km more', home_plan_empty:'Nothing to plan for this day yet. Tap + to add something.', fab_errand:'Errand', fab_job:'Appointment', fab_voice:'Voice', fab_plan:'Plan', fab_new:'New', fab_errand_title:'What do you need to do?', fab_errand_hint:'Type several with commas: "pharmacy, doctor at 12 on Main St, coffee downtown". Each becomes its own box.', fab_voice_none:'Voice is not available here — use the keyboard microphone.', fab_voice_denied:'Microphone permission was not given.', km_incl_return:'incl. drive home',
     route_distance:'distance', route_travel:'Travel', route_fuel:'Fuel', route_stops:'Stop order',
     route_real:'Real', route_estimated:'Estimated', route_arrival:'Arrival',
     settings_title:'Settings', settings_profession:'Specialty', settings_personal:'Personal', settings_name:'Name',
@@ -1535,7 +1542,7 @@ const I18N = {
     schedule_no_lessons_day:'Aucun cours ce jour', schedule_optimize:'Optimiser avec carte (OpenStreetMap)',
     schedule_optimized_done:'Optimisation terminée', schedule_unplaced_students:"élève(s) sans programme complet",
     route_title:'Itinéraire', route_calc:'Calculer', route_no_route:'Aucun itinéraire',
-    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
+    route_no_lessons_day:'Aucun cours ce jour', route_start:'Départ', route_return:'Retour', swipe_delete:'Supprimer', swipe_undo:'Annuler', swipe_deleted:'Supprimé : {name}.', swipe_refit:'Les suivants ont été avancés.', swipe_refit_now:'Les suivants ont été recalculés à partir de {time}.', swipe_no_refit:'Les suivants gardent leurs horaires.', ba_title:'Avant et après', ba_before_typed:'Dans l\u2019ordre saisi', ba_before_time:'Dans l\u2019ordre des heures', ba_before_week:'Placement simple, non optimisé', ba_after:'Avec RoutePal', ba_drive:'trajet', ba_wait:'attente', ba_saved:'Vous économisez {km} km et {min}′ (−{pct}%) · ≈ {eur} € de carburant', ba_more:'{n} rendez-vous de plus tiennent', ba_already_good:'Votre ordre était déjà le meilleur', ba_trade:'{min}′ d\u2019attente en moins, pour {km} km de plus', home_plan_empty:'Rien à planifier pour ce jour. Appuyez sur + pour ajouter.', fab_errand:'Course', fab_job:'Rendez-vous', fab_voice:'Voix', fab_plan:'Planifier', fab_new:'Nouveau', fab_errand_title:'Que devez-vous faire ?', fab_errand_hint:'Tapez-en plusieurs avec des virgules : « pharmacie, médecin à 12h, café centre ». Chacun devient une case.', fab_voice_none:'La voix n\u2019est pas disponible ici — utilisez le micro du clavier.', fab_voice_denied:'Accès au micro refusé.', km_incl_return:'retour compris',
     route_distance:'distance', route_travel:'Trajet', route_fuel:'Carburant', route_stops:'Ordre des arrêts',
     route_real:'Réelle', route_estimated:'Estimée', route_arrival:'Arrivée',
     settings_title:'Réglages', settings_profession:'Spécialité', settings_personal:'Personnel', settings_name:'Nom',
@@ -1725,7 +1732,7 @@ const I18N = {
     schedule_no_lessons_day:'Keine Stunden an diesem Tag', schedule_optimize:'Mit Karte optimieren (OpenStreetMap)',
     schedule_optimized_done:'Optimierung abgeschlossen', schedule_unplaced_students:'Schüler ohne vollständigen Plan',
     route_title:'Route', route_calc:'Berechnen', route_no_route:'Keine Route',
-    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
+    route_no_lessons_day:'Keine Stunden an diesem Tag', route_start:'Start', route_return:'Rückkehr', swipe_delete:'Löschen', swipe_undo:'Rückgängig', swipe_deleted:'Gelöscht: {name}.', swipe_refit:'Die nächsten rücken vor.', swipe_refit_now:'Die nächsten wurden ab {time} neu berechnet.', swipe_no_refit:'Die nächsten behalten ihre Zeiten.', ba_title:'Vorher und nachher', ba_before_typed:'In der eingegebenen Reihenfolge', ba_before_time:'Nach Uhrzeit', ba_before_week:'Einfache Einplanung, nicht optimiert', ba_after:'Mit RoutePal', ba_drive:'Fahrt', ba_wait:'Warten', ba_saved:'Sie sparen {km} km und {min}′ (−{pct}%) · ≈ {eur} € Kraftstoff', ba_more:'{n} Termine mehr passen', ba_already_good:'Ihre Reihenfolge war schon die beste', ba_trade:'{min}′ weniger Warten, für {km} km mehr', home_plan_empty:'Für diesen Tag gibt es nichts zu planen. Tippen Sie auf +, um etwas hinzuzufügen.', fab_errand:'Besorgung', fab_job:'Termin', fab_voice:'Sprache', fab_plan:'Planen', fab_new:'Neu', fab_errand_title:'Was steht an?', fab_errand_hint:'Mehrere mit Komma: "Apotheke, Arzt um 12, Kaffee Zentrum". Jedes wird ein eigener Eintrag.', fab_voice_none:'Sprache ist hier nicht verfügbar — nutzen Sie das Mikrofon der Tastatur.', fab_voice_denied:'Kein Zugriff auf das Mikrofon.', km_incl_return:'inkl. Rückfahrt',
     route_distance:'Entfernung', route_travel:'Fahrt', route_fuel:'Kraftstoff', route_stops:'Reihenfolge der Stopps',
     route_real:'Tatsächliche', route_estimated:'Geschätzte', route_arrival:'Ankunft',
     settings_title:'Einstellungen', settings_profession:'Fachgebiet', settings_personal:'Persönlich', settings_name:'Name',
@@ -3807,6 +3814,36 @@ const Scheduler = {
     next.before = plan.before || null;
     next.after = this.measureDay(laid, plan.day, cfg);
     return { ok: true, plan: next };
+  },
+
+  // Take one stop out of a planned day and close the gap: stops already under
+  // way (they started before `nowMin`) stay where they are; the rest are laid
+  // out again in the same order, from now — or from the end of the last one
+  // under way plus the drive — so they move up. If that cannot be laid out,
+  // the rest keep their old times and `refit` is false.
+  dropStop(plan, settings, id, nowMin){
+    const rest = plan.stops.filter(x => x.job.id !== id);
+    const list = rest.map(x => x.job).concat((plan.unplanned || []).filter(j => j.id !== id));
+    const { clients, cfg, dh } = this._dayFrame(list, plan.day, settings, plan.hours, plan.errand);
+    const kept = nowMin == null ? [] : rest.filter(x => this.toMin(x.start) < nowMin);
+    const todo = rest.filter(x => !kept.includes(x));
+    let start = this.toMin(cfg.dayHours[plan.day].start);
+    if(nowMin != null) start = Math.max(start, Math.ceil(nowMin / 5) * 5);
+    const last = kept[kept.length - 1];
+    if(last && todo.length)
+      start = Math.max(start, this.toMin(last.end) + (cfg.travelMargin ?? 2) +
+        this.travelEstMin(last.slot.studentId, last.slot.address, todo[0].slot.studentId, todo[0].slot.address, plan.day, this.toMin(last.end)));
+    const cfg2 = { ...cfg, dayHours: { ...cfg.dayHours, [plan.day]: { ...cfg.dayHours[plan.day], start: this.toTime(start) } } };
+    let laid = todo.length ? this.relayoutDay(todo.map(x => ({ ...x.slot })), plan.day, clients, cfg2) : [];
+    let refit = true;
+    if(!laid){ laid = todo.map(x => ({ ...x.slot })); refit = false; }
+    const placed = kept.map(x => ({ ...x.slot })).concat(laid);
+    const next = this._daySummary(placed, list, clients, cfg, dh, plan.day, plan.date, plan.unlocated || []);
+    next.timesFrom = plan.timesFrom; next.errand = !!plan.errand;
+    next.before = null;                         // the "before" was a different list
+    next.after = this.measureDay(placed, plan.day, cfg);
+    next.refit = refit; next.refitFrom = this.toTime(start);
+    return next;
   },
 
   // Which two clients could share one slot?
@@ -6658,6 +6695,8 @@ const App = {
     applyLanguageArrays();
     this.applyTheme();
 
+    try { this._initSwipe(); } catch(e){}
+
     // First run: clean slate + onboarding
     if(!localStorage.getItem('rp_init_v24')){
       state.settings = defaultSettings();
@@ -7848,7 +7887,7 @@ const App = {
     const next = !isToday ? null : items.find(x => !x.done && x.time && Scheduler.toMin(x.end || x.time) > nowMin);
     const kindIcon = { lesson: '📘', job: '🔧', errand: '🛍️' };
     const row = (x) => `
-      <div class="agenda-row${x.done ? ' done' : ''}${next && x === next ? ' next' : ''}" role="button" tabindex="0" style="cursor:pointer"
+      <div class="agenda-row${x.done ? ' done' : ''}${next && x === next ? ' next' : ''}" role="button" tabindex="0" style="cursor:pointer"${x.kind !== 'lesson' ? ` data-swipe-job="${esc(x.id)}"` : ''}
         onclick="App.homeOpen('${x.kind}','${esc(x.id)}')">
         <div class="agenda-time">${x.time ? esc(x.time) : '—'}</div>
         <div class="agenda-body">
@@ -8085,6 +8124,86 @@ const App = {
     try{ this._fabRec && this._fabRec.stop(); }catch(e){}
     this._fabRec = null;
     document.getElementById('fab-mic')?.classList.remove('on');
+  },
+
+  // Swipe right on a job or errand to delete it, with Undo. The planned day
+  // closes the gap (see Scheduler.dropStop).
+  swipeDeleteJob(id){
+    const j = (state.jobs || []).find(x => x.id === id);
+    if(!j) return;
+    const saved = { jobs: state.jobs.slice(), coord: state.coords[id], plan: state.dayPlan };
+    state.jobs = state.jobs.filter(x => x.id !== id);
+    delete state.coords[id];
+    let refitMsg = '';
+    const plan = state.dayPlan;
+    if(plan && plan.date === j.date && plan.stops.some(x => x.job && x.job.id === id)){
+      const now = new Date();
+      const nowMin = plan.date === this.todayISO() ? now.getHours() * 60 + now.getMinutes() : null;
+      try{
+        state.dayPlan = Scheduler.dropStop(plan, state.settings, id, nowMin);
+        if(state.dayPlan.stops.length) refitMsg = ' ' + (!state.dayPlan.refit ? t('swipe_no_refit')
+          : nowMin != null ? tf('swipe_refit_now', { time: state.dayPlan.refitFrom }) : t('swipe_refit'));
+      }catch(e){ console.warn('dropStop failed', e); state.dayPlan = null; }
+    }
+    Storage.saveJobs(state.jobs); Storage.saveCoords(state.coords);
+    this._rerenderAfterJobs();
+    Toast.show(tf('swipe_deleted', { name: j.name }) + refitMsg, 'info', 6000, { label: t('swipe_undo'), run: () => {
+      state.jobs = saved.jobs; if(saved.coord) state.coords[id] = saved.coord; state.dayPlan = saved.plan;
+      Storage.saveJobs(state.jobs); Storage.saveCoords(state.coords);
+      this._rerenderAfterJobs();
+    } });
+  },
+  _rerenderAfterJobs(){
+    if(state.currentScreen === 'home') this.renderHome();
+    else if(state.currentScreen === 'schedule') this.renderSchedule();
+  },
+  // One listener for every [data-swipe-job] element on any screen.
+  _initSwipe(){
+    if(this._swipeInit) return; this._swipeInit = true;
+    let el = null, x0 = 0, y0 = 0, dx = 0, active = false, bg = null;
+    const reset = () => { if(el){ el.classList.remove('swiping'); el.style.transform = ''; } if(bg) bg.remove(); el = null; bg = null; active = false; dx = 0; };
+    document.addEventListener('pointerdown', (e) => {
+      const t0 = e.target.closest && e.target.closest('[data-swipe-job]');
+      if(!t0 || e.target.closest('button,input,select,textarea,a')) return;
+      el = t0; x0 = e.clientX; y0 = e.clientY; dx = 0; active = false;
+    }, { passive: true });
+    document.addEventListener('pointermove', (e) => {
+      if(!el) return;
+      const mx = e.clientX - x0, my = e.clientY - y0;
+      if(!active){
+        if(Math.abs(my) > 12 && Math.abs(my) > Math.abs(mx)){ reset(); return; }   // a scroll
+        if(mx < 14) return;
+        active = true; el.classList.add('swiping');
+        try{ window.getSelection().removeAllRanges(); }catch(e){}
+        bg = document.createElement('div'); bg.className = 'swipe-bg'; bg.textContent = '🗑 ' + t('swipe_delete');
+        el.appendChild(bg);
+      }
+      dx = Math.max(0, mx);
+      el.style.transform = `translateX(${dx}px)`;
+      if(bg) bg.style.transform = `translateX(${-dx}px)`;
+    }, { passive: true });
+    const end = () => {
+      if(!el) return;
+      if(active){
+        this._swipeJustEnded = Date.now();                 // swallow the click that follows
+        if(dx > Math.min(140, el.offsetWidth * 0.35)){
+          const id = el.getAttribute('data-swipe-job'), target = el;
+          target.classList.remove('swiping'); target.classList.add('swipe-out');
+          if(bg) bg.remove();
+          el = null; bg = null; active = false;
+          setTimeout(() => this.swipeDeleteJob(id), 180);
+          return;
+        }
+      }
+      reset();
+    };
+    document.addEventListener('pointerup', end, { passive: true });
+    document.addEventListener('pointercancel', reset, { passive: true });
+    document.addEventListener('click', (e) => {
+      if(this._swipeJustEnded && Date.now() - this._swipeJustEnded < 400 && e.target.closest && e.target.closest('[data-swipe-job]')){
+        e.stopPropagation(); e.preventDefault();
+      }
+    }, true);
   },
 
   toggleJobDone(id){
@@ -9892,7 +10011,7 @@ const App = {
                  {n:w.minutes, after:esc(w.after), before:esc(w.before)})}</div>`).join('')}
           </div>`:''}
         ${plan.stops.length ? `<div style="padding:0 0 8px">${plan.stops.map((x,i)=>`
-          <div class="stop-item">
+          <div class="stop-item" data-swipe-job="${esc(x.job.id)}" style="background:var(--bg)">
             <div class="stop-num">${i+1}</div>
             <div class="stop-info">
               <div class="stop-name">${esc(x.job.name)}</div>
@@ -9939,7 +10058,7 @@ const App = {
       </div>
       <div style="padding:0 16px 24px">
         ${jobs.length ? jobs.map(j=>`
-          <div class="card-sm" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:10px 12px">
+          <div class="card-sm" data-swipe-job="${esc(j.id)}" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:10px 12px">
             <div style="flex:1;min-width:0">
               <div style="font-weight:600;font-size:14px">${esc(j.name)}${
                 placedIds.has(j.id)?'':` <span style="font-size:11px;color:var(--orange)">${esc(t('day_not_planned'))}</span>`}</div>
@@ -12902,7 +13021,7 @@ const App = {
 // TOAST
 // ============================================================
 const Toast = {
-  show(msg, type='info', duration=3000){
+  show(msg, type='info', duration=3000, action){
     const icons = {
       success:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
       error:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
@@ -12920,6 +13039,15 @@ const Toast = {
     const body = document.createElement('span');
     body.textContent = msg == null ? '' : String(msg);
     t.appendChild(icon); t.appendChild(body);
+    // An optional action, e.g. "Undo": a real button, so it is tappable.
+    if(action && action.label && typeof action.run === 'function'){
+      const b = document.createElement('button');
+      b.className = 'toast-action';
+      b.textContent = action.label;
+      b.onclick = (e) => { e.stopPropagation(); try{ action.run(); }finally{ t.remove(); } };
+      t.appendChild(b);
+      t.style.pointerEvents = 'auto';
+    }
     document.getElementById('toast-container').appendChild(t);
     setTimeout(()=>{
       t.style.animation='toastOut .25s ease forwards';

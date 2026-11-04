@@ -6028,6 +6028,66 @@ describe('before and after: the same rules, the same distances, only the plannin
   });
 });
 
+describe('swipe right to delete: the day closes the gap', () => {
+  const DATE = '2030-01-07';
+  async function planned(n = 4, extra = {}) {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '20:00' } } });
+    const coords = { home: { lat: 38.2466, lon: 21.7346 } };
+    const pts = [[38.25, 21.80], [38.25, 21.67], [38.26, 21.81], [38.26, 21.66]];
+    const jobs = pts.slice(0, n).map((c, i) => { coords['e' + i] = { lat: c[0], lon: c[1] }; return { id: 'e' + i, name: 'E' + i, date: DATE, kind: 'errand', address: 'x' + i, durationMin: 30, ...(extra[i] || {}) }; });
+    app.setState({ settings: cfg, coords, students: [], jobs, schedule: {} });
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, DATE, { hours: { start: '09:00', end: '20:00' }, errand: true, budgetMs: 400 });
+    return { app, S: app.Scheduler, cfg, plan };
+  }
+  test('a stop taken out: the ones after it move up, the ones before stay', async () => {
+    const { S, cfg, plan } = await planned();
+    const gone = plan.stops[1];
+    const next = S.dropStop(plan, cfg, gone.job.id, null);
+    assert.equal(next.stops.length, 3);
+    assert.equal(next.stops[0].start, plan.stops[0].start, 'the first is untouched');
+    assert.ok(S.toMin(next.stops[1].start) < S.toMin(plan.stops[2].start), 'the next one moved up');
+    assert.equal(next.refit, true);
+    assert.equal(next.issues.length, 0);
+    assert.equal(next.before, null, 'the old before/after no longer applies');
+  });
+  test('today: what started before now keeps its time, the rest start from now', async () => {
+    const { S, cfg, plan } = await planned();
+    const nowMin = S.toMin(plan.stops[1].start) + 5;          // the second one is under way
+    const next = S.dropStop(plan, cfg, plan.stops[2].job.id, nowMin);
+    assert.equal(next.stops[0].start, plan.stops[0].start);
+    assert.equal(next.stops[1].start, plan.stops[1].start, 'under way: not moved');
+    assert.ok(S.toMin(next.stops[2].start) >= nowMin, 'nothing is put in the past');
+  });
+  test('the one under way deleted: the rest start from now, never in the past', async () => {
+    const { S, cfg, plan } = await planned();
+    const nowMin = S.toMin(plan.stops[0].start) + 10;
+    const next = S.dropStop(plan, cfg, plan.stops[0].job.id, nowMin);
+    for (const x of next.stops) assert.ok(S.toMin(x.start) >= nowMin, x.start);
+  });
+  test('if the rest no longer fit from now, they keep their times', async () => {
+    const { S, cfg, plan } = await planned();
+    const nowMin = S.toMin(plan.stops[1].start) - 1;
+    const tight = { ...plan, hours: { start: '09:00', end: S.toTime(nowMin + 20) } };   // no room left for a 30-minute stop
+    const next = S.dropStop(tight, cfg, plan.stops[3].job.id, nowMin);
+    assert.equal(next.refit, false);
+    assert.equal(JSON.stringify(next.stops.map(x => x.start)), JSON.stringify(plan.stops.slice(0, 3).map(x => x.start)));
+  });
+  test('the app deletes, offers undo, and undo brings the day back exactly', async () => {
+    const { app, plan } = await planned();
+    app.state.dayPlan = plan; app.state.currentScreen = 'schedule';
+    app.App.renderSchedule = () => {};
+    let action = null; app.Toast.show = (m, ty, d, a) => { action = a; };
+    const id = plan.stops[1].job.id, times = JSON.stringify(plan.stops.map(x => x.start));
+    app.App.swipeDeleteJob(id);
+    assert.equal(app.state.jobs.length, 3); assert.equal(app.state.dayPlan.stops.length, 3);
+    assert.ok(action && typeof action.run === 'function');
+    action.run();
+    assert.equal(app.state.jobs.length, 4);
+    assert.equal(JSON.stringify(app.state.dayPlan.stops.map(x => x.start)), times);
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {
