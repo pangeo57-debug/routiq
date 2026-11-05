@@ -2607,6 +2607,43 @@ const Scheduler = {
     return [...Array(joins).fill(2 * dur), ...Array(n - 2 * joins).fill(dur)];
   },
 
+  // The previous schedule as a starting point: only lessons of students who
+  // still exist and still take that many, with anything the current rules
+  // forbid repaired or taken out. Null when nothing usable is left.
+  warmStart(prev, students, settings){
+    if(!prev) return null;
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const out = {};
+    for(const d of (settings.workDays || [])){
+      out[d] = ((prev[d] || []).filter(sl => {
+        const ids = sl.isGroup ? (sl.groupMemberIds || [sl.studentId, sl.pairedStudentId].filter(Boolean)) : [sl.studentId];
+        return ids.every(id => byId[id]);
+      })).map(sl => ({ ...sl }));
+    }
+    // a student now asking for fewer lessons than the old week gave them
+    const count = {};
+    for(const d of Object.keys(out)) out[d] = out[d].filter(sl => {
+      if(sl.isGroup) return true;
+      const st = byId[sl.studentId], len = this.toMin(sl.end) - this.toMin(sl.start);
+      // a lesson whose length the client no longer has is not kept
+      const lens = Array.isArray(st.durations) && st.durations.length ? st.durations.map(Number) : [Number(st.lessonDuration)];
+      if(!(sl.merged ? len === Number(st.lessonDuration) * (sl.mergedCount || 1) : lens.includes(len))) return false;
+      const c = (count[sl.studentId] || 0) + (sl.mergedCount || 1);
+      if(c > (st.lessonsPerWeek || 0)) return false;
+      count[sl.studentId] = c; return true;
+    });
+    if(!this.countTotal(out)) return null;
+    this.enforceConstraints(out, students, settings);
+    return this.countTotal(out) ? out : null;
+  },
+  // Lexicographic, as everywhere: more lessons, then km + waiting.
+  isBetterStart(a, b, settings){
+    const na = this.countTotal(a), nb = this.countTotal(b);
+    if(na !== nb) return na > nb;
+    const ma = this.measureWeek(a, settings), mb = this.measureWeek(b, settings);
+    return ma.km + ma.idle * this.IDLE_KM_PER_MIN < mb.km + mb.idle * this.IDLE_KM_PER_MIN - 0.05;
+  },
+
   // Make each flexible student's pieces describe the schedule actually kept:
   // what is placed, plus the rest of the weekly time as the fewest pieces.
   flexSync(schedule, students){
@@ -7714,6 +7751,18 @@ const App = {
         if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler worker failed; running on the page', e);
         result = await Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
       }
+      // Build on what was there. The schedule on screen, cleaned of anything
+      // the current students and settings no longer allow, is a starting
+      // point too: if it holds at least as many lessons for less, the run
+      // continues from it, so a solution found once is not lost to the luck
+      // of a fresh start, and pressing again can only keep or improve it.
+      try{
+        const warm = Scheduler.warmStart(scheduleBackup, state.students, state.settings);
+        if(warm && Scheduler.isBetterStart(warm, result.schedule, state.settings)){
+          console.info(`warm start: ${Scheduler.countTotal(warm)} lessons from the previous schedule beat ${Scheduler.countTotal(result.schedule)} from a fresh start`);
+          result = { ...result, schedule: warm };
+        }
+      }catch(e){ console.warn('warm start failed', e); }
       state.scheduleAttempts = [result];
       state.scheduleAttemptIdx = 0;
       state.scheduleOptimized = false;
