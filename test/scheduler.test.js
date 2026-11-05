@@ -5007,7 +5007,7 @@ describe('refineWeek: fit the lessons that are out, then win the kilometres back
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
     const run = src.slice(src.indexOf('async runAndNotify()'));
     const iRel = run.indexOf('Scheduler.relocateForTime(state.schedule'), iRef = run.indexOf('Scheduler.refineWeek(state.schedule'),
-      iVer = run.indexOf('Scheduler.verifySchedule(state.schedule');
+      iVer = run.indexOf('Scheduler.verifySchedule(state.schedule', iRef);   // the final check (earlier ones guard single passes)
     assert.ok(iRel > 0 && iRef > iRel && iVer > iRef, 'order: relocateForTime, refineWeek, verifySchedule');
   });
 });
