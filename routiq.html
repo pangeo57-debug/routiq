@@ -2644,6 +2644,92 @@ const Scheduler = {
     return ma.km + ma.idle * this.IDLE_KM_PER_MIN < mb.km + mb.idle * this.IDLE_KM_PER_MIN - 0.05;
   },
 
+  // ── The whole week, start to finish, with no screen ─────────────────────
+  // The same phases, budgets and guards the app has always run, in the same
+  // order, so it can run in a worker (several at once) or on the page.
+  // input: { students, settings, coords, attempts, warm }  (warm: the cleaned
+  // previous schedule, or null). hooks: { progress(pct, titleKey, subKey,
+  // params), stopped() }. Returns { schedule, result, students } — students
+  // because flexible time may have been split on the way.
+  async optimizeWeek(input, hooks = {}){
+    const { students, settings, coords } = input;
+    const P = hooks.progress || (() => {}), stop = hooks.stopped || (() => this._stopped());
+    const tick = () => new Promise(r => setTimeout(r, 0));
+    let result, sch;
+    if(input.skipPhase1 && input.warm){
+      // A second round: search again from the best week found so far.
+      result = { schedule: input.warm, unplaced: [], success: true, _attempts: 0 };
+      sch = JSON.parse(JSON.stringify(input.warm));
+    } else {
+      P(15, 'phase1b_title', 'phase1b_sub', { n: input.attempts });
+      result = await this.runMultiAttempt(students, settings, coords, input.attempts, false);
+      sch = result.schedule;
+      if(input.warm && this.isBetterStart(input.warm, sch, settings)) sch = JSON.parse(JSON.stringify(input.warm));
+    }
+    // The best week seen so far, by the app's own rule (more lessons, then
+    // km + waiting, never a newly broken rule), is kept aside after every
+    // pass and is what comes back. A pass may still hand on a week that rule
+    // rates worse — some judge by their own yardstick (ALNS has no waiting
+    // in it), and the way to a much better week can lead through a worse
+    // one: measured, from 138.2 km a run reached 127.2 km only that way.
+    const issues = (x) => this.verifySchedule(x, students, settings).length;
+    let best = JSON.parse(JSON.stringify(sch)), bestIssues = issues(best);
+    const keepBest = () => {
+      const n = issues(sch);
+      if(n < bestIssues || (n === bestIssues && this.isBetterStart(sch, best, settings))){ best = JSON.parse(JSON.stringify(sch)); bestIssues = n; }
+    };
+    const guard = async (fn) => { try{ await fn(sch); }catch(e){} keepBest(); };
+    const done = (stopped) => {
+      keepBest();
+      return { schedule: best, result, students, stopped };
+    };
+    if(stop()) return done(true);
+    P(55, 'phase3_title', 'phase3_sub_short');
+    await guard((x) => this.alnsOptimize(x, students, settings, coords, 25000, (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
+    if(stop()) return done(true);
+    P(82, 'phase4b_title', 'phase4b_sub'); await tick();
+    await guard((x) => this.saRepair(x, students, settings, result));
+    if(stop()) return done(true);
+    P(92, 'phase5_title', 'phase5b_sub'); await tick();
+    await guard((x) => this.lnsRepair(x, students, settings, 10000));
+    try{
+      this.enforceConstraints(sch, students, settings);
+      this.collapseForceMergeFragments(sch, students, settings);
+      this.rebalanceDays(sch, students, settings);
+    }catch(e){}
+    keepBest();
+    if(stop()) return done(true);
+    if(this._missingLessons(sch, students).length){
+      try{
+        P(93, 'phase_persist_title', 'phase_refine_sub');
+        const before = JSON.stringify(sch), base = this.verifySchedule(sch, students, settings).length;
+        await this.ejectionChains(sch, students, settings, 8000);
+        if(this.verifySchedule(sch, students, settings).length > base){ const b = JSON.parse(before); for(const d of Object.keys(sch)) delete sch[d]; Object.assign(sch, b); }
+      }catch(e){}
+    }
+    if(stop()) return done(true);
+    if(this._missingLessons(sch, students).length){
+      try{
+        await this.guardedPass(sch, settings, (x) => this.lnsRepair(x, students, settings, 420000,
+          (nLeft, elapsed) => P(93, 'phase_persist_title', 'phase_persist_sub', { n: nLeft, sec: Math.round(elapsed / 1000) }), 60000));
+        this.enforceConstraints(sch, students, settings);
+        this.collapseForceMergeFragments(sch, students, settings);
+      }catch(e){}
+    }
+    if(stop()) return done(true);
+    await guard((x) => { this.tidyDays(x, students, settings); this.compactDays(x, students, settings); });
+    await guard((x) => { const f = this.fillGaps(x, students, settings); if(f.moved.length) this.compactDays(x, students, settings); });
+    await guard((x) => this.relocateForTime(x, students, settings));
+    if(stop()) return done(true);
+    try{
+      P(94, 'phase_refine_title', 'phase_refine_sub');
+      await guard((x) => this.refineWeek(x, students, settings, 20000, (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
+    }catch(e){}
+    try{ await this.flexFit(sch, students, settings, 6000, stop); }catch(e){}
+    try{ this.rebalanceDays(sch, students, settings); }catch(e){}
+    return done(stop());
+  },
+
   // Make each flexible student's pieces describe the schedule actually kept:
   // what is placed, plus the rest of the weekly time as the fewest pieces.
   flexSync(schedule, students){
@@ -5669,6 +5755,9 @@ const Scheduler = {
     return { added };
   },
 
+  // String removals: temperature (km) from T0 down to T1, strings of up to
+  // maxLen lessons from up to maxDays days.
+  SISR: { T0: 2.0, T1: 0.05, maxLen: 3, maxDays: 3 },
   async stringRemovals(schedule, students, settings, budgetMs = 8000){
     const byId = Object.fromEntries(students.map(s => [s.id, s]));
     const coords = (typeof state !== 'undefined' && state.coords) || {};
@@ -5678,7 +5767,7 @@ const Scheduler = {
     let cur = clone(schedule), curP = this.countTotal(cur), curC = this._weekCost(cur, settings);
     let best = clone(cur), bestP = curP, bestC = curC;
     const t0 = Date.now(); let lastYield = t0, iters = 0;
-    const T0 = 2.0, T1 = 0.05;
+    const T0 = this.SISR.T0, T1 = this.SISR.T1;
     while(Date.now() - t0 < budgetMs && !this._stopped()){
       iters++;
       if(Date.now() - lastYield > 150){ await new Promise(r => setTimeout(r, 0)); lastYield = Date.now(); }
@@ -5688,13 +5777,13 @@ const Scheduler = {
       if(!all.length) break;
       const seed = all[Math.floor(Math.random() * all.length)], cs = pos(seed.x);
       const near = all.slice().sort((a, b) => this.haversineKm(cs, pos(a.x)) - this.haversineKm(cs, pos(b.x)));
-      const hit = new Set(), maxDays = 1 + Math.floor(Math.random() * 3);
+      const hit = new Set(), maxDays = 1 + Math.floor(Math.random() * this.SISR.maxDays);
       for(const p of near){
         if(hit.has(p.d) || hit.size >= maxDays) continue;
         hit.add(p.d);
         const sl = this._byStart(trial[p.d]);
         const at = sl.indexOf(sl.find(x => x.studentId === p.x.studentId && x.start === p.x.start));
-        const len = 1 + Math.floor(Math.random() * Math.min(3, sl.length));
+        const len = 1 + Math.floor(Math.random() * Math.min(this.SISR.maxLen, sl.length));
         const from = Math.max(0, Math.min(at - Math.floor(Math.random() * len), sl.length - len));
         const keep = sl.slice(0, from).concat(sl.slice(from + len).filter(Boolean));
         const back = sl.slice(from, from + len).filter(x => !this._plainSlot(x, byId));
@@ -5730,6 +5819,71 @@ const Scheduler = {
     const improved = this._refineBetter(best, schedule, students, settings, baseIssues);
     if(improved){ for(const d of Object.keys(schedule)) delete schedule[d]; Object.assign(schedule, best); }
     return { iters, improved };
+  },
+
+  // The blocks nothing else moves: a pair or group lesson, and a merged
+  // double. Every other pass works on plain one-person lessons only, so a
+  // block stayed on whatever day the first placement gave it, and the rest
+  // of the week was built around that accident. Here each block may move to
+  // another day where every one of its people is free, or trade days with a
+  // plain lesson, when that makes the week cheaper and breaks nothing.
+  async blockMoves(schedule, students, settings, budgetMs = 3000){
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const baseIssues = this.verifySchedule(schedule, students, settings).length;
+    const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs || this._stopped();
+    const order = (slots, d) => { const r = this.bestDayOrder(this._byStart(slots), d, students, settings); return r ? r.laid : null; };
+    const cost = (sl, d) => sl.length ? this.dayCost(sl, d, settings) : 0;
+    const out = { relocate: 0, swap: 0 };
+    let improved = true;
+    while(improved && !timeUp()){
+      improved = false;
+      outer:
+      for(const d1 of settings.workDays){
+        for(const x of (schedule[d1] || [])){
+          if(timeUp()) break outer;
+          if(this._plainSlot(x, byId)) continue;
+          const members = this.occupantIds(x).map(id => byId[id]);
+          if(!members.length || members.some(m => !m)) continue;
+          const len = this._len(x), moving = { ...x, start: '00:00', end: this.toTime(len) };
+          const rest1 = schedule[d1].filter(y => y !== x);
+          const a1 = rest1.length ? order(rest1, d1) : [];
+          if(!a1) continue;
+          for(const d2 of settings.workDays){
+            if(d2 === d1) continue;
+            await new Promise(r => setTimeout(r, 0));
+            const c0 = cost(schedule[d1], d1) + cost(schedule[d2] || [], d2);
+            if(members.every(m => this._canTake(m, d2, schedule))){
+              const a2 = order((schedule[d2] || []).concat([moving]), d2);
+              if(a2 && cost(a1, d1) + cost(a2, d2) < c0 - 0.05){
+                const trial = { ...schedule, [d1]: a1, [d2]: a2 };
+                if(this.verifySchedule(trial, students, settings).length <= baseIssues){
+                  schedule[d1] = a1; schedule[d2] = a2; out.relocate++; improved = true; break outer;
+                }
+              }
+            }
+            for(const y of (schedule[d2] || [])){
+              if(!this._plainSlot(y, byId)) continue;
+              const sy = byId[y.studentId];
+              if(!sy.availability || !sy.availability[d1] || !sy.availability[d1].on) continue;
+              if(rest1.some(z => this.occupantIds(z).includes(sy.id))) continue;
+              const without = (schedule[d2] || []).filter(z => z !== y);
+              if(!members.every(m => this._canTake(m, d2, { ...schedule, [d2]: without }))) continue;
+              const b1 = order(rest1.concat([this._lessonSlot(sy, this._len(y))]), d1);
+              if(!b1) continue;
+              const b2 = order(without.concat([moving]), d2);
+              if(!b2) continue;
+              if(cost(b1, d1) + cost(b2, d2) < c0 - 0.05){
+                const trial = { ...schedule, [d1]: b1, [d2]: b2 };
+                if(this.verifySchedule(trial, students, settings).length <= baseIssues){
+                  schedule[d1] = b1; schedule[d2] = b2; out.swap++; improved = true; break outer;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return out;
   },
 
   async interDayMoves(schedule, students, settings, budgetMs = 6000){
@@ -5797,6 +5951,8 @@ const Scheduler = {
     const out = {};
     const baseIssues = () => this.verifySchedule(schedule, students, settings).length;
     if(onStep) onStep(0);
+    out.blocks = await this.blockMoves(schedule, students, settings, budgetMs * 0.1);
+    if(this._stopped()) return out;
     out.chains = await this.ejectionChains(schedule, students, settings, budgetMs * 0.3);
     if(this._stopped()) return out;
     if(onStep) onStep(1);
@@ -5817,6 +5973,10 @@ const Scheduler = {
     if(onStep) onStep(3);
     if(this._stopped()){ out.moves = { relocate: 0, swap: 0 }; return out; }
     out.moves = await this.interDayMoves(schedule, students, settings, budgetMs * 0.25);
+    if(!this._stopped()){
+      const again = await this.blockMoves(schedule, students, settings, budgetMs * 0.1);
+      out.blocks = { relocate: out.blocks.relocate + again.relocate, swap: out.blocks.swap + again.swap };
+    }
     return out;
   },
 
@@ -7485,6 +7645,7 @@ const App = {
     state._schedulingCancelled = true;
     state._cancelShown = true;
     if(this._schedWorker){ try{ this._schedWorker.reject(new Error('cancelled')); }catch(e){} }
+    for(const x of (this._schedWorkers || []).slice()){ try{ x.reject(new Error('cancelled')); }catch(e){} }
     try{ schedProgress(null); }catch(e){}
     const rb = document.querySelector('.btn[onclick*="runAndNotify"]');
     if(rb){ rb.disabled=false; rb.style.opacity=''; rb.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
@@ -7517,11 +7678,80 @@ const App = {
       const m = e.data;
       try{
         Object.assign(state, m.state);
-        const r = await Scheduler.runMultiAttempt(m.students, m.settings, m.coords, m.attempts, false);
-        self.postMessage({ ok: true, result: r });
+        if(m.type === 'week'){
+          const out = await Scheduler.optimizeWeek(m.input, {
+            progress: (p, a, b, c) => { if(m.progress) self.postMessage({ progress: [p, a, b, c] }); },
+            stopped: () => false });
+          self.postMessage({ ok: true, result: out });
+        } else {
+          const r = await Scheduler.runMultiAttempt(m.students, m.settings, m.coords, m.attempts, false);
+          self.postMessage({ ok: true, result: r });
+        }
       }catch(err){ self.postMessage({ ok: false, error: String((err && err.message) || err) }); }
     };
   `,
+  // One worker job. Every live worker is kept in _schedWorkers so ✕ can
+  // stop them all at once.
+  _workerCall(message, onProgress){
+    return new Promise((resolve, reject) => {
+      let w;
+      try{
+        if(typeof Worker === 'undefined' || typeof Blob === 'undefined' || !URL.createObjectURL) return reject(new Error('no-worker'));
+        if(!this._schedWorkerUrl){
+          const src = [...document.querySelectorAll('script:not([src])')].map(x => x.textContent).find(x => x.includes('const Scheduler = {'));
+          if(!src) return reject(new Error('no-source'));
+          this._schedWorkerUrl = URL.createObjectURL(new Blob([this._WORKER_PRELUDE, src, this._WORKER_HANDLER], { type: 'text/javascript' }));
+        }
+        w = new Worker(this._schedWorkerUrl);
+      }catch(e){ return reject(new Error('no-worker')); }
+      this._schedWorkers = this._schedWorkers || [];
+      const entry = { w, reject: null };
+      const done = () => { this._schedWorkers = (this._schedWorkers || []).filter(x => x !== entry); try{ w.terminate(); }catch(e){} };
+      entry.reject = (err) => { done(); reject(err); };
+      this._schedWorkers.push(entry);
+      w.onmessage = (e) => {
+        const d = e.data || {};
+        if(d.progress){ if(onProgress) onProgress(...d.progress); return; }
+        done(); d.ok ? resolve(d.result) : reject(new Error(d.error || 'worker'));
+      };
+      w.onerror = (e) => { if(e && e.preventDefault) e.preventDefault(); done(); reject(new Error('no-worker')); };
+      w.postMessage({ ...message, progress: !!onProgress, state: {
+        settings: state.settings, coords: state.coords, students: state.students, schedule: state.schedule, jobs: state.jobs,
+        travelMatrixPeak: state.travelMatrixPeak, travelMatrixOffPeak: state.travelMatrixOffPeak, travelMatrix: state.travelMatrix,
+        dayMatrixPeak: state.dayMatrixPeak, dayMatrixOffPeak: state.dayMatrixOffPeak } });
+    });
+  },
+  // How many runs at once: one per spare core, at most three.
+  _parallelRuns(){
+    const n = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 2;
+    return Math.max(1, Math.min(3, n - 1));
+  },
+  // Two rounds, each as several runs at once in workers; the best wins by
+  // the app's rule. Round 2 starts every run from the best week of round 1
+  // (no fresh placement) and searches again from there: measured on the
+  // owner's week, a run from 138.2 km found 127.2 km 3 times in 8.
+  async _optimizeParallel(input, onProgress){
+    const k = this._parallelRuns();
+    const round = async (inp, prog) => {
+      const outs = await Promise.all(Array.from({ length: k }, (_, i) =>
+        this._workerCall({ type: 'week', input: inp }, i === 0 ? prog : null).catch(e => e)));
+      if(outs.some(o => o instanceof Error && o.message === 'cancelled')) throw new Error('cancelled');
+      const good = outs.filter(o => o && !(o instanceof Error) && o.schedule);
+      if(!good.length) throw outs[0] instanceof Error ? outs[0] : new Error('worker');
+      let best = good[0];
+      for(const o of good.slice(1)) if(Scheduler.isBetterStart(o.schedule, best.schedule, inp.settings)) best = o;
+      return best;
+    };
+    const first = await round(input, onProgress);
+    if(state._schedulingCancelled) return first;
+    const second = await round({ ...input, students: first.students || input.students, warm: first.schedule, skipPhase1: true },
+      onProgress ? (p, a, b, c) => onProgress(Math.min(99, 90 + (p - 55) / 45 * 9), 'phase_refine_title', 'phase_refine_sub') : null).catch(e => {
+        if(e && e.message === 'cancelled') throw e; return null; });
+    const best = second && Scheduler.isBetterStart(second.schedule, first.schedule, input.settings) ? second : first;
+    console.info(`parallel runs: ${k} at a time, two rounds; round 2 ${best === second ? 'improved' : 'kept round 1'}`);
+    return { ...best, result: first.result };
+  },
+
   _workerRun(students, settings, coords, attempts){
     return new Promise((resolve, reject) => {
       let w;
@@ -7734,218 +7964,49 @@ const App = {
     schedProgress(15,t('phase1b_title'),tf('phase1b_sub',{n:attemptCount}));
     await new Promise(r=>setTimeout(r,40));
     let r;
+    if(state.students.length===0){
+      schedProgress(null); state._schedulingInProgress=false; clearTimeout(this._schedulingWatchdog);
+      if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
+      return;
+    }
+    // The whole optimisation, several times at once in worker threads, each
+    // from its own start; the best by the app's rule wins. The schedule on
+    // screen (cleaned of what no longer holds) is a starting point for every
+    // one of them. Without workers it runs once here, as it always did.
     try{
-      if(state.students.length===0){
-        schedProgress(null); state._schedulingInProgress=false; clearTimeout(this._schedulingWatchdog);
-        if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
-        return;
-      }
-      // Phase 1 is a long synchronous search; run in the page it freezes the
-      // phone for seconds at a time and the ✕ cannot even be tapped. It runs
-      // in a worker thread instead, which ✕ simply stops; where a worker is
-      // not available, it runs here as before.
-      let result;
-      try{ result = await this._workerRun(state.students, state.settings, state.coords, attemptCount); }
+      let warm = null;
+      try{ warm = Scheduler.warmStart(scheduleBackup, state.students, state.settings); }catch(e){}
+      const input = { students: state.students, settings: state.settings, coords: state.coords, attempts: attemptCount, warm };
+      const P = (p, a, b, c) => schedProgress(p, t(a), c ? tf(b, c) : t(b));
+      let out;
+      try{ out = await this._optimizeParallel(input, P); }
       catch(e){
         if(state._schedulingCancelled || isStale()) return cancelledCleanup();
-        if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler worker failed; running on the page', e);
-        result = await Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
+        if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler workers failed; running on the page', e);
+        out = await Scheduler.optimizeWeek(input, { progress: P, stopped: () => state._schedulingCancelled || isStale() });
       }
-      // Build on what was there. The schedule on screen, cleaned of anything
-      // the current students and settings no longer allow, is a starting
-      // point too: if it holds at least as many lessons for less, the run
-      // continues from it, so a solution found once is not lost to the luck
-      // of a fresh start, and pressing again can only keep or improve it.
-      try{
-        const warm = Scheduler.warmStart(scheduleBackup, state.students, state.settings);
-        if(warm && Scheduler.isBetterStart(warm, result.schedule, state.settings)){
-          console.info(`warm start: ${Scheduler.countTotal(warm)} lessons from the previous schedule beat ${Scheduler.countTotal(result.schedule)} from a fresh start`);
-          result = { ...result, schedule: warm };
-        }
-      }catch(e){ console.warn('warm start failed', e); }
-      state.scheduleAttempts = [result];
+      if(state._schedulingCancelled || isStale()) return cancelledCleanup();
+      // Flexible time may have been split in the winning run: carry that over.
+      for(const st of state.students){
+        const w = (out.students || []).find(x => x.id === st.id);
+        if(w && w !== st && Scheduler.isFlex(st)){ st.durations = w.durations; st.lessonsPerWeek = w.lessonsPerWeek; st.hoursPerWeek = w.hoursPerWeek; st.lessonDuration = w.lessonDuration; }
+      }
+      r = { ...out.result, schedule: out.schedule };
+      state.scheduleAttempts = [r];
       state.scheduleAttemptIdx = 0;
       state.scheduleOptimized = false;
       state.scheduleKmBefore = null;
       state.scheduleKmAfter = null;
-      state.schedule = result.schedule;
-      state.schedulerResult = result;
+      state.schedule = out.schedule;
+      state.schedulerResult = r;
       state.routeResults = {};
-      r = result;
     }catch(e){
-      // A throw here used to leave the run silently doing nothing: state.schedule
-      // was never assigned, every later phase operated on the old one, and the
-      // summary toast was skipped by `if(!r) return`. From the outside that is
-      // indistinguishable from "it stopped finding a schedule", with no clue
-      // why. Say so, and say what broke.
+      // A throw here used to leave the run silently doing nothing; say so.
       console.error('Scheduler error', e);
       state._schedulerError = (e && e.message) || String(e);
     }
 
     if(state._schedulingCancelled) return cancelledCleanup();
-
-    // Warm start. Phase 1 is a randomized search, so a rerun used to begin from
-    // a completely fresh draw and the result bounced around — 140 km, then 170,
-    // then 115, then 165. That is not what "recalculate" should mean.
-    //
-    // If the schedule already on screen is still legal under the current
-    // students and settings, and phase 1's fresh draw is not better than it,
-    // hand the OLD schedule to the optimizer instead. ALNS is destroy-repair
-    // and keeps the best solution it has seen, so starting from the incumbent
-    // means a rerun can only refine it. Combined with the floor check at the
-    // end of the run, pressing Refresh again is now monotonic: same or better,
-    // never worse.
-    if(prevUsable){
-      const fresh = { placed: this._countPlaced(state.schedule), km: this._estimateTotalKm(state.schedule) };
-      const prev  = { placed: this._countPlaced(scheduleBackup),  km: this._estimateTotalKm(scheduleBackup) };
-      if(!this._isBetterSchedule(fresh, prev)){
-        state.schedule = JSON.parse(JSON.stringify(scheduleBackup));
-        if(r) r.schedule = state.schedule;
-        console.info('warm start: optimizing from the previous schedule',
-          `(${prev.placed} placed / ${prev.km.toFixed(1)} km) rather than this run's draw`,
-          `(${fresh.placed} / ${fresh.km.toFixed(1)} km)`);
-      }
-    }
-
-    // Phase 2+3: route optimization (ALNS — destroy/repair with adaptive
-    // operator weights, replaces the old geoOptimize+SA two-step pipeline;
-    // optimizes against real road distance via travelEstKm/travelEstMin
-    // instead of straight-line distance)
-    schedProgress(35,t('phase2_title'),t('phase2_sub'));
-    await new Promise(r=>setTimeout(r,40));
-    schedProgress(55,t('phase3_title'),t('phase3_sub_short'));
-    try{
-      // Drive the bar from real search progress (fraction of the ALNS time
-      // budget actually used) instead of leaving it to the fake creep — the
-      // creep alone visibly stalls over a single ~25s phase.
-      const onTick = (frac)=> schedProgress(55 + Math.min(1,frac)*27, t('phase3_title'), t('phase3_sub_short'));
-      await Scheduler.alnsOptimize(state.schedule, state.students, state.settings, state.coords, 25000, onTick);
-    }catch(e){ console.error('alnsOptimize error', e); }
-
-    if(state._schedulingCancelled) return cancelledCleanup();
-
-    // Phase 4: repair
-    schedProgress(82,t('phase4b_title'),t('phase4b_sub'));
-    await new Promise(r=>setTimeout(r,40));
-    try{ Scheduler.saRepair(state.schedule, state.students, state.settings, state.schedulerResult); }catch(e){}
-
-    if(state._schedulingCancelled) return cancelledCleanup();
-
-    // Phase 5: LNS
-    schedProgress(92,t('phase5_title'),t('phase5b_sub'));
-    await new Promise(r=>setTimeout(r,40));
-    // Guarded: LNS destroys and repairs, and its repair is not guaranteed to
-    // beat what it tore up. Keep its work only if it placed more lessons, or
-    // held the same number without adding kilometres.
-    try{
-      const g = await Scheduler.guardedPass(state.schedule, state.settings,
-        (sch)=>Scheduler.lnsRepair(sch, state.students, state.settings, 10000));
-      if(!g.kept) console.info(`lnsRepair rejected: ${g.before.placed}/${g.before.km.toFixed(1)}km -> ${g.after.placed}/${g.after.km.toFixed(1)}km`);
-    }catch(e){}
-
-    // Safety net: forcibly fix (or drop) any slot that still violates a
-    // student's own availability, regardless of which phase caused it.
-    try{
-      const fixResult = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
-      if(fixResult.repaired) console.warn(`⚠ enforceConstraints: repaired ${fixResult.repaired-fixResult.dropped}, dropped ${fixResult.dropped}`);
-      Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);
-      Scheduler.rebalanceDays(state.schedule, state.students, state.settings);
-    }catch(e){}
-
-    if(state._schedulingCancelled) return cancelledCleanup();
-
-    // Still someone unplaced after the normal 10s pass? Keep trying with a much
-    // longer budget (up to 7 min) instead of giving up — a short search can miss
-    // a real, valid slot on a lightly-loaded day. Only runs when actually needed.
-    // First the quick tool that usually does it: an ejection chain moves one
-    // lesson to another day to make room. Measured on the owner's week: the
-    // 7-minute search below failed to place one lesson that the chains then
-    // placed in seconds.
-    if(this.computeUnplacedLive().length > 0){
-      try{
-        schedProgress(93, t('phase_persist_title'), t('phase_refine_sub'));
-        const before = JSON.stringify(state.schedule), base = Scheduler.verifySchedule(state.schedule, state.students, state.settings).length;
-        await Scheduler.ejectionChains(state.schedule, state.students, state.settings, 8000);
-        if(Scheduler.verifySchedule(state.schedule, state.students, state.settings).length > base) state.schedule = JSON.parse(before);
-      }catch(e){ console.warn('ejection chains failed', e); }
-    }
-    if(state._schedulingCancelled) return cancelledCleanup();
-    if(this.computeUnplacedLive().length > 0){
-      try{
-        await Scheduler.guardedPass(state.schedule, state.settings, (sch)=>
-          Scheduler.lnsRepair(sch, state.students, state.settings, 420000, (nLeft, elapsed)=>{
-            schedProgress(93, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}));
-          }, 60000));
-        const fixResult2 = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
-        if(fixResult2.repaired) console.warn(`⚠ enforceConstraints (after persistent search): repaired ${fixResult2.repaired-fixResult2.dropped}, dropped ${fixResult2.dropped}`);
-        Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);
-      }catch(e){}
-    }
-
-    if(state._schedulingCancelled) return cancelledCleanup();
-
-    // Close the holes the repair passes leave behind. Runs last, after every
-    // pass that can insert or remove a lesson, and before verification — a
-    // compacted day is what the user actually reads.
-    // Tidy each day before compacting it: reorder to cut both driving and dead
-    // time. The optimizer minimises km only and cannot reorder stops (visit
-    // order follows lesson times), and compaction never reorders — so this is
-    // the only pass that can close a hole by moving a later, more flexible
-    // lesson up into it.
-    try{
-      const z = Scheduler.tidyDays(state.schedule, state.students, state.settings);
-      if(z.moves) console.info(`tidyDays: ${z.moves} moves, ${z.kmSaved.toFixed(1)} km and ${Math.round(z.idleSaved)} min of waiting saved`);
-    }catch(e){}
-
-    try{
-      const packed = Scheduler.compactDays(state.schedule, state.students, state.settings);
-      if(packed.moved) console.info(`compactDays: pulled ${packed.moved} lessons earlier, ${packed.savedMin} min of dead time removed`);
-    }catch(e){}
-
-    // A hole that survived all of the above can only be closed by bringing a
-    // lesson over from another day. fillGaps does its own accepting, against
-    // the week's cost in km AND waiting — compacted again afterwards, since
-    // the day the lesson came FROM may now have a hole of its own to close.
-    try{
-      const f = Scheduler.fillGaps(state.schedule, state.students, state.settings);
-      if(f.moved.length){
-        console.info(`fillGaps: ${f.moved.map(m=>`${m.name} → day ${m.to} at ${m.at}`).join(', ')}`);
-        Scheduler.compactDays(state.schedule, state.students, state.settings);
-      }
-    }catch(e){}
-
-    // The other direction. fillGaps asks who could go INTO a gap; this asks
-    // whether the lesson that CAUSES a wait — a student free only from 20:00,
-    // say — could go to another day where it fits with no waiting at all.
-    // Without it the teacher sat around for half an hour on Wednesday rather
-    // than have that lesson moved to a Tuesday it fitted on.
-    try{
-      const r = Scheduler.relocateForTime(state.schedule, state.students, state.settings);
-      if(r.moved.length)
-        console.info(`relocateForTime: ${r.moved.map(m=>`${m.name} → day ${m.to} at ${m.at}`).join(', ')}`);
-    }catch(e){ console.warn('relocateForTime failed', e); }
-
-    if(state._schedulingCancelled) return cancelledCleanup();
-
-    // Fit the lessons that are still out, then win the kilometres back.
-    // Kept step by step only if nothing is lost — see Scheduler.refineWeek.
-    try{
-      schedProgress(94, t('phase_refine_title'), t('phase_refine_sub'));
-      const w = await Scheduler.refineWeek(state.schedule, state.students, state.settings, 20000,
-        (i)=> schedProgress(94 + i, t('phase_refine_title'), t('phase_refine_sub')));
-      console.info(`refineWeek: +${w.chains.added} lessons by chains, strings ${w.strings.improved?'kept':'no gain'} (${w.strings.iters} tries), ${w.moves.relocate} moved and ${w.moves.swap} swapped between days`);
-    }catch(e){ console.warn('refineWeek failed', e); }
-
-    // Flexible weekly time that did not fit: split the missing piece (2 → 1+1)
-    // and try again, down to each person's shortest piece.
-    try{
-      const f = await Scheduler.flexFit(state.schedule, state.students, state.settings, 6000, () => state._schedulingCancelled);
-      if(f.rounds) console.info(`flexible time: ${f.rounds} splits tried`);
-    }catch(e){ console.warn('flexible split failed', e); }
-
-    // The passes above optimise kilometres and may pack days again; bring
-    // every day back within the user's daily limit as the last word.
-    try{ Scheduler.rebalanceDays(state.schedule, state.students, state.settings); }catch(e){}
 
     // Verify constraints — surfaced to the user, not just the console, so a
     // scheduling bug that violates someone's availability doesn't ship silently.
