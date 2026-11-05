@@ -7943,6 +7943,34 @@ const App = {
       if(f.rounds) console.info(`flexible time: ${f.rounds} splits tried`);
     }catch(e){ console.warn('flexible split failed', e); }
 
+    // A second round from the best found, inside the same press: what
+    // pressing again used to do. Measured on the owner's week, a second press
+    // found 5.5 km less in one run out of four; the first press must not
+    // leave that on the table. Kept only if it is better by the same rule as
+    // everything else (more lessons, then km + waiting) and breaks nothing.
+    try{
+      for(let round = 0; round < 2 && !state._schedulingCancelled; round++){
+        schedProgress(95 + round, t('phase_refine_title'), t('phase_refine_sub'));
+        const cur = state.schedule, copy = JSON.parse(JSON.stringify(cur));
+        const base = Scheduler.verifySchedule(cur, state.students, state.settings).length;
+        await Scheduler.alnsOptimize(copy, state.students, state.settings, state.coords, 15000);
+        if(state._schedulingCancelled) break;
+        Scheduler.enforceConstraints(copy, state.students, state.settings);
+        Scheduler.tidyDays(copy, state.students, state.settings);
+        Scheduler.compactDays(copy, state.students, state.settings);
+        Scheduler.relocateForTime(copy, state.students, state.settings);
+        await Scheduler.refineWeek(copy, state.students, state.settings, 12000);
+        if(state._schedulingCancelled) break;
+        Scheduler.rebalanceDays(copy, state.students, state.settings);
+        const better = Scheduler.verifySchedule(copy, state.students, state.settings).length <= base
+          && Scheduler.isBetterStart(copy, cur, state.settings);
+        if(!better) break;
+        state.schedule = copy;
+        console.info(`second round ${round + 1}: improved`);
+      }
+    }catch(e){ console.warn('second round failed', e); }
+    if(state._schedulingCancelled) return cancelledCleanup();
+
     // The passes above optimise kilometres and may pack days again; bring
     // every day back within the user's daily limit as the last word.
     try{ Scheduler.rebalanceDays(state.schedule, state.students, state.settings); }catch(e){}
