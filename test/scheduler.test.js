@@ -6159,6 +6159,36 @@ describe('clients as a wallet of cards', () => {
   });
 });
 
+describe('more lessons than days they fit on: a double lesson where one fits', () => {
+  const cfg = () => settings({ workDays: [1, 2, 3, 4, 5, 6], dayHours: Object.fromEntries([1, 2, 3, 4, 5, 6].map(d => [d, { start: '14:30', end: '22:00' }])) });
+  const ioanna = (n) => student('io', { lessonsPerWeek: n, lessonDuration: 60, availability: {
+    1: { on: true, start: '16:30', end: '21:30' }, 2: { on: true, start: '14:30', end: '15:04' }, 3: { on: true, start: '16:30', end: '19:15' },
+    4: { on: true, start: '14:31', end: '15:00' }, 5: { on: true, start: '14:33', end: '15:00' }, 6: { on: false } } });
+  test('four hours on three possible days become 2 + 1 + 1', () => {
+    const S = loadApp().Scheduler;
+    // Mon and Wed fit an hour (and two); Tue, Thu, Fri are under an hour; Sat off → 2 days... add Sat
+    const st = ioanna(4); st.availability[6] = { on: true, start: '14:30', end: '17:30' };
+    assert.equal(JSON.stringify(S.autoCombine(st, cfg())), '[120,60,60]');
+  });
+  test('nothing changes when the days are enough, or when no day holds a double', () => {
+    const S = loadApp().Scheduler;
+    const st = ioanna(2);
+    assert.equal(S.autoCombine(st, cfg()), null, 'two lessons, two days');
+    const tight = ioanna(3); tight.availability[1] = { on: true, start: '16:30', end: '17:45' }; tight.availability[3] = { on: true, start: '16:30', end: '17:45' };
+    assert.equal(S.autoCombine(tight, cfg()), null, 'no day has two hours free');
+    assert.equal(S.autoCombine({ ...ioanna(4), forceMerge: true, mergeMode: 'always' }, cfg()), null, 'merging already asked for');
+  });
+  test('with the double lesson every hour is placed', async () => {
+    const app = loadApp({ seed: 1 }); const S = app.Scheduler;
+    const st = ioanna(4); st.availability[6] = { on: true, start: '14:30', end: '17:30' };
+    const c = cfg();
+    const durs = S.autoCombine(st, c); st.durations = durs; st.lessonsPerWeek = durs.length; st.lessonDuration = Math.max(...durs);
+    const sch = await runPipeline(app, [st], c, cityCoords([st]), { refine: 300 });
+    const mins = Object.values(sch).flat().reduce((a, x) => a + S.toMin(x.end) - S.toMin(x.start), 0);
+    assert.equal(mins, 240);
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {
