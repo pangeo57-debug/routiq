@@ -6189,6 +6189,38 @@ describe('more lessons than days they fit on: a double lesson where one fits', (
   });
 });
 
+describe('✕ stops the calculation at once', () => {
+  test('without a worker the first phase runs on the page, as before', async () => {
+    const app = loadApp();
+    await assert.rejects(app.App._workerRun([], settings(), {}, 1), /no-worker|no-source/);
+  });
+  test('a tap hides the bar, gives Refresh back and stops the worker', () => {
+    const app = loadApp();
+    app.state._schedulingInProgress = true; app.state._schedulingCancelled = false;
+    let stopped = null, hidden = false;
+    app.App._schedWorker = { w: {}, reject: (e) => { stopped = e.message; } };
+    app.ctx.schedProgress = (p) => { if (p === null) hidden = true; };
+    app.App.cancelScheduling();
+    assert.equal(app.state._schedulingCancelled, true);
+    assert.equal(stopped, 'cancelled');
+    assert.equal(app.state._cancelShown, true, 'the cancel is said once, at the tap');
+  });
+  test('every long loop of the refinement checks the cancel', () => {
+    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.equal((src.match(/timeUp = \(\) => Date\.now\(\) - t0 > budgetMs \|\| this\._stopped\(\)/g) || []).length, 2, 'ejection chains and inter-day moves');
+    assert.match(src, /while\(Date\.now\(\) - t0 < budgetMs && !this\._stopped\(\)\)/, 'string removals');
+    assert.match(src, /round < 40 && Date\.now\(\) - t0 < budgetMs && !this\._stopped\(\)/, 'rebalancing');
+  });
+  test('after a cancel, the bar does not come back for the stopping run', () => {
+    const app = loadApp();
+    app.state._schedulingCancelled = true;
+    let shown = false;
+    app.ctx.document.getElementById = (id) => id === 'sched-overlay' ? { style: { set display(v){ if (v === 'block') shown = true; } }, classList: { add(){}, remove(){} } } : null;
+    app.ctx.schedProgress(40, 'x', 'y');
+    assert.equal(shown, false);
+  });
+});
+
 describe('reminders: the phone calendar, and notifications while the app runs', () => {
   const MON = '2026-11-02';
   function world() {

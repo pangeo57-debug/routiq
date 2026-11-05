@@ -4897,7 +4897,7 @@ const Scheduler = {
       sum + this.dayCost((sch[d] || []).slice()
         .sort((x,y) => this.toMin(x.start) - this.toMin(y.start)), d, settings), 0);
     let moved = 0;
-    for(let round = 0; round < 40 && Date.now() - t0 < budgetMs; round++){
+    for(let round = 0; round < 40 && Date.now() - t0 < budgetMs && !this._stopped(); round++){
       const over = (settings.workDays || []).filter(d => (schedule[d] || []).length > cap);
       if(!over.length) break;
       const ctx = { byId, weekCost,
@@ -5561,9 +5561,13 @@ const Scheduler = {
     return this.relayoutDay(rest, d, students, settings) || rest;
   },
 
+  // The ✕ on the progress bar: every long loop checks this, so a cancel
+  // takes effect within a moment, not at the end of the current phase.
+  _stopped(){ return typeof state !== 'undefined' && !!(state && state._schedulingCancelled); },
+
   async ejectionChains(schedule, students, settings, budgetMs = 6000){
     const byId = Object.fromEntries(students.map(s => [s.id, s]));
-    const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs;
+    const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs || this._stopped();
     let lastYield = Date.now();
     const breathe = async () => { if(Date.now() - lastYield > 150){ await new Promise(r => setTimeout(r, 0)); lastYield = Date.now(); } };
     let sch = schedule, added = 0, progress = true;
@@ -5635,7 +5639,7 @@ const Scheduler = {
     let best = clone(cur), bestP = curP, bestC = curC;
     const t0 = Date.now(); let lastYield = t0, iters = 0;
     const T0 = 2.0, T1 = 0.05;
-    while(Date.now() - t0 < budgetMs){
+    while(Date.now() - t0 < budgetMs && !this._stopped()){
       iters++;
       if(Date.now() - lastYield > 150){ await new Promise(r => setTimeout(r, 0)); lastYield = Date.now(); }
       const trial = clone(cur);
@@ -5691,7 +5695,7 @@ const Scheduler = {
   async interDayMoves(schedule, students, settings, budgetMs = 6000){
     const byId = Object.fromEntries(students.map(s => [s.id, s]));
     const baseIssues = this.verifySchedule(schedule, students, settings).length;
-    const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs;
+    const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs || this._stopped();
     let lastYield = t0;
     const order = (slots, d) => { const r = this.bestDayOrder(this._byStart(slots), d, students, settings); return r ? r.laid : null; };
     const moves = { relocate: 0, swap: 0 };
@@ -5754,8 +5758,10 @@ const Scheduler = {
     const baseIssues = () => this.verifySchedule(schedule, students, settings).length;
     if(onStep) onStep(0);
     out.chains = await this.ejectionChains(schedule, students, settings, budgetMs * 0.3);
+    if(this._stopped()) return out;
     if(onStep) onStep(1);
     out.strings = await this.stringRemovals(schedule, students, settings, budgetMs * 0.45);
+    if(this._stopped()) return out;
     if(onStep) onStep(2);
     {
       const copy = JSON.parse(JSON.stringify(schedule)), before = baseIssues();
@@ -5769,6 +5775,7 @@ const Scheduler = {
       }catch(e){ console.warn('refineWeek: clean-up passes failed', e); }
     }
     if(onStep) onStep(3);
+    if(this._stopped()){ out.moves = { relocate: 0, swap: 0 }; return out; }
     out.moves = await this.interDayMoves(schedule, students, settings, budgetMs * 0.25);
     return out;
   },
@@ -6689,6 +6696,8 @@ function _schedStopAnim(){
 function schedProgress(pct, phase, sub, icon){
   const ov=document.getElementById('sched-overlay');
   if(!ov) return;
+  // After ✕ the bar stays gone, even if the stopping run reports once more.
+  if(pct!==null && typeof state!=='undefined' && state._schedulingCancelled) return;
   if(pct===null){
     _schedStopAnim();
     ov.style.opacity='0';
@@ -7428,13 +7437,72 @@ const App = {
   // restoring the previous schedule happens once control gets back to
   // runAndNotify's cleanup, not here, since a phase mid-mutation can't be
   // safely interrupted from outside.
+  // Respond at the tap: the bar goes, the Refresh button comes back and the
+  // previous schedule stays. The run itself stops within a moment (every
+  // long loop checks the flag) and then puts the previous schedule back.
   cancelScheduling(){
-    if(!state._schedulingInProgress) return;
+    if(!state._schedulingInProgress || state._schedulingCancelled) return;
     state._schedulingCancelled = true;
-    const btn = document.getElementById('sched-cancel-btn');
-    if(btn){ btn.disabled=true; btn.style.opacity='0.5'; }
-    const sb = document.getElementById('sched-sub');
-    if(sb) sb.textContent = t('sched_cancelling');
+    state._cancelShown = true;
+    if(this._schedWorker){ try{ this._schedWorker.reject(new Error('cancelled')); }catch(e){} }
+    try{ schedProgress(null); }catch(e){}
+    const rb = document.querySelector('.btn[onclick*="runAndNotify"]');
+    if(rb){ rb.disabled=false; rb.style.opacity=''; rb.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
+    Toast.show(t('toast_scheduling_cancelled'), 'info');
+  },
+
+  // ── Phase 1 in a worker ────────────────────────────────────────────────
+  // The worker runs this same script (taken from the page), with stand-ins
+  // for the page objects it never uses there, and answers one message:
+  // runMultiAttempt for the inputs it is given.
+  _WORKER_PRELUDE: `
+    const __stub = () => ({ style:{}, dataset:{}, value:'', textContent:'', innerHTML:'',
+      classList:{ add(){}, remove(){}, contains(){ return false; }, toggle(){} },
+      addEventListener(){}, removeEventListener(){}, appendChild(){}, remove(){},
+      setAttribute(){}, getAttribute(){ return null; }, querySelector(){ return __stub(); },
+      querySelectorAll(){ return []; }, closest(){ return null; },
+      getBoundingClientRect(){ return { top:0, left:0, width:0, height:0 }; } });
+    self.document = { getElementById: () => __stub(), querySelector: () => null, querySelectorAll: () => [],
+      createElement: () => __stub(), addEventListener(){}, body: __stub(), head: __stub(),
+      documentElement: { dataset:{}, style:{} } };
+    self.window = self;
+    self.localStorage = { getItem(){ return null; }, setItem(){}, removeItem(){}, clear(){} };
+    self.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
+    self.cancelAnimationFrame = (id) => clearTimeout(id);
+    self.matchMedia = () => ({ matches: false, addEventListener(){} });
+    self.L = undefined;
+  `,
+  _WORKER_HANDLER: `
+    self.onmessage = async (e) => {
+      const m = e.data;
+      try{
+        Object.assign(state, m.state);
+        const r = await Scheduler.runMultiAttempt(m.students, m.settings, m.coords, m.attempts, false);
+        self.postMessage({ ok: true, result: r });
+      }catch(err){ self.postMessage({ ok: false, error: String((err && err.message) || err) }); }
+    };
+  `,
+  _workerRun(students, settings, coords, attempts){
+    return new Promise((resolve, reject) => {
+      let w;
+      try{
+        if(typeof Worker === 'undefined' || typeof Blob === 'undefined' || !URL.createObjectURL) return reject(new Error('no-worker'));
+        if(!this._schedWorkerUrl){
+          const src = [...document.querySelectorAll('script:not([src])')].map(x => x.textContent).find(x => x.includes('const Scheduler = {'));
+          if(!src) return reject(new Error('no-source'));
+          this._schedWorkerUrl = URL.createObjectURL(new Blob([this._WORKER_PRELUDE, src, this._WORKER_HANDLER], { type: 'text/javascript' }));
+        }
+        w = new Worker(this._schedWorkerUrl);
+      }catch(e){ return reject(new Error('no-worker')); }
+      const done = () => { if(this._schedWorker && this._schedWorker.w === w) this._schedWorker = null; try{ w.terminate(); }catch(e){} };
+      this._schedWorker = { w, reject: (err) => { done(); reject(err); } };
+      w.onmessage = (e) => { done(); e.data && e.data.ok ? resolve(e.data.result) : reject(new Error((e.data && e.data.error) || 'worker')); };
+      w.onerror = (e) => { if(e && e.preventDefault) e.preventDefault(); done(); reject(new Error('no-worker')); };
+      w.postMessage({ students, settings, coords, attempts, state: {
+        settings, coords, students, schedule: state.schedule, jobs: state.jobs,
+        travelMatrixPeak: state.travelMatrixPeak, travelMatrixOffPeak: state.travelMatrixOffPeak, travelMatrix: state.travelMatrix,
+        dayMatrixPeak: state.dayMatrixPeak, dayMatrixOffPeak: state.dayMatrixOffPeak } });
+    });
   },
 
   async runAndNotify(){
@@ -7455,6 +7523,7 @@ const App = {
     if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.innerHTML = btn.innerHTML.replace(new RegExp(t('schedule_refresh')+'|<svg[^>]*>.*?<\\/svg>\\s*','s'),'') ; btn.textContent = t('debug_geocoding'); }
     state._schedulingInProgress = true;
     state._schedulingCancelled = false;
+    state._cancelShown = false;
     // Generation marker: if a newer run starts anyway (e.g. the wait above
     // timed out on a stuck phase), this one must not write its now-stale
     // result over the newer one's.
@@ -7508,7 +7577,8 @@ const App = {
       if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
       if(state.currentScreen==='schedule') this.renderSchedule();
       else if(state.currentScreen==='home') this.renderHome();
-      Toast.show(t('toast_scheduling_cancelled'), 'error');
+      if(!state._cancelShown) Toast.show(t('toast_scheduling_cancelled'), 'error');
+      state._cancelShown = false;
     };
     // Safety net: if something throws outside the phases' own try/catch guards
     // and this never gets to its normal cleanup, don't leave Settings blocked
@@ -7630,7 +7700,17 @@ const App = {
         if(btn){ btn.disabled=false; btn.style.opacity=''; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> ${t('schedule_refresh')}`; }
         return;
       }
-      const result = await Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
+      // Phase 1 is a long synchronous search; run in the page it freezes the
+      // phone for seconds at a time and the ✕ cannot even be tapped. It runs
+      // in a worker thread instead, which ✕ simply stops; where a worker is
+      // not available, it runs here as before.
+      let result;
+      try{ result = await this._workerRun(state.students, state.settings, state.coords, attemptCount); }
+      catch(e){
+        if(state._schedulingCancelled || isStale()) return cancelledCleanup();
+        if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler worker failed; running on the page', e);
+        result = await Scheduler.runMultiAttempt(state.students, state.settings, state.coords, attemptCount);
+      }
       state.scheduleAttempts = [result];
       state.scheduleAttemptIdx = 0;
       state.scheduleOptimized = false;
