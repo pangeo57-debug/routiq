@@ -5315,7 +5315,9 @@ const Scheduler = {
   },
 
   // Phase 5: LNS — destroy 2-4 slots blocking an unplaced student, re-place everyone
-  async lnsRepair(schedule, students, settings, budgetMs=10000, onProgress=null){
+  // stallMs: give up once this long passes with nobody more placed — a
+  // search that has not found a place in a minute will not in seven.
+  async lnsRepair(schedule, students, settings, budgetMs=10000, onProgress=null, stallMs=Infinity){
     const wdays = settings.workDays;
     // Group members must only ever be placed together, and forceMerge students already
     // got their combined block in Phase 0 — neither should be solo-repaired here.
@@ -5364,7 +5366,8 @@ const Scheduler = {
     const rng=()=>{ss=(ss*1664525+1013904223)&0xffffffff;return(ss>>>0)/0xffffffff;};
     const t0=Date.now();
     let iter=0, lastProgress=t0;
-    while(Date.now()-t0<budgetMs && bestU>0){
+    let lastGain=Date.now();
+    while(Date.now()-t0<budgetMs && bestU>0 && Date.now()-lastGain<stallMs){
       // Yield to the browser periodically so a long budget (this can run for
       // minutes when there are still unplaced students) never looks frozen —
       // checked every 40 iterations (was 200) so pressing the ✕ cancel
@@ -5430,7 +5433,7 @@ const Scheduler = {
         }
       }
       const nu=getUnpl(sc).length;
-      if(nu<bestU){bestU=nu;Object.assign(best,copyS(sc));}
+      if(nu<bestU){bestU=nu;Object.assign(best,copyS(sc));lastGain=Date.now();}
     }
     for(const d of wdays) schedule[d]=best[d]||[];
   },
@@ -7805,12 +7808,25 @@ const App = {
     // Still someone unplaced after the normal 10s pass? Keep trying with a much
     // longer budget (up to 7 min) instead of giving up — a short search can miss
     // a real, valid slot on a lightly-loaded day. Only runs when actually needed.
+    // First the quick tool that usually does it: an ejection chain moves one
+    // lesson to another day to make room. Measured on the owner's week: the
+    // 7-minute search below failed to place one lesson that the chains then
+    // placed in seconds.
+    if(this.computeUnplacedLive().length > 0){
+      try{
+        schedProgress(93, t('phase_persist_title'), t('phase_refine_sub'));
+        const before = JSON.stringify(state.schedule), base = Scheduler.verifySchedule(state.schedule, state.students, state.settings).length;
+        await Scheduler.ejectionChains(state.schedule, state.students, state.settings, 8000);
+        if(Scheduler.verifySchedule(state.schedule, state.students, state.settings).length > base) state.schedule = JSON.parse(before);
+      }catch(e){ console.warn('ejection chains failed', e); }
+    }
+    if(state._schedulingCancelled) return cancelledCleanup();
     if(this.computeUnplacedLive().length > 0){
       try{
         await Scheduler.guardedPass(state.schedule, state.settings, (sch)=>
           Scheduler.lnsRepair(sch, state.students, state.settings, 420000, (nLeft, elapsed)=>{
             schedProgress(93, t('phase_persist_title'), tf('phase_persist_sub',{n:nLeft, sec:Math.round(elapsed/1000)}));
-          }));
+          }, 60000));
         const fixResult2 = Scheduler.enforceConstraints(state.schedule, state.students, state.settings);
         if(fixResult2.repaired) console.warn(`⚠ enforceConstraints (after persistent search): repaired ${fixResult2.repaired-fixResult2.dropped}, dropped ${fixResult2.dropped}`);
         Scheduler.collapseForceMergeFragments(state.schedule, state.students, state.settings);
