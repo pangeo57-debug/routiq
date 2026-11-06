@@ -67,11 +67,35 @@ self.addEventListener('fetch', (event) => {
 
 // "Your week is ready", sent by the compute server when a week computed off
 // the phone is done. Tapping it opens the app, which picks the result up.
+// A reminder push carries only an opaque key; what it says (who, where) is
+// read here from IndexedDB, written by the page. The server never knew it.
+function reminderText(k) {
+  return new Promise((resolve) => {
+    try {
+      const r = indexedDB.open('routepal', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('remind');
+      r.onerror = () => resolve(null);
+      r.onsuccess = () => {
+        try {
+          const g = r.result.transaction('remind').objectStore('remind').get(k);
+          g.onsuccess = () => resolve(g.result || null); g.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      };
+    } catch (e) { resolve(null); }
+  });
+}
 self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) {}
-  event.waitUntil(self.registration.showNotification(d.title || 'RoutePal', {
-    body: d.body || '', tag: d.tag || 'plan', icon: 'icon-192.png', badge: 'icon-192.png', data: { job: d.job || null } }));
+  event.waitUntil((async () => {
+    if (d.kind === 'reminder') {
+      const x = await reminderText(d.k);
+      return self.registration.showNotification((x && x.title) || d.title || 'RoutePal', {
+        body: (x && x.body) || '', tag: (x && x.tag) || 'rp-remind', icon: 'icon-192.png', badge: 'icon-192.png' });
+    }
+    return self.registration.showNotification(d.title || 'RoutePal', {
+      body: d.body || '', tag: d.tag || 'plan', icon: 'icon-192.png', badge: 'icon-192.png', data: { job: d.job || null } });
+  })());
 });
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

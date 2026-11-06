@@ -93,3 +93,29 @@ describe('computed on the server, returned as people', () => {
     assert.equal(job.threads.size, 0);
   });
 });
+
+describe('reminders with the app closed', () => {
+  const sub = { endpoint: 'https://push.example/abc', keys: { p256dh: 'x', auth: 'y' } };
+  test('only times and opaque keys are accepted; a text field is ignored, a bad key refused', () => {
+    const now = Date.now();
+    assert.equal(server.setReminders({ push: sub, items: [{ t: now + 100, k: 'a1b2c3d4e5f6' }] }, now), null);
+    assert.match(server.setReminders({ push: sub, items: [{ t: now + 100, k: 'Μαρία Κορίνθου 12' }] }, now), /key/);
+    assert.match(server.setReminders({ push: sub, items: [{ t: now + 3 * 86400000, k: 'a1b2c3d4' }] }, now), /next day/);
+  });
+  test('each fires at its time, and a new set replaces the old one', async () => {
+    const now = Date.now();
+    server.setReminders({ push: sub, items: [{ t: now + 50, k: 'aaaaaaaa' }, { t: now + 5000, k: 'bbbbbbbb' }] }, now);
+    server.setReminders({ push: sub, items: [{ t: now + 80, k: 'cccccccc' }] }, now);
+    await new Promise(r => setTimeout(r, 250));
+    const keys = server.sent.map(x => x.k);
+    assert.ok(keys.includes('cccccccc'));
+    assert.ok(!keys.includes('aaaaaaaa'), 'the replaced set must not fire');
+  });
+  test('the phone sends the server no name and no address for a reminder', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'routiq.html'), 'utf8');
+    const body = src.slice(src.indexOf('  async _pushReminders('), src.indexOf('  _remind(x){'));
+    assert.match(body, /items\.push\(\{ t: at, k \}\)/);
+    assert.match(body, /JSON\.stringify\(\{ push, items, fallback/);
+    assert.match(body, /RemindStore\.replace\(texts\)/);
+  });
+});

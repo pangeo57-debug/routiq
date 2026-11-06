@@ -6887,6 +6887,22 @@ const ANALYTICS_TOKEN = '';
 const COMPUTE_BASE = '';
 const VAPID_PUBLIC = '';   // the compute server's VAPID public key, for "ready" notifications
 
+// What each "in 15 minutes" reminder says, kept on the phone for the
+// service worker (which cannot read localStorage). Replaced as a whole each
+// time the day's reminders are set.
+const RemindStore = {
+  _db(){ return new Promise((res, rej) => { const r = indexedDB.open('routepal', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('remind');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async replace(texts){
+    if(typeof indexedDB === 'undefined') return;
+    const db = await this._db();
+    await new Promise((res, rej) => { const tx = db.transaction('remind', 'readwrite'), st = tx.objectStore('remind');
+      st.clear(); for(const [k, v] of Object.entries(texts)) st.put(v, k);
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  },
+};
+
 const Remote = {
   KEY: 'rp_remote_job',
   available(){ return !!COMPUTE_BASE; },
@@ -7928,7 +7944,30 @@ const App = {
       if(wait <= 0 || wait > 12 * 3600000) continue;
       this._remindTimers.push(setTimeout(() => this._remind(x), wait));
     }
+    // With the compute server, the same reminders also come with the app
+    // closed: the server is told only WHEN (and an opaque key per stop); what
+    // each one says stays on the phone, in IndexedDB, where the service
+    // worker reads it at the moment the notification is shown.
+    try{ if(Remote.available() && VAPID_PUBLIC) this._pushReminders(d); }catch(e){}
     return this._remindTimers.length;
+  },
+  async _pushReminders(d){
+    const base = new Date(d); base.setHours(0, 0, 0, 0);
+    const items = [], texts = {};
+    for(const x of this._todayAgenda()){
+      if(!x.time || x.done) continue;
+      const at = base.getTime() + (Scheduler.toMin(x.time) - this.REMIND_MIN) * 60000;
+      if(at <= d.getTime() || at - d.getTime() > 24 * 3600000) continue;
+      const k = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+      texts[k] = { title: tf('remind_title', { min: this.REMIND_MIN, name: x.title }),
+        body: [x.time, x.address].filter(Boolean).join(' · '), tag: 'rp-' + x.id };
+      items.push({ t: at, k });
+    }
+    await RemindStore.replace(texts);
+    const push = await Remote._push();
+    if(!push) return;
+    await fetch(Remote._url('/reminders'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ push, items, fallback: { title: tf('remind_title', { min: this.REMIND_MIN, name: '' }).replace(/[:\s]+$/, '') } }) });
   },
   _remind(x){
     const title = tf('remind_title', { min: this.REMIND_MIN, name: x.title });

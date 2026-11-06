@@ -14,6 +14,7 @@
  *   POST   /jobs        { input, matrix, push?, notify? }  -> { id }
  *   GET    /jobs/:id    -> { status, progress, result? }
  *   DELETE /jobs/:id    -> stops it
+ *   POST   /reminders   { push, items: [{ t, k }] }   -> replaces this phone's reminders
  *   GET    /health
  */
 const http = require('http');
@@ -138,6 +139,37 @@ async function notify(job) {
   } catch (e) { /* an expired subscription is not an error worth more than this */ }
 }
 
+// ---- reminders: "in 15 minutes", with the app closed --------------------------
+// Only times and opaque keys arrive; what each reminder says is on the phone.
+// One set per push subscription, replaced whenever the phone sends a new one.
+// In memory: a restart forgets them until the app next opens.
+const reminders = new Map();   // endpoint hash -> [timeouts]
+const KEY = /^[0-9a-f]{8,48}$/;
+function setReminders(body, now) {
+  const push = body && body.push;
+  if (!push || typeof push.endpoint !== 'string' || !/^https:\/\//.test(push.endpoint)) return 'push subscription required';
+  const items = Array.isArray(body.items) ? body.items : null;
+  if (!items || items.length > 60) return 'items: at most 60';
+  for (const it of items) {
+    if (!it || !Number.isFinite(it.t) || it.t < now - 60000 || it.t > now + 26 * 3600 * 1000) return 'times must be within the next day';
+    if (!KEY.test(String(it.k))) return 'bad key';
+  }
+  const id = crypto.createHash('sha256').update(push.endpoint).digest('hex');
+  for (const tm of reminders.get(id) || []) clearTimeout(tm);
+  const title = String((body.fallback && body.fallback.title) || 'RoutePal').slice(0, 60);
+  const timers = items.map(it => {
+    const tm = setTimeout(() => {
+      if (webpush) webpush.sendNotification(push, JSON.stringify({ kind: 'reminder', k: it.k, title })).catch(() => {});
+      sent.push({ id, k: it.k, at: Date.now() }); if (sent.length > 100) sent.shift();
+    }, Math.max(0, it.t - now));
+    tm.unref();
+    return tm;
+  });
+  if (timers.length) reminders.set(id, timers); else reminders.delete(id);
+  return null;
+}
+const sent = [];               // the last few sent, for the tests
+
 // ---- http --------------------------------------------------------------------
 function cors(req) {
   const o = req.headers.origin || '';
@@ -179,6 +211,15 @@ async function handle(req, res) {
     jobs.set(id, job); queue.push(job); pump();
     return send(res, 202, { id, position: queue.indexOf(job) + 1 }, c.headers);
   }
+  if (url.pathname === '/reminders' && req.method === 'POST') {
+    let raw = '';
+    for await (const chunk of req) { raw += chunk; if (raw.length > 64 * 1024) return send(res, 413, { error: 'body too large' }, c.headers); }
+    let body;
+    try { body = JSON.parse(raw); } catch { return send(res, 400, { error: 'body is not JSON' }, c.headers); }
+    const bad = setReminders(body, Date.now());
+    if (bad) return send(res, 400, { error: bad }, c.headers);
+    return send(res, 200, { ok: true, n: body.items.length }, c.headers);
+  }
   const m = url.pathname.match(/^\/jobs\/([0-9a-f]{32})$/);
   if (m) {
     const job = jobs.get(m[1]);
@@ -207,4 +248,4 @@ function start(port = CONF.port) {
 
 if (require.main === module) start().then(() => console.log(`compute on :${CONF.port}, ${CONF.runs} runs per round`));
 
-module.exports = { start, validate, CONF, jobs };
+module.exports = { start, validate, CONF, jobs, setReminders, reminders, sent };
