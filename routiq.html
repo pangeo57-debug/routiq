@@ -7398,7 +7398,25 @@ function _schedStopAnim(){
   if(_schedRaf!==null){ cancelAnimationFrame(_schedRaf); _schedRaf=null; }
 }
 
+// While a plan is being computed the screen is kept on. A phone that turns
+// its screen off hides the page, and a hidden page is frozen by the browser
+// (at once on iPhone, within seconds on Android): the computation stops and
+// only resumes when the person comes back. Released as soon as the bar goes.
+const SchedWake = {
+  lock: null, want: false,
+  async on(){
+    this.want = true;
+    if(this.lock || typeof navigator === 'undefined' || !navigator.wakeLock) return;
+    try{ this.lock = await navigator.wakeLock.request('screen'); this.lock.addEventListener('release', () => { this.lock = null; }); }catch(e){ this.lock = null; }
+  },
+  off(){ this.want = false; const l = this.lock; this.lock = null; if(l) try{ l.release(); }catch(e){} },
+};
+// A wake lock is dropped whenever the page is hidden; take it again on return.
+if(typeof document !== 'undefined' && document.addEventListener)
+  document.addEventListener('visibilitychange', () => { if(!document.hidden && SchedWake.want) SchedWake.on(); });
+
 function schedProgress(pct, phase, sub, icon){
+  if(pct === null) SchedWake.off(); else SchedWake.on();
   const ov=document.getElementById('sched-overlay');
   if(!ov) return;
   // After ✕ the bar stays gone, even if the stopping run reports once more.
