@@ -67,6 +67,12 @@ function chosenInstances(argv) {
 
 // ---------------------------------------------------------------------------
 
+// --timescale K: app minutes per instance time unit (10 = no rounding at all).
+function timeScale() {
+  const i = process.argv.indexOf('--timescale');
+  return i >= 0 ? Number(process.argv[i + 1]) || 1 : 1;
+}
+
 // --idle N: price waiting at N km per minute (the app's is 0.5; Solomon's is 0).
 function idleOverride(app) {
   const i = process.argv.indexOf('--idle');
@@ -148,7 +154,7 @@ async function solomonRun(name, maxRoutes, budgets) {
       `file says ${best.cost} — the distance convention is wrong, every number below would be meaningless`);
   }
 
-  const { sts, cfg, coords, days, matrix } = Solomon.toRoutePal(inst, fixtures, maxRoutes);
+  const { sts, cfg, coords, days, matrix } = Solomon.toRoutePal(inst, fixtures, maxRoutes, timeScale());
   const app = loadApp({ seed: SEED });
   idleOverride(app);
   app.setState({ students: sts, settings: cfg, coords,
@@ -162,7 +168,7 @@ async function solomonRun(name, maxRoutes, budgets) {
   // checking against the instance by code that is not the app's.
   { const di = process.argv.indexOf('--dump');
     if (di >= 0 && process.argv[di + 1]) {
-      const routes = days.map(d => (schedule[d] || []).slice().sort((a, b) => a.start.localeCompare(b.start))
+      const routes = days.map(d => (schedule[d] || []).slice().sort((a, b) => ((x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; })(a.start) - ((x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; })(b.start))
         .map(x => ({ node: Number(x.studentId.slice(1)), start: x.start, end: x.end }))).filter(r => r.length);
       fs.writeFileSync(path.join(process.argv[di + 1], name + '.routes.json'), JSON.stringify(routes, null, 1));
     } }

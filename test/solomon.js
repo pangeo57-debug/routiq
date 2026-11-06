@@ -71,12 +71,17 @@ const dist = (inst, a, b) =>
  *  - Day 6 is skipped. The optimizer charges a penalty for Saturday work and
  *    treats it as off-peak traffic; neither belongs in this comparison.
  */
-function toRoutePal(inst, { student, settings }, maxRoutes) {
+// timeScale: app minutes per instance time unit. The app keeps time in whole
+// minutes and the instance's travel times have one decimal, so at 1 a lesson
+// can look reachable that is 0.1-0.6 units late. At 10 every time is a whole
+// number of minutes: nothing is rounded.
+function toRoutePal(inst, { student, settings }, maxRoutes, timeScale = 1) {
+  const K = timeScale;
   const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m) % 60).padStart(2, '0')}`;
   const days = [];
   for (let d = 1; days.length < maxRoutes; d++) if (d !== 6) days.push(d);
 
-  const horizon = inst.tw[1][1];
+  const horizon = inst.tw[1][1] * K;
   const dayHours = {};
   for (const d of days) dayHours[d] = { start: '00:00', end: hhmm(horizon) };
   const cfg = settings({ workDays: days, dayHours, travelMargin: 0, homeAddress: 'depot' });
@@ -89,8 +94,8 @@ function toRoutePal(inst, { student, settings }, maxRoutes) {
 
   const ids = ['home'], sts = [], coords = { home: place(inst.coord[1]) };
   for (let node = 2; node <= inst.n; node++) {
-    const [ready, due] = inst.tw[node];
-    const service = inst.service(node);
+    const [ready, due] = inst.tw[node].map(x => x * K);
+    const service = inst.service(node) * K;
     const st = student('n' + node, { days, lessonsPerWeek: 1, lessonDuration: service,
       window: { start: hhmm(ready), end: hhmm(Math.max(ready + service, due + service - flex)) } });
     sts.push(st); ids.push(st.id);
@@ -103,7 +108,7 @@ function toRoutePal(inst, { student, settings }, maxRoutes) {
     durations.push([]); distances.push([]);
     for (let b = 0; b < ids.length; b++) {
       const d = dist(inst, node(a), node(b));
-      durations[a].push(d * 60);      // seconds, so minutes == distance units
+      durations[a].push(Math.round(d * 60 * K));      // seconds; minutes == distance units × K
       distances[a].push(d * 1000);    // metres,  so km      == distance units
     }
   }
@@ -115,7 +120,7 @@ function scheduleCost(inst, schedule, days) {
   let total = 0, routes = 0, overCapacity = 0;
   for (const d of days) {
     const slots = (schedule[d] || []).slice()
-      .sort((a, b) => a.start.localeCompare(b.start));
+      .sort((a, b) => ((x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; })(a.start) - ((x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; })(b.start));
     if (!slots.length) continue;
     routes++;
     let prev = 1, load = 0;
