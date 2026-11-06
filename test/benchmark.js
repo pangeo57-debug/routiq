@@ -67,6 +67,12 @@ function chosenInstances(argv) {
 
 // ---------------------------------------------------------------------------
 
+// --idle N: price waiting at N km per minute (the app's is 0.5; Solomon's is 0).
+function idleOverride(app) {
+  const i = process.argv.indexOf('--idle');
+  if (i >= 0 && process.argv[i + 1] != null) app.Scheduler.IDLE_KM_PER_MIN = Number(process.argv[i + 1]);
+}
+
 async function runPipeline(app, sts, cfg, coords, budgets) {
   const S = app.Scheduler;
   const t0 = Date.now();
@@ -144,6 +150,7 @@ async function solomonRun(name, maxRoutes, budgets) {
 
   const { sts, cfg, coords, days, matrix } = Solomon.toRoutePal(inst, fixtures, maxRoutes);
   const app = loadApp({ seed: SEED });
+  idleOverride(app);
   app.setState({ students: sts, settings: cfg, coords,
     travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
 
@@ -169,6 +176,7 @@ async function ownRun() {
     : { lat: 38.246 + ((i * 13) % 30) / 2000, lon: 21.734 + ((i * 7) % 30) / 2000 }; });
 
   const app = loadApp({ seed: SEED });
+  idleOverride(app);
   app.setState({ students: sts, settings: cfg, coords,
     travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
   const { schedule, ms } = await runPipeline(app, sts, cfg, coords,
