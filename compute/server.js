@@ -58,7 +58,7 @@ function validate(body) {
   if (input.students.length === 0 || input.students.length > 300) return 'between 1 and 300 clients';
   for (const s of input.students) {
     if (!s || !ID.test(String(s.id))) return 'client ids must be anonymous codes';
-    for (const f of FORBIDDEN) if (s[f]) return `client field "${f}" is not accepted`;
+    for (const f of FORBIDDEN) if (s[f] && !(f === 'address' && /^§p\d{1,4}$/.test(s[f]))) return `client field "${f}" is not accepted`;
   }
   for (const f of FORBIDDEN) if (input.settings[f]) return `setting "${f}" is not accepted`;
   if (!matrix || !matrix.peak || !Array.isArray(matrix.peak.coordIds) || !Array.isArray(matrix.peak.durations))

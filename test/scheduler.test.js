@@ -6530,3 +6530,49 @@ describe('anonymous usage counts (opt-in)', () => {
     assert.equal(plain.Usage.available(), false);
   });
 });
+
+describe('clients who come to the professional\'s own place (workplace)', () => {
+  function gym() {
+    const app = loadApp({ seed: 2 });
+    const S = app.Scheduler;
+    const W = 'Γυμναστήριο, Ερμού 20, Πάτρα';
+    const sts = ['a', 'b', 'c', 'd'].map(id => student(id, { address: W, atWorkplace: true, days: [1], window: { start: '09:00', end: '13:00' } }));
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '13:00' } }, travelMargin: 3, workplaceAddress: W });
+    const coords = { home: { lat: 38.24, lon: 21.73 }, workplace: { lat: 38.25, lon: 21.74 } };
+    for (const s of sts) coords[s.id] = { ...coords.workplace };
+    app.setState({ students: sts, settings: cfg, coords, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    return { app, S, sts, cfg, coords };
+  }
+
+  test('sessions at one place follow one another: no drive, no margin', () => {
+    const { S, sts, cfg } = gym();
+    const laid = S.relayoutDay(sts.map(s => S._lessonSlot(s, 60)), 1, sts, cfg);
+    assert.deepStrictEqual(Array.from(laid, x => x.start), ['09:00', '10:00', '11:00', '12:00']);
+    assertClean(S.verifySchedule({ 1: laid }, sts, cfg));
+    assert.equal(S.dayIdle(laid, 1, cfg), 0);
+  });
+
+  test('the day drives home to the workplace and back, once', () => {
+    const { S, sts, cfg } = gym();
+    const laid = S.relayoutDay(sts.map(s => S._lessonSlot(s, 60)), 1, sts, cfg);
+    const oneWay = S.travelEstKm('home', '', 'a', sts[0].address, 1);
+    assert.ok(Math.abs(S.dayKm(laid, 1, cfg) - 2 * oneWay) < 1e-9);
+  });
+
+  test('a full week fits four hour-long sessions into four hours', async () => {
+    const { S, sts, cfg, coords } = gym();
+    const out = await S.optimizeWeek({ students: sts, settings: cfg, coords, attempts: 1, warm: null, timeScale: 0.05 });
+    assert.equal(S.countTotal(out.schedule), 4);
+    assertClean(S.verifySchedule(out.schedule, sts, cfg));
+  });
+
+  test('on the compute server the workplace is a code, never its address', () => {
+    const { sts, cfg, coords } = gym();
+    const app = loadApp({ seed: 2, computeBase: 'https://compute.example' });
+    app.setState({ students: sts, settings: cfg, coords, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const { job } = app.Remote.build({ students: sts, settings: cfg, coords, attempts: 1 });
+    const text = JSON.stringify(job);
+    assert.ok(!text.includes('Ερμού'), 'the workplace address left the phone');
+    assert.ok(job.input.students.every(s => s.address === '§p1'));
+  });
+});
