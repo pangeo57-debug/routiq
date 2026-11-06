@@ -16,6 +16,7 @@
  *   npm run bench:tsptw -- --size 20 --all    all 25 of n20
  *   npm run bench:tsptw -- --only n20w60.003
  *   npm run bench:tsptw -- --budget 8000      ALNS budget in ms (app: 4000)
+ *   npm run bench:tsptw -- --full             the whole week pipeline on the day
  */
 
 const fixtures = require('./harness');
@@ -53,7 +54,8 @@ async function run(name) {
     travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
   const budget = Number(arg('--budget')) || undefined;
   const t0 = Date.now();
-  const plan = await app.Scheduler.planDay(jobs, cfg, coords, date, budget ? { budgetMs: budget } : {});
+  const plan = await app.Scheduler.planDay(jobs, cfg, coords, date,
+    { ...(budget ? { budgetMs: budget } : {}), ...(process.argv.includes('--full') ? { full: true } : {}) });
   const ms = Date.now() - t0;
 
   const tour = plan.stops.map(s => Number(s.job.id.slice(1)));

@@ -3960,8 +3960,18 @@ const Scheduler = {
 
     const { clients, cfg, dh } = this._dayFrame(list, day, settings, o.hours, o.errand);
 
-    const r = await this.runMultiAttempt(clients, cfg, coords, o.attempts || 2, false);
-    if(o.optimise !== false) await this.alnsOptimize(r.schedule, clients, cfg, coords, o.budgetMs || 4000);
+    let r;
+    if(o.full){
+      // The whole week pipeline on this one day — every pass, ejection chains
+      // and SISR included — and a second round from its best, as the week does.
+      let out = await this.optimizeWeek({ students: clients, settings: cfg, coords, attempts: o.attempts || 2, warm: null });
+      const again = await this.optimizeWeek({ students: clients, settings: cfg, coords, attempts: 0, warm: out.schedule, skipPhase1: true });
+      if(this.isBetterStart(again.schedule, out.schedule, cfg)) out = again;
+      r = { schedule: out.schedule };
+    } else {
+      r = await this.runMultiAttempt(clients, cfg, coords, o.attempts || 2, false);
+      if(o.optimise !== false) await this.alnsOptimize(r.schedule, clients, cfg, coords, o.budgetMs || 4000);
+    }
     this.enforceConstraints(r.schedule, clients, cfg);
     this.tidyDays(r.schedule, clients, cfg);
     this.compactDays(r.schedule, clients, cfg);
