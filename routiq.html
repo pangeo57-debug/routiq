@@ -2655,6 +2655,12 @@ const Scheduler = {
     const { students, settings, coords } = input;
     const P = hooks.progress || (() => {}), stop = hooks.stopped || (() => this._stopped());
     const tick = () => new Promise(r => setTimeout(r, 0));
+    // Search time grows with the week: the budgets below were set on weeks of
+    // 20-40 lessons, and a list of 100 was searched a third as hard per
+    // lesson. Up to 40 lessons nothing changes; beyond, up to 2.4 times.
+    const lessons = students.reduce((a, s) => a + (Number(s.lessonsPerWeek) || 0), 0);
+    const scale = Math.min(2.4, Math.max(1, lessons / 40));
+    const B = (ms) => Math.round(ms * scale);
     let result, sch;
     if(input.skipPhase1 && input.warm){
       // A second round: search again from the best week found so far.
@@ -2685,13 +2691,13 @@ const Scheduler = {
     };
     if(stop()) return done(true);
     P(55, 'phase3_title', 'phase3_sub_short');
-    await guard((x) => this.alnsOptimize(x, students, settings, coords, 25000, (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
+    await guard((x) => this.alnsOptimize(x, students, settings, coords, B(25000), (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
     if(stop()) return done(true);
     P(82, 'phase4b_title', 'phase4b_sub'); await tick();
     await guard((x) => this.saRepair(x, students, settings, result));
     if(stop()) return done(true);
     P(92, 'phase5_title', 'phase5b_sub'); await tick();
-    await guard((x) => this.lnsRepair(x, students, settings, 10000));
+    await guard((x) => this.lnsRepair(x, students, settings, B(10000)));
     try{
       this.enforceConstraints(sch, students, settings);
       this.collapseForceMergeFragments(sch, students, settings);
@@ -2723,7 +2729,7 @@ const Scheduler = {
     if(stop()) return done(true);
     try{
       P(94, 'phase_refine_title', 'phase_refine_sub');
-      await guard((x) => this.refineWeek(x, students, settings, 20000, (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
+      await guard((x) => this.refineWeek(x, students, settings, B(20000), (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
     }catch(e){}
     try{ await this.flexFit(sch, students, settings, 6000, stop); }catch(e){}
     try{ this.rebalanceDays(sch, students, settings); }catch(e){}
@@ -5886,6 +5892,52 @@ const Scheduler = {
     return out;
   },
 
+  // 2-opt* (Potvin & Rousseau 1995): two days swap their tails. Day A keeps
+  // its first i lessons and takes day B's lessons from j on; B keeps its
+  // first j and takes A's rest. Both days are timed again in that order;
+  // kept only if the two days cost less together and no rule is broken.
+  // The other inter-day moves shift one lesson (or trade two) at a time; a
+  // tail exchange moves a whole afternoon's run at once.
+  async twoOptStar(schedule, students, settings, budgetMs = 3000){
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const baseIssues = this.verifySchedule(schedule, students, settings).length;
+    const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs || this._stopped();
+    const cost = (sl, d) => sl.length ? this.dayCost(sl, d, settings) : 0;
+    const once = (sl) => { const seen = new Set(); for(const x of sl) for(const id of this.occupantIds(x)){ if(seen.has(id)) return false; seen.add(id); } return true; };
+    const days = settings.workDays || [];
+    let moves = 0, improved = true, lastYield = t0;
+    while(improved && !timeUp()){
+      improved = false;
+      outer:
+      for(let a = 0; a < days.length; a++) for(let b = a + 1; b < days.length; b++){
+        const d1 = days[a], d2 = days[b];
+        const A = this._byStart(schedule[d1] || []), B = this._byStart(schedule[d2] || []);
+        if(!A.length && !B.length) continue;
+        const c0 = cost(A, d1) + cost(B, d2);
+        for(let i = 0; i <= A.length; i++) for(let j = 0; j <= B.length; j++){
+          if((i === A.length && j === B.length) || (i === 0 && j === 0)) continue;   // nothing or everything moves
+          if(Date.now() - lastYield > 150){ await new Promise(r => setTimeout(r, 0)); lastYield = Date.now(); }
+          if(timeUp()) break outer;
+          const nA = A.slice(0, i).concat(B.slice(j)), nB = B.slice(0, j).concat(A.slice(i));
+          if(!once(nA) || !once(nB)) continue;
+          const cap = (settings.maxPerDay | 0);
+          if(cap && (nA.length > cap || nB.length > cap)) continue;
+          const lA = nA.length ? this.relayoutDay(nA.map(x => ({ ...x })), d1, students, settings) : [];
+          if(!lA) continue;
+          const lB = nB.length ? this.relayoutDay(nB.map(x => ({ ...x })), d2, students, settings) : [];
+          if(!lB) continue;
+          if(cost(lA, d1) + cost(lB, d2) < c0 - 0.05){
+            const trial = { ...schedule, [d1]: lA, [d2]: lB };
+            if(this.verifySchedule(trial, students, settings).length <= baseIssues){
+              schedule[d1] = lA; schedule[d2] = lB; moves++; improved = true; break outer;
+            }
+          }
+        }
+      }
+    }
+    return { moves };
+  },
+
   async interDayMoves(schedule, students, settings, budgetMs = 6000){
     const byId = Object.fromEntries(students.map(s => [s.id, s]));
     const baseIssues = this.verifySchedule(schedule, students, settings).length;
@@ -5973,6 +6025,7 @@ const Scheduler = {
     if(onStep) onStep(3);
     if(this._stopped()){ out.moves = { relocate: 0, swap: 0 }; return out; }
     out.moves = await this.interDayMoves(schedule, students, settings, budgetMs * 0.25);
+    if(!this._stopped()) out.cross = await this.twoOptStar(schedule, students, settings, budgetMs * 0.15);
     if(!this._stopped()){
       const again = await this.blockMoves(schedule, students, settings, budgetMs * 0.1);
       out.blocks = { relocate: out.blocks.relocate + again.relocate, swap: out.blocks.swap + again.swap };
@@ -7983,7 +8036,14 @@ const App = {
       catch(e){
         if(state._schedulingCancelled || isStale()) return cancelledCleanup();
         if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler workers failed; running on the page', e);
-        out = await Scheduler.optimizeWeek(input, { progress: P, stopped: () => state._schedulingCancelled || isStale() });
+        const hooks = { progress: P, stopped: () => state._schedulingCancelled || isStale() };
+        out = await Scheduler.optimizeWeek(input, hooks);
+        // the same second round the workers do, from the best week found
+        if(!hooks.stopped()){
+          const again = await Scheduler.optimizeWeek({ ...input, warm: out.schedule, skipPhase1: true },
+            { ...hooks, progress: (p) => P(Math.min(99, 90 + (p - 55) / 45 * 9), 'phase_refine_title', 'phase_refine_sub') });
+          if(Scheduler.isBetterStart(again.schedule, out.schedule, state.settings)) out = { ...again, result: out.result };
+        }
       }
       if(state._schedulingCancelled || isStale()) return cancelledCleanup();
       // Flexible time may have been split in the winning run: carry that over.
