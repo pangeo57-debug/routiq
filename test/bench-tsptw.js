@@ -17,6 +17,9 @@
  *   npm run bench:tsptw -- --only n20w60.003
  *   npm run bench:tsptw -- --budget 8000      ALNS budget in ms (app: 4000)
  *   npm run bench:tsptw -- --full             the whole week pipeline on the day
+ *   npm run bench:tsptw -- --engine week      the day planner as it was before solveDay
+ *   npm run bench:tsptw -- --day-ms 2000      solveDay's time budget
+ *   npm run bench:tsptw -- --app-cost         price waiting as the app does (default: free)
  */
 
 const fixtures = require('./harness');
@@ -50,12 +53,16 @@ async function run(name) {
 
   const { jobs, cfg, coords, date, matrix, zeroLegs } = T.toDay(inst, fixtures);
   const app = loadApp({ seed: SEED });
+  // The literature's objective is travel alone; waiting is free. --app-cost
+  // keeps the app's own price on waiting instead.
+  if (!process.argv.includes('--app-cost')) { app.Scheduler.IDLE_KM_PER_MIN = 0; app.Scheduler.GAP_PENALTY_PER_MIN = 0; }
   app.setState({ jobs, settings: cfg, coords, students: [], schedule: {},
     travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
   const budget = Number(arg('--budget')) || undefined;
   const t0 = Date.now();
   const plan = await app.Scheduler.planDay(jobs, cfg, coords, date,
-    { ...(budget ? { budgetMs: budget } : {}), ...(process.argv.includes('--full') ? { full: true } : {}) });
+    { ...(budget ? { budgetMs: budget } : {}), ...(process.argv.includes('--full') ? { full: true } : {}),
+      ...(arg('--engine') ? { engine: arg('--engine') } : {}), ...(arg('--day-ms') ? { dayMs: Number(arg('--day-ms')) } : {}) });
   const ms = Date.now() - t0;
 
   const tour = plan.stops.map(s => Number(s.job.id.slice(1)));

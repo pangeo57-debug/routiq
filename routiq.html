@@ -3968,16 +3968,35 @@ const Scheduler = {
       const again = await this.optimizeWeek({ students: clients, settings: cfg, coords, attempts: 0, warm: out.schedule, skipPhase1: true });
       if(this.isBetterStart(again.schedule, out.schedule, cfg)) out = again;
       r = { schedule: out.schedule };
-    } else {
+    } else if(o.engine === 'week'){
       r = await this.runMultiAttempt(clients, cfg, coords, o.attempts || 2, false);
       if(o.optimise !== false) await this.alnsOptimize(r.schedule, clients, cfg, coords, o.budgetMs || 4000);
     }
-    this.enforceConstraints(r.schedule, clients, cfg);
-    this.tidyDays(r.schedule, clients, cfg);
-    this.compactDays(r.schedule, clients, cfg);
-
-    let placed = (r.schedule[day] || []).slice()
-      .sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+    let placed;
+    if(r){
+      this.enforceConstraints(r.schedule, clients, cfg);
+      this.tidyDays(r.schedule, clients, cfg);
+      this.compactDays(r.schedule, clients, cfg);
+      placed = (r.schedule[day] || []).slice().sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+    } else {
+      // The day's own solver. Should it ever fail to give a legal day, or
+      // leave someone out, the week machinery runs as before and the better
+      // of the two is kept, so this can only add.
+      let sol = null;
+      try{ sol = await this.solveDay(clients, cfg, day, { budgetMs: o.dayMs }); }catch(e){ sol = null; }
+      placed = sol ? sol.slots : [];
+      if(!sol || sol.out.length){
+        const w = await this.runMultiAttempt(clients, cfg, coords, o.attempts || 2, false);
+        if(o.optimise !== false) await this.alnsOptimize(w.schedule, clients, cfg, coords, o.budgetMs || 4000);
+        this.enforceConstraints(w.schedule, clients, cfg);
+        this.tidyDays(w.schedule, clients, cfg);
+        this.compactDays(w.schedule, clients, cfg);
+        const alt = (w.schedule[day] || []).slice().sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+        if(alt.length > placed.length || (alt.length === placed.length && alt.length &&
+            !this.verifySchedule({ [day]: alt }, clients, cfg).length &&
+            this.dayCost(alt, day, cfg) < this.dayCost(placed, day, cfg) - 1e-9)) placed = alt;
+      }
+    }
     // The person's own order is the "before". The plan is never allowed to be
     // worse than it: if their order fits as many and costs less, it is the plan.
     const base = this.dayBaseline(clients, cfg, day);
@@ -3989,6 +4008,335 @@ const Scheduler = {
     summary.before = base ? { kind: base.kind, km: base.km, drive: base.drive, idle: base.idle, stops: base.stops } : null;
     summary.after = this.measureDay(placed, day, cfg);
     return summary;
+  },
+
+  // ── One day, solved as the problem it is ────────────────────────────────
+  // A day of jobs is one vehicle, N stops with time windows: the travelling
+  // salesman with time windows. The week's machinery treated it as a small
+  // week and, measured on the Dumas et al. (1995) instances, left customers
+  // out of days on which they all fit (8/25 days of 20 complete, 0/25 of 40),
+  // no better at five times the time. Three things the literature's solvers
+  // have and that one did not:
+  //
+  //  · an evaluation that costs arithmetic, not a re-layout: travel between
+  //    every two stops is looked up once, and a move re-times only the part
+  //    of the day after the first position it touches;
+  //  · a search that may pass through days that break a window. Lateness is
+  //    priced (the "time warp" of Vidal et al. 2013: arrive late, pay for
+  //    every minute, carry on from the latest legal start) and the price
+  //    rises while the search stays infeasible and falls while it does not,
+  //    so it can cross from one legal day to a better one through illegal
+  //    ones instead of being walled in by them;
+  //  · iterated local search: relocate one to three consecutive stops, swap
+  //    two, reverse a stretch; then shake and repeat, keeping the best legal
+  //    day seen.
+  //
+  // Feasible days are timed by exactly the rules relayoutDay applies (the same
+  // earliestLegal, windows, breaks, margin and travel lookups), and the day
+  // returned is laid out by relayoutDay itself and checked by verifySchedule.
+  // If not every stop fits, stops are left out only when no legal day with
+  // all of them has been found, and the search keeps trying to put them back.
+  //
+  // Returns { slots, out } — slots laid out and legal, out the clients left
+  // unplaced — or null if it could not produce a legal day at all.
+  async solveDay(clients, cfg, day, opts){
+    const o = opts || {};
+    const n = clients.length;
+    const dh = cfg.dayHours && cfg.dayHours[day];
+    if(!dh) return null;
+    if(!n) return { slots: [], out: [] };
+    const margin = cfg.travelMargin ?? 2;
+    const dayStart = this.toMin(dh.start), dayEnd = this.toMin(dh.end) + this.endFlex();
+    const breaks = this.breaksOn(day, cfg);
+    const IDLE = this.IDLE_KM_PER_MIN;
+    const homeAddr = cfg.homeAddress || '';
+    const budget = o.budgetMs || 2000, t0 = Date.now();
+    let seed = (o.seed || 20240611) >>> 0;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const ri = (k) => Math.floor(rnd() * k);
+
+    // Per stop: length, the windows relayoutDay would use, the latest legal start.
+    const dur = new Array(n), wins = new Array(n), clipped = new Array(n), LS = new Array(n), WS = new Array(n);
+    const never = [];
+    for(let i = 0; i < n; i++){
+      const c = clients[i];
+      dur[i] = Number(c.lessonDuration) || 60;
+      clipped[i] = this.commonWindows([c], day, cfg).map(w => [Math.max(w[0], dayStart), Math.min(w[1], dayEnd)]);
+      wins[i] = clipped[i].filter((w, k) => w[1] + this.windowFlex(clipped[i], k) - w[0] >= dur[i]);
+      if(!wins[i].length){ never.push(i); continue; }
+      WS[i] = Math.max(dayStart, wins[i][0][0]);
+      let ls = -Infinity;
+      wins[i].forEach((w, k) => { ls = Math.max(ls, Math.min(w[1] + this.windowFlex(wins[i], k), dayEnd) - dur[i]); });
+      LS[i] = ls;
+    }
+
+    // Travel, minutes and km, for both traffic bands. Index 0 is home.
+    const N1 = n + 1, PF = this.PEAK_FROM, PT = this.PEAK_TO;
+    const band = (t) => (t >= PF && t < PT) ? 1 : 0;
+    const idOf = (a) => a === 0 ? 'home' : clients[a - 1].id;
+    const adOf = (a) => a === 0 ? homeAddr : clients[a - 1].address;
+    const tMin = [new Float64Array(N1 * N1), new Float64Array(N1 * N1)];
+    const tKm = [new Float64Array(N1 * N1), new Float64Array(N1 * N1)];
+    for(let b = 0; b < 2; b++){
+      const at = b ? PF : PT;
+      for(let a = 0; a < N1; a++) for(let c = 0; c < N1; c++){
+        if(a === c) continue;
+        tMin[b][a * N1 + c] = this.travelEstMin(idOf(a), adOf(a), idOf(c), adOf(c), day, at);
+        tKm[b][a * N1 + c] = this.travelEstKm(idOf(a), adOf(a), idOf(c), adOf(c), day, at);
+      }
+    }
+
+    const tLo = new Float64Array(N1 * N1);           // the shorter of the two bands, for pruning
+    for(let q = 0; q < N1 * N1; q++) tLo[q] = Math.min(tMin[0][q], tMin[1][q]);
+    // The earliest legal start at or after `t`, by relayoutDay's own rules:
+    // earliestLegal over the usable windows (each with the end-of-day
+    // tolerance on its last one, as windowFlex gives it), then the same
+    // clipped-window and end-of-day checks. Written out over precomputed
+    // numbers because it runs millions of times; a test holds it to
+    // earliestLegal on random input.
+    const EF = this.endFlex();
+    const wS = wins.map(w => w ? w.map(x => x[0]) : []);
+    const wE = wins.map(w => w ? w.map((x, k) => x[1] + (k === w.length - 1 ? EF : 0)) : []);
+    const cS = clipped.map(w => w ? w.map(x => x[0]) : []);
+    const cE = clipped.map(w => w ? w.map((x, k) => x[1] + (k === w.length - 1 ? EF : 0)) : []);
+    const nb = breaks.length, bS = breaks.map(b => b.start), bE = breaks.map(b => b.end);
+    const legal = (i, t) => {
+      const d = dur[i], S0 = wS[i], E0 = wE[i], nw = S0.length;
+      let s = t;
+      for(let guard = 0; guard < nb + nw + 2; guard++){
+        let best = -1;
+        for(let k = 0; k < nw; k++){
+          const c = s > S0[k] ? s : S0[k];
+          if(c + d <= E0[k] && (best < 0 || c < best)) best = c;
+        }
+        if(best < 0) return null;
+        s = best;
+        let hit = -1;
+        for(let q = 0; q < nb; q++) if(s < bE[q] && s + d > bS[q]){ hit = q; break; }
+        if(hit < 0){
+          const CS = cS[i], CE = cE[i];
+          let inside = false;
+          for(let k = 0; k < CS.length; k++) if(s >= CS[k] && s + d <= CE[k]){ inside = true; break; }
+          if(!inside || s + d > dayEnd) return null;
+          return s;
+        }
+        s = bE[hit];
+      }
+      return null;
+    };
+    this._solveDayLegal = legal;                     // for the test that checks it
+
+    // Prefix state after each position of the current order, so a move is
+    // re-timed only from the first position it changes — and only until the
+    // day falls back into step with the current one (same stop, same end
+    // time), after which the rest is known to be unchanged.
+    let lambda = 1;
+    const SP = new Int32Array(n), SE = new Float64Array(n), SK = new Float64Array(n),
+          SI = new Float64Array(n), SL = new Float64Array(n);
+    let TK = 0, TI = 0, TL = 0;                    // totals of the current order
+    const st = { prev: -1, end: 0, km: 0, idle: 0, late: 0 };
+    const step = (i) => {
+      let earliest = WS[i], drive = 0;
+      const prev = st.prev, end = st.end;
+      if(prev >= 0){
+        const b = band(end);
+        drive = tMin[b][(prev + 1) * N1 + i + 1];
+        earliest = Math.max(earliest, end + drive + margin);
+        st.km += tKm[b][(prev + 1) * N1 + i + 1];
+      }
+      let s = legal(i, earliest);
+      if(s === null){
+        // Late: pay for it and carry on from the latest legal start.
+        st.late += Math.max(1, earliest - LS[i]);
+        s = Math.min(earliest, LS[i]);
+      }
+      if(prev >= 0) st.idle += Math.max(0, s - end - drive - margin);
+      else st.km += tKm[band(s)][i + 1];             // home -> first, leaving for its start
+      st.prev = i; st.end = s + dur[i];
+    };
+    const load = (p) => {
+      if(p > 0){ st.prev = SP[p - 1]; st.end = SE[p - 1]; st.km = SK[p - 1]; st.idle = SI[p - 1]; st.late = SL[p - 1]; }
+      else { st.prev = -1; st.end = 0; st.km = 0; st.idle = 0; st.late = 0; }
+    };
+    const back = () => st.prev >= 0 ? tKm[band(st.end)][(st.prev + 1) * N1] : 0;
+    const prefix = (ord) => {
+      load(0);
+      for(let k = 0; k < ord.length; k++){
+        step(ord[k]);
+        SP[k] = st.prev; SE[k] = st.end; SK[k] = st.km; SI[k] = st.idle; SL[k] = st.late;
+      }
+      TK = st.km + back(); TI = st.idle; TL = st.late;
+    };
+    const res = { cost: 0, late: 0 };
+    // `buf` holds a trial order equal to the current one before p and from r on.
+    const evalBuf = (buf, m, p, r) => {
+      load(p);
+      for(let k = p; k < m; k++){
+        step(buf[k]);
+        if(k >= r && st.prev === SP[k] && st.end === SE[k]){
+          res.cost = (st.km + TK - SK[k]) + (st.idle + TI - SI[k]) * IDLE;
+          res.late = st.late + TL - SL[k];
+          return res;
+        }
+      }
+      res.cost = st.km + back() + st.idle * IDLE; res.late = st.late;
+      return res;
+    };
+    const evalAll = (ord) => { load(0); for(const i of ord) step(i); return { cost: st.km + back() + st.idle * IDLE, late: st.late }; };
+    const value = (e) => e.cost + lambda * e.late;
+
+    // Local search to a local optimum of cost + lambda * late: relocate a run
+    // of 1-3 stops, swap two, reverse a stretch. An improving move is applied
+    // at once and the scan goes on from there.
+    const buf = new Int32Array(n);
+    let evals = 0;
+    const late = () => (++evals & 1023) === 0 && Date.now() - t0 > budget;
+    const localSearch = (ordIn) => {
+      const ord = Int32Array.from(ordIn), m = ord.length;
+      prefix(ord);
+      let curV = TK + TI * IDLE + lambda * TL;
+      const take = (p, r) => {                       // accept buf as the new order
+        for(let k = p; k < r; k++) ord[k] = buf[k];
+        prefix(ord); curV = TK + TI * IDLE + lambda * TL;
+      };
+      let improved = true, stop = false;
+      while(improved && !stop){
+        improved = false;
+        for(let L = 1; L <= 3 && !stop; L++){
+          for(let i = 0; i + L <= m && !stop; i++){
+            const f = ord[i], g = ord[i + L - 1];
+            for(let j = 0; j <= m - L; j++){
+              if(j === i) continue;
+              // Skip a place where the run is late for certain: after a stop
+              // that cannot finish in time for it, or before one it cannot
+              // reach in time.
+              const before = j < i ? (j > 0 ? ord[j - 1] : -1) : ord[j + L - 1];
+              const after = j < i ? ord[j] : (j + L < m ? ord[j + L] : -1);
+              if(before >= 0 && WS[before] + dur[before] + tLo[(before + 1) * N1 + f + 1] > LS[f]) continue;
+              if(after >= 0 && WS[g] + dur[g] + tLo[(g + 1) * N1 + after + 1] > LS[after]) continue;
+              let p, r;
+              if(j < i){
+                p = j; r = i + L;
+                for(let k = j; k < j + L; k++) buf[k] = ord[i + k - j];
+                for(let k = j + L; k < i + L; k++) buf[k] = ord[k - L];
+              } else {
+                p = i; r = j + L;
+                for(let k = i; k < j; k++) buf[k] = ord[k + L];
+                for(let k = j; k < j + L; k++) buf[k] = ord[i + k - j];
+              }
+              for(let k = r; k < m; k++) buf[k] = ord[k];
+              const e = evalBuf(buf, m, p, r);
+              if(e.cost + lambda * e.late < curV - 1e-9){ take(p, r); improved = true; }
+              if(late()){ stop = true; break; }
+            }
+          }
+        }
+        for(let i = 0; i < m - 1 && !stop; i++){
+          for(let j = i + 1; j < m; j++){
+            for(let k = i; k < m; k++) buf[k] = ord[k];
+            buf[i] = ord[j]; buf[j] = ord[i];
+            let e = evalBuf(buf, m, i, j + 1);
+            if(e.cost + lambda * e.late < curV - 1e-9){ take(i, j + 1); improved = true; continue; }
+            if(j - i >= 2){
+              for(let k = i; k <= j; k++) buf[k] = ord[j - (k - i)];
+              e = evalBuf(buf, m, i, j + 1);
+              if(e.cost + lambda * e.late < curV - 1e-9){ take(i, j + 1); improved = true; }
+            }
+            if(late()){ stop = true; break; }
+          }
+        }
+      }
+      return { ord: Array.from(ord), e: { cost: TK + TI * IDLE, late: TL } };
+    };
+
+    // Starting orders: by closing time, by opening time, as typed.
+    const live = []; for(let i = 0; i < n; i++) if(!never.includes(i)) live.push(i);
+    const starts = [
+      live.slice().sort((a, b) => LS[a] - LS[b] || WS[a] - WS[b]),
+      live.slice().sort((a, b) => WS[a] - WS[b] || LS[a] - LS[b]),
+      live.slice(),
+    ];
+    let cur = null;
+    for(const s of starts){
+      const r = localSearch(s);
+      if(!cur || value(r.e) < value(cur.e)) cur = r;
+    }
+    let out = never.slice();                       // left out, as indices
+    let best = null;                               // best legal: { ord, cost }
+    const better = (ord, e) => e.late === 0 && (!best || ord.length > best.ord.length ||
+      (ord.length === best.ord.length && e.cost < best.cost - 1e-9));
+    const remember = (ord, e) => { if(better(ord, e)) best = { ord: ord.slice(), cost: e.cost }; };
+    remember(cur.ord, cur.e);
+
+    // Put back whoever was left out, wherever it fits legally and costs least.
+    const reinsert = () => {
+      if(!best || out.length === never.length) return false;
+      let gained = false;
+      for(const i of out.slice()){
+        if(never.includes(i)) continue;
+        let pick = null;
+        for(let j = 0; j <= best.ord.length; j++){
+          const trial = best.ord.slice(0, j).concat([i], best.ord.slice(j));
+          const e = evalAll(trial);
+          if(e.late === 0 && (!pick || e.cost < pick.e.cost)) pick = { ord: trial, e };
+        }
+        if(pick){ best = { ord: pick.ord, cost: pick.e.cost }; out = out.filter(x => x !== i); gained = true; }
+      }
+      if(gained) cur = { ord: best.ord.slice(), e: evalAll(best.ord) };
+      return gained;
+    };
+
+    let iter = 0, sinceBest = 0, sinceLegal = 0, lastYield = Date.now(), bestAt = Date.now();
+    const stallLimit = Math.max(40, 3 * n);
+    while(Date.now() - t0 < budget && !this._stopped()){
+      iter++;
+      // shake: move a few stops, or exchange two stretches (double bridge)
+      let ord = cur.ord.slice();
+      const m = ord.length;
+      if(m >= 8 && rnd() < 0.3){
+        const a = 1 + ri(m - 3), b = a + 1 + ri(m - a - 2), c = b + 1 + ri(m - b - 1);
+        ord = ord.slice(0, a).concat(ord.slice(b, c), ord.slice(a, b), ord.slice(c));
+      } else {
+        const k = 2 + ri(Math.max(1, Math.min(6, Math.floor(m / 5))));
+        for(let q = 0; q < k && m > 1; q++){
+          const i = ri(m), x = ord.splice(i, 1)[0]; ord.splice(ri(m), 0, x);
+        }
+      }
+      const r = localSearch(ord);
+      // the price of lateness follows the search: up while it is illegal, down while legal
+      if(r.e.late > 0) lambda = Math.min(1e4, lambda * 1.25); else lambda = Math.max(0.01, lambda * 0.9);
+      const prevBest = best;
+      remember(r.ord, r.e);
+      if(best !== prevBest){ sinceBest = 0; bestAt = Date.now(); } else sinceBest++;
+      // accept if not worse (at today's price), or now and then anyway
+      if(value(r.e) <= value(evalAll(cur.ord)) + 1e-9 || rnd() < 0.05) cur = r;
+      if(best && best.ord.length >= cur.ord.length) sinceLegal = 0; else sinceLegal++;
+
+      // No legal day with everyone after a long try: leave out the one whose
+      // absence costs least, and keep trying to bring it back.
+      if(sinceLegal > Math.max(60, 4 * n) && cur.ord.length > 1){
+        let drop = null;
+        for(let q = 0; q < cur.ord.length; q++){
+          const trial = cur.ord.slice(0, q).concat(cur.ord.slice(q + 1));
+          const e = evalAll(trial), v = e.cost + 1e6 * e.late;
+          if(!drop || v < drop.v) drop = { q, v, trial };
+        }
+        out.push(cur.ord[drop.q]);
+        cur = localSearch(drop.trial); remember(cur.ord, cur.e); sinceLegal = 0;
+      }
+      if(best && best.ord.length === cur.ord.length && out.length > never.length && iter % 20 === 0) reinsert();
+      if(best && out.length === never.length && sinceBest > stallLimit && Date.now() - bestAt > Math.max(300, (bestAt - t0) / 2)) break;
+      if(Date.now() - lastYield > 40){ await new Promise(res => setTimeout(res, 0)); lastYield = Date.now(); }
+    }
+    if(best) reinsert();
+    if(!best) return null;
+
+    // Lay it out with relayoutDay and check it as every other plan is checked.
+    const slots = this.relayoutDay(best.ord.map(i => this._lessonSlot(clients[i], dur[i])), day, clients, cfg);
+    if(!slots) return null;
+    if(this.verifySchedule({ [day]: slots }, clients, cfg).length) return null;
+    const inBest = new Set(best.ord);
+    return { slots, out: clients.filter((_, i) => !inBest.has(i)), iterations: iter, ms: Date.now() - t0 };
   },
 
   // The one-day frame every day computation shares: the jobs as clients and a

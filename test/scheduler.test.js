@@ -4052,7 +4052,18 @@ describe('reordering the stops of a planned day by hand', () => {
     const slots = r.plan.stops.map(x => x.slot);
     const { cfg: dayCfg } = app.Scheduler._dayFrame(r.plan.stops.map(x => x.job), 1, cfg);
     assert.equal(r.plan.km, app.Scheduler.dayKm(slots, 1, dayCfg));
-    assert.notEqual(r.plan.km, plan.km, 'reversing the ends of a line of stops changes the drive');
+    // And a move whose order drives differently must show the difference.
+    // (Which move that is depends on which of the equally short orders the
+    // planner chose, so it is looked for rather than assumed.)
+    let shown = false;
+    for (let from = 0; from < 3 && !shown; from++) for (let to = 0; to < 3 && !shown; to++) {
+      const m = app.Scheduler.reorderDay(plan, cfg, coords, from, to);
+      if (m.ok && m.plan.km !== plan.km) {
+        assert.equal(m.plan.km, app.Scheduler.dayKm(m.plan.stops.map(x => x.slot), 1, dayCfg));
+        shown = true;
+      }
+    }
+    assert.ok(shown, 'some move of a line of three stops must change the drive');
   });
 
   test('no job is lost or duplicated by a move', async () => {
@@ -6314,5 +6325,123 @@ describe('reminders: the phone calendar, and notifications while the app runs', 
     const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
     assert.match(home, /App\.exportCalendar\(\)/);
     assert.match(home, /Notification\.permission === 'default'[\s\S]*App\.enableReminders\(\)/);
+  });
+});
+
+describe('the day solver (solveDay)', () => {
+  // Measured on Dumas et al. (1995): the week machinery, run on one day of
+  // twenty jobs with tight windows, left customers out of days on which all
+  // of them fit, and no extra time changed that. These pin the replacement.
+  const T = require('./tsptw');
+  const fixtures = require('./harness');
+  const MONDAY = '2026-09-28';
+
+  function dumas(name) {
+    const inst = T.parseInstance(name);
+    const { jobs, cfg, coords, date, matrix } = T.toDay(inst, fixtures);
+    const app = loadApp({ seed: 1 });
+    app.Scheduler.IDLE_KM_PER_MIN = 0; app.Scheduler.GAP_PENALTY_PER_MIN = 0;
+    app.setState({ jobs, settings: cfg, coords, students: [], schedule: {},
+      travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
+    return { app, inst, jobs, cfg, coords, date };
+  }
+
+  test('a tight twenty-job day that the old planner cut short is planned whole and legal', async () => {
+    // n20w20.002: the old planner placed 15 of 20.
+    const { app, inst, jobs, cfg, coords, date } = dumas('n20w20.002');
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, date, { dayMs: 1500 });
+    assert.equal(plan.stops.length, 20);
+    assertClean(plan.issues);
+    const v = T.verifyTour(inst, plan.stops.map(s => Number(s.job.id.slice(1))));
+    assert.ok(v.valid, v.errors.join('; '));
+  });
+
+  test('on a day with room to choose it finds the known optimum, not just a legal order', async () => {
+    // n20w100.001: the old planner left one out; with all in it was +30%.
+    const { app, inst, jobs, cfg, coords, date } = dumas('n20w100.001');
+    const plan = await app.Scheduler.planDay(jobs, cfg, coords, date, { dayMs: 1500 });
+    const v = T.verifyTour(inst, plan.stops.map(s => Number(s.job.id.slice(1))));
+    assert.ok(v.valid);
+    assert.ok(v.cost <= T.parseSolution('n20w100.001').cost * 1.01, `cost ${v.cost}`);
+  });
+
+  function small(app, list, extra) {
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '08:00', end: '18:00' } }, ...(extra || {}) });
+    const coords = { home: { lat: 38.240, lon: 21.730 } };
+    list.forEach((j, i) => { coords[j.id] = { lat: 38.240 + (i + 1) / 300, lon: 21.730 + (i % 3) / 400 }; });
+    app.setState({ jobs: list, settings: cfg, coords, students: [], schedule: {},
+      travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    return { cfg, coords };
+  }
+
+  test('a reserved break stays free', async () => {
+    const app = loadApp({ seed: 3 });
+    const list = ['a', 'b', 'c', 'd'].map(id => ({ id, name: id, address: id, durationMin: 90, date: MONDAY }));
+    const { cfg, coords } = small(app, list, { blockedSlots: [{ day: 1, start: '12:00', end: '13:30' }] });
+    const plan = await app.Scheduler.planDay(list, cfg, coords, MONDAY, { dayMs: 500 });
+    const S = app.Scheduler;
+    assert.equal(plan.stops.length, 4);
+    for (const s of plan.stops)
+      assert.ok(S.toMin(s.end) <= 12 * 60 || S.toMin(s.start) >= 13 * 60 + 30, `${s.start}-${s.end} runs into the break`);
+    assertClean(plan.issues);
+  });
+
+  test('when not everyone fits, the one left out is named and the rest is legal', async () => {
+    const app = loadApp({ seed: 3 });
+    const w = { start: '10:00', end: '11:00' };
+    const list = [
+      { id: 'x', name: 'x', address: 'x', durationMin: 60, date: MONDAY, window: w },
+      { id: 'y', name: 'y', address: 'y', durationMin: 60, date: MONDAY, window: w },
+      { id: 'z', name: 'z', address: 'z', durationMin: 30, date: MONDAY },
+    ];
+    const { cfg, coords } = small(app, list);
+    const plan = await app.Scheduler.planDay(list, cfg, coords, MONDAY, { dayMs: 500 });
+    assert.equal(plan.stops.length, 2);
+    assert.equal(plan.unplanned.length, 1);
+    assert.ok(['x', 'y'].includes(plan.unplanned[0].id));
+    assertClean(plan.issues);
+  });
+
+  test('its fast legality check agrees with earliestLegal and relayoutDay\'s checks on random days', async () => {
+    const app = loadApp({ seed: 9 });
+    const S = app.Scheduler;
+    let seed = 7; const r = (k) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % k; };
+    let compared = 0;
+    for (let round = 0; round < 40; round++) {
+      const list = Array.from({ length: 6 }, (_, i) => {
+        const a = 8 * 60 + r(8 * 60), b = a + 30 + r(4 * 60);
+        return { id: 'j' + i, name: 'j' + i, address: 'j' + i, durationMin: 15 + r(90), date: MONDAY,
+          window: r(3) ? { start: S.toTime(a), end: S.toTime(Math.min(b, 18 * 60)) } : undefined };
+      });
+      const blocked = r(2) ? [{ day: 1, start: S.toTime(11 * 60 + r(120)), end: S.toTime(13 * 60 + r(90)) }] : [];
+      const { cfg } = small(app, list, { blockedSlots: blocked, endFlexMin: r(2) ? 0 : 15 });
+      app.setState({ settings: cfg });
+      const { clients, cfg: c2 } = S._dayFrame(list, 1, cfg);
+      await S.solveDay(clients, c2, 1, { budgetMs: 1 });
+      const legal = S._solveDayLegal;
+      const dh = c2.dayHours[1], dayStart = S.toMin(dh.start), dayEnd = S.toMin(dh.end) + S.endFlex();
+      const breaks = S.breaksOn(1, c2);
+      clients.forEach((c, i) => {
+        const dur = c.lessonDuration;
+        const clipped = S.commonWindows([c], 1, c2).map(w => [Math.max(w[0], dayStart), Math.min(w[1], dayEnd)]);
+        const wins = clipped.filter((w, k) => w[1] + S.windowFlex(clipped, k) - w[0] >= dur);
+        if (!wins.length) return;
+        for (let t = dayStart; t <= dayEnd; t += 7) {
+          let want = S.earliestLegal(wins, breaks, Math.max(t, dayStart, wins[0][0]), dur);
+          if (want !== null && (!clipped.some((w, k) => want >= w[0] && want + dur <= w[1] + S.windowFlex(clipped, k)) || want + dur > dayEnd)) want = null;
+          assert.strictEqual(legal(i, Math.max(t, dayStart, wins[0][0])), want, `job ${i} at ${t}`);
+          compared++;
+        }
+      });
+    }
+    assert.ok(compared > 1000, `only ${compared} comparisons`);
+  });
+
+  test('the day is laid out by relayoutDay itself, so its times are the app\'s times', async () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const body = src.slice(src.indexOf('  async solveDay('), src.indexOf('  // The one-day frame every day computation shares'));
+    assert.match(body, /this\.relayoutDay\(best\.ord\.map/);
+    assert.match(body, /this\.verifySchedule\(\{ \[day\]: slots \}/);
+    assert.match(body, /this\.windowFlex\(clipped\[i\], k\)/);
   });
 });
