@@ -19,6 +19,7 @@
  */
 
 import * as Sync from './sync.js';
+import * as Analytics from './analytics.js';
 
 const HERE_HOSTS = {
   geocode:     'https://geocode.search.hereapi.com/v1/geocode',
@@ -222,6 +223,16 @@ async function handle(request, env, ctx) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (url.pathname === '/health') return json({ ok: true }, 200, cors);
 
+  // The owner's numbers, read with curl and a key (no browser, so no Origin).
+  // Without the right key this route does not exist.
+  if (url.pathname === '/a/stats') {
+    const auth = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!env.DB || !env.ANALYTICS_KEY || !Analytics.sameSecret(auth, env.ANALYTICS_KEY))
+      return json({ error: 'not found' }, 404, {});
+    const out = await Analytics.stats(env.DB, Date.now());
+    return json(out.body, out.status, {});
+  }
+
   if (!cors._allowed) {
     return json({ error: 'origin not allowed' }, 403, cors);
   }
@@ -317,6 +328,21 @@ async function handle(request, env, ctx) {
     return json(out.body || { error: out.error }, out.status, cors);
   }
 
+  // ---- Anonymous usage counts (opt-in in the app) -------------------------
+  if (group === 'a') {
+    if (!env.DB) return json({ error: 'not configured' }, 503, cors);
+    if (action === 'ping') {
+      if (request.method !== 'POST') return json({ error: 'POST only' }, 405, cors);
+      const raw = await request.text();
+      if (raw.length > 2048) return json({ error: 'body too large' }, 413, cors);
+      let body;
+      try { body = JSON.parse(raw); } catch { return json({ error: 'body is not JSON' }, 400, cors); }
+      const out = await Analytics.record(env.DB, body, Date.now());
+      return json(out.body || { error: out.error }, out.status, cors);
+    }
+    return json({ error: 'not found' }, 404, cors);
+  }
+
   // ---- OpenStreetMap ------------------------------------------------------
   if (group === 'osm' && OSM_HOSTS[action]) {
     const clean = cleanParams(action, url);
@@ -357,6 +383,8 @@ export default {
     try {
       const res = await Sync.purgeStale(env.DB, Date.now());
       if (res.deleted) console.log(`retention: deleted ${res.deleted} space(s)`);
+      const a = await Analytics.purge(env.DB, Date.now());
+      if (a.deleted) console.log(`retention: deleted ${a.deleted} usage row(s)`);
     } catch (err) {
       console.error('retention run failed', err && err.message);
     }

@@ -6484,3 +6484,40 @@ describe('each day of the week ordered by the day solver (polishDays)', () => {
     assert.ok(body.indexOf('this.refineWeek(') < body.indexOf('this.polishDays('));
   });
 });
+
+describe('anonymous usage counts (opt-in)', () => {
+  function withProxy() {
+    const sent = [];
+    const app = loadApp({ seed: 1, apiBase: 'https://api.example', fetch: async (url, o) => { sent.push({ url, body: JSON.parse(o.body) }); return { ok: true, json: async () => ({}) }; } });
+    return { app, sent };
+  }
+
+  test('nothing is sent before the person says yes', () => {
+    const { app, sent } = withProxy();
+    app.Usage.ping('open');
+    app.Usage.maybeAsk();                       // asked, not answered
+    app.Usage.ping('week', { same: true, km: 10, minutes: 30 });
+    assert.equal(sent.length, 0);
+  });
+
+  test('after a yes: once a day per kind, and only the listed fields', () => {
+    const { app, sent } = withProxy();
+    app.Usage.setConsent(true);
+    app.Usage.ping('open'); app.Usage.ping('open');
+    app.Usage.ping('week', { same: true, km: 12.5, minutes: 40 });
+    assert.equal(sent.length, 2);
+    assert.match(sent[0].url, /\/a\/ping$/);
+    assert.deepStrictEqual(Object.keys(sent[1].body).sort(), ['aid', 'kind', 'km', 'lang', 'min', 'prof', 'ver']);
+    assert.match(sent[1].body.aid, /^[0-9a-f]{32}$/);
+  });
+
+  test('a no takes the id away, and without a proxy nothing exists to send to', () => {
+    const { app, sent } = withProxy();
+    app.Usage.setConsent(true); app.Usage.setConsent(false);
+    app.Usage.ping('open');
+    assert.equal(sent.length, 0);
+    assert.equal(app.Usage._get().aid, undefined);
+    const plain = loadApp({ seed: 1 });
+    assert.equal(plain.Usage.available(), false);
+  });
+});

@@ -217,3 +217,24 @@ page.
 71 tests, no network and no Cloudflare account needed — the Worker is plain ES
 modules with a stubbed `env`. They are all about the two ways this can fail
 badly: leaking the key, and being an open relay.
+
+## Anonymous usage counts (opt-in)
+
+The app asks once, after the first plan, whether it may send anonymous usage
+counts. Only after a yes does it send, at most once a day per kind, a random
+id it made up, what was done (`open`, `week`, `day`), the saving it measured,
+language, profession and version. No names, addresses, coordinates or
+schedules; the Worker drops any other field. Rows older than 400 days are
+deleted by the daily run.
+
+Set it up once:
+
+    npx wrangler d1 execute routepal-sync --remote --file=migrations/0002_analytics.sql
+    npx wrangler secret put ANALYTICS_KEY        # any long random string
+
+Read the numbers (people, active 1/7/30 days, retention D1/D7/D30, mean
+weekly km and minutes saved):
+
+    curl -H "Authorization: Bearer $ANALYTICS_KEY" https://<your-worker>/a/stats
+
+Without `ANALYTICS_KEY` the stats route does not exist.
