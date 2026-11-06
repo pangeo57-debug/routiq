@@ -158,6 +158,14 @@ async function solomonRun(name, maxRoutes, budgets) {
     budgets || { attempts: 2, alns: 20000, lns: 8000 });
 
   const scored = Solomon.scheduleCost(inst, schedule, days);
+  // --dump DIR: keep the routes (stops in visit order, with start times) for
+  // checking against the instance by code that is not the app's.
+  { const di = process.argv.indexOf('--dump');
+    if (di >= 0 && process.argv[di + 1]) {
+      const routes = days.map(d => (schedule[d] || []).slice().sort((a, b) => a.start.localeCompare(b.start))
+        .map(x => ({ node: Number(x.studentId.slice(1)), start: x.start, end: x.end }))).filter(r => r.length);
+      fs.writeFileSync(path.join(process.argv[di + 1], name + '.routes.json'), JSON.stringify(routes, null, 1));
+    } }
   return { name, served: app.Scheduler.countTotal(schedule), total: inst.n - 1,
     ...scored, bestCost: best.cost, bestRoutes: best.routes.length,
     violations: auditSchedule(app.Scheduler, schedule, sts, cfg).length, ms };
