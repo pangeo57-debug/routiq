@@ -5899,38 +5899,39 @@ const Scheduler = {
   // The other inter-day moves shift one lesson (or trade two) at a time; a
   // tail exchange moves a whole afternoon's run at once.
   async twoOptStar(schedule, students, settings, budgetMs = 3000){
-    const byId = Object.fromEntries(students.map(s => [s.id, s]));
     const baseIssues = this.verifySchedule(schedule, students, settings).length;
     const t0 = Date.now(), timeUp = () => Date.now() - t0 > budgetMs || this._stopped();
     const cost = (sl, d) => sl.length ? this.dayCost(sl, d, settings) : 0;
     const once = (sl) => { const seen = new Set(); for(const x of sl) for(const id of this.occupantIds(x)){ if(seen.has(id)) return false; seen.add(id); } return true; };
+    // Each new day in its best order (exact up to EXACT_ORDER_MAX lessons).
+    const lay = (sl, d) => { if(!sl.length) return []; const r = this.bestDayOrder(sl.map(x => ({ ...x })), d, students, settings); return r ? r.laid : null; };
     const days = settings.workDays || [];
+    const cap = (settings.maxPerDay | 0);
     let moves = 0, improved = true, lastYield = t0;
     while(improved && !timeUp()){
       improved = false;
-      outer:
-      for(let a = 0; a < days.length; a++) for(let b = a + 1; b < days.length; b++){
+      for(let a = 0; a < days.length && !timeUp(); a++) for(let b = a + 1; b < days.length && !timeUp(); b++){
         const d1 = days[a], d2 = days[b];
         const A = this._byStart(schedule[d1] || []), B = this._byStart(schedule[d2] || []);
         if(!A.length && !B.length) continue;
         const c0 = cost(A, d1) + cost(B, d2);
+        let best = null;
         for(let i = 0; i <= A.length; i++) for(let j = 0; j <= B.length; j++){
-          if((i === A.length && j === B.length) || (i === 0 && j === 0)) continue;   // nothing or everything moves
+          if((i === A.length && j === B.length) || (i === 0 && j === 0)) continue;   // nothing, or everything, moves
           if(Date.now() - lastYield > 150){ await new Promise(r => setTimeout(r, 0)); lastYield = Date.now(); }
-          if(timeUp()) break outer;
+          if(timeUp()) break;
           const nA = A.slice(0, i).concat(B.slice(j)), nB = B.slice(0, j).concat(A.slice(i));
           if(!once(nA) || !once(nB)) continue;
-          const cap = (settings.maxPerDay | 0);
           if(cap && (nA.length > cap || nB.length > cap)) continue;
-          const lA = nA.length ? this.relayoutDay(nA.map(x => ({ ...x })), d1, students, settings) : [];
-          if(!lA) continue;
-          const lB = nB.length ? this.relayoutDay(nB.map(x => ({ ...x })), d2, students, settings) : [];
-          if(!lB) continue;
-          if(cost(lA, d1) + cost(lB, d2) < c0 - 0.05){
-            const trial = { ...schedule, [d1]: lA, [d2]: lB };
-            if(this.verifySchedule(trial, students, settings).length <= baseIssues){
-              schedule[d1] = lA; schedule[d2] = lB; moves++; improved = true; break outer;
-            }
+          const lA = lay(nA, d1); if(!lA) continue;
+          const lB = lay(nB, d2); if(!lB) continue;
+          const c = cost(lA, d1) + cost(lB, d2);
+          if(c < c0 - 0.05 && (!best || c < best.c)) best = { c, lA, lB };
+        }
+        if(best){
+          const trial = { ...schedule, [d1]: best.lA, [d2]: best.lB };
+          if(this.verifySchedule(trial, students, settings).length <= baseIssues){
+            schedule[d1] = best.lA; schedule[d2] = best.lB; moves++; improved = true;
           }
         }
       }

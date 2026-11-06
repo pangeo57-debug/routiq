@@ -3308,9 +3308,12 @@ describe('a lesson that causes a wait can move to a day it fits without waiting'
     const fs = require('fs');
     const { APP_FILE } = require('./harness');
     const src = fs.readFileSync(APP_FILE, 'utf8');
-    const run = src.slice(src.indexOf('async runAndNotify()'));
-    assert.match(run.slice(0, run.indexOf('\n  },\n')), /Scheduler\.relocateForTime\(/,
-      'runAndNotify must run it');
+    // The pipeline lives in Scheduler.optimizeWeek (run in workers or on the page).
+    const run = src.slice(src.indexOf('async optimizeWeek('));
+    assert.match(run.slice(0, run.indexOf('\n  },\n')), /this\.relocateForTime\(/,
+      'the week pipeline must run it');
+    const app = src.slice(src.indexOf('async runAndNotify()'));
+    assert.match(app.slice(0, app.indexOf('\n  },\n')), /_optimizeParallel\(|Scheduler\.optimizeWeek\(/, 'and the app must run that pipeline');
     const refine = src.slice(src.indexOf('async refineExcept('));
     assert.match(refine.slice(0, refine.indexOf('\n  },\n')), /this\.relocateForTime\(/,
       'and so must the short refinement after a gap is filled by hand');
@@ -5005,10 +5008,12 @@ describe('refineWeek: fit the lessons that are out, then win the kilometres back
 
   test('the app runs refineWeek after relocateForTime and before the final check', () => {
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const week = src.slice(src.indexOf('async optimizeWeek('));
+    const iRel = week.indexOf('this.relocateForTime('), iRef = week.indexOf('this.refineWeek(');
+    assert.ok(iRel > 0 && iRef > iRel, 'order in the pipeline: relocateForTime, then refineWeek');
     const run = src.slice(src.indexOf('async runAndNotify()'));
-    const iRel = run.indexOf('Scheduler.relocateForTime(state.schedule'), iRef = run.indexOf('Scheduler.refineWeek(state.schedule'),
-      iVer = run.indexOf('Scheduler.verifySchedule(state.schedule', iRef);   // the final check (earlier ones guard single passes)
-    assert.ok(iRel > 0 && iRef > iRel && iVer > iRef, 'order: relocateForTime, refineWeek, verifySchedule');
+    const iOpt = run.indexOf('Scheduler.optimizeWeek('), iVer = run.indexOf('Scheduler.verifySchedule(state.schedule', iOpt);
+    assert.ok(iOpt > 0 && iVer > iOpt, 'and the final check after it');
   });
 });
 
@@ -6207,7 +6212,7 @@ describe('✕ stops the calculation at once', () => {
   });
   test('every long loop of the refinement checks the cancel', () => {
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
-    assert.equal((src.match(/timeUp = \(\) => Date\.now\(\) - t0 > budgetMs \|\| this\._stopped\(\)/g) || []).length, 2, 'ejection chains and inter-day moves');
+    assert.ok((src.match(/timeUp = \(\) => Date\.now\(\) - t0 > budgetMs \|\| this\._stopped\(\)/g) || []).length >= 4, 'ejection chains, inter-day moves, block moves, 2-opt*');
     assert.match(src, /while\(Date\.now\(\) - t0 < budgetMs && !this\._stopped\(\)\)/, 'string removals');
     assert.match(src, /round < 40 && Date\.now\(\) - t0 < budgetMs && !this\._stopped\(\)/, 'rebalancing');
   });
@@ -6218,6 +6223,46 @@ describe('✕ stops the calculation at once', () => {
     app.ctx.document.getElementById = (id) => id === 'sched-overlay' ? { style: { set display(v){ if (v === 'block') shown = true; } }, classList: { add(){}, remove(){} } } : null;
     app.ctx.schedProgress(40, 'x', 'y');
     assert.equal(shown, false);
+  });
+});
+
+describe('moves for whole runs and blocks', () => {
+  const cfg = () => settings({ workDays: [1, 2], dayHours: { 1: { start: '15:00', end: '22:00' }, 2: { start: '15:00', end: '22:00' } } });
+  // Two towns: E (east) and W (west), 15 km apart; home in between.
+  const coords = { home: { lat: 38.25, lon: 21.75 }, e1: { lat: 38.25, lon: 21.84 }, e2: { lat: 38.251, lon: 21.841 }, w1: { lat: 38.25, lon: 21.66 }, w2: { lat: 38.251, lon: 21.661 } };
+  test('2-opt*: east-then-west and west-then-east swap tails, one town a day', async () => {
+    const app = loadApp(); const S = app.Scheduler;
+    const sts = ['e1', 'e2', 'w1', 'w2'].map(id => student(id, { days: [1, 2] }));
+    const c = cfg();
+    app.setState({ settings: c, students: sts, coords, schedule: {} });
+    // Monday goes east then west, Tuesday west then east: swapping the tails
+    // gives one day in each town.
+    const sch = { 1: [slot('e1', '15:00', '16:00'), slot('w1', '16:40', '17:40')], 2: [slot('w2', '15:00', '16:00'), slot('e2', '16:40', '17:40')] };
+    const before = S._weekCost(sch, c);
+    const r = await S.twoOptStar(sch, sts, c, 2000);
+    assert.ok(r.moves >= 1);
+    assert.ok(S._weekCost(sch, c) < before * 0.7, `${S._weekCost(sch, c)} vs ${before}`);
+    assert.equal(S.verifySchedule(sch, sts, c).length, 0);
+    // no day crosses town and back: each town's stops are together in the day
+    for (const d of [1, 2]) {
+      const seq = (sch[d] || []).map(x => x.studentId[0]).join('');
+      assert.ok(!/ewe|wew/.test(seq), `day ${d}: ${seq}`);
+    }
+  });
+  test('a merged double, which no other pass moves, goes to the day its neighbours are on', async () => {
+    const app = loadApp(); const S = app.Scheduler;
+    const dbl = student('e1', { days: [1, 2], lessonsPerWeek: 2, forceMerge: true, mergeMode: 'always' });
+    const sts = [dbl, student('e2', { days: [2] }), student('w1', { days: [1] }), student('w2', { days: [1] })];
+    const c = cfg();
+    app.setState({ settings: c, students: sts, coords, schedule: {} });
+    const block = { ...slot('e1', '15:00', '17:00'), merged: true, mergedCount: 2, duration: 120 };
+    const sch = { 1: [block, slot('w1', '17:40', '18:40'), slot('w2', '18:45', '19:45')], 2: [slot('e2', '15:00', '16:00')] };
+    const before = S._weekCost(sch, c);
+    const r = await S.blockMoves(sch, sts, c, 2000);
+    assert.equal(r.relocate + r.swap >= 1, true);
+    assert.ok(sch[2].some(x => x.studentId === 'e1' && x.merged), 'the double moved to Tuesday, with e2');
+    assert.ok(S._weekCost(sch, c) < before);
+    assert.equal(S.verifySchedule(sch, sts, c).length, 0);
   });
 });
 
