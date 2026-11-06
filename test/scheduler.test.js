@@ -4773,7 +4773,8 @@ describe('the map library comes from this site, and the day map zooms to the sto
   });
 
   test('the service worker cache was renewed so old pages do not keep the CDN version', () => {
-    assert.match(fs.readFileSync(path.join(root, 'sw.js'), 'utf8'), /const CACHE = 'routepal-v4'/);
+    const v = fs.readFileSync(path.join(root, 'sw.js'), 'utf8').match(/const CACHE = 'routepal-v(\d+)'/);
+    assert.ok(v && Number(v[1]) >= 4, 'the cache must be v4 (the vendored Leaflet) or later');
   });
 
   test('the map is fitted to the stops even when home is far away', () => {
@@ -6482,6 +6483,14 @@ describe('each day of the week ordered by the day solver (polishDays)', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
     const body = src.slice(src.indexOf('  async optimizeWeek('), src.indexOf('  // Make each flexible student'));
     assert.ok(body.indexOf('this.refineWeek(') < body.indexOf('this.polishDays('));
+  });
+});
+
+describe('the service worker shows "your week is ready"', () => {
+  const sw = require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8');
+  test('a push becomes a notification, and tapping it opens the app', () => {
+    assert.match(sw, /addEventListener\('push'[\s\S]*showNotification/);
+    assert.match(sw, /addEventListener\('notificationclick'[\s\S]*(focus|openWindow)/);
   });
 });
 

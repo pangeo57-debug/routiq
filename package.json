@@ -4,7 +4,7 @@
   "description": "Scheduling and route optimization for mobile professionals",
   "private": true,
   "scripts": {
-    "test": "node --test test/*.test.js worker/test/*.test.js",
+    "test": "node --test test/*.test.js worker/test/*.test.js compute/test/*.test.js",
     "test:scheduler": "node --test test/scheduler.test.js",
     "test:data": "node --test test/data.test.js",
     "test:rendering": "node --test test/rendering.test.js",

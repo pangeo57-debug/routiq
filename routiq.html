@@ -2664,7 +2664,8 @@ const Scheduler = {
     // lesson. Up to 40 lessons nothing changes; beyond, up to 2.4 times.
     const lessons = students.reduce((a, s) => a + (Number(s.lessonsPerWeek) || 0), 0);
     const scale = Math.min(2.4, Math.max(1, lessons / 40));
-    const B = (ms) => Math.round(ms * scale);
+    // input.timeScale shortens every budget (the compute server's tests use it).
+    const B = (ms) => Math.round(ms * scale * (input.timeScale > 0 && input.timeScale < 1 ? input.timeScale : 1));
     let result, sch;
     if(input.skipPhase1 && input.warm){
       // A second round: search again from the best week found so far.
@@ -6870,6 +6871,197 @@ function apiUrl(path, params){
 // identifying is ever passed to it. Do not extend this to send custom data.
 const ANALYTICS_TOKEN = '';
 
+// ── Computing the week off the phone ────────────────────────────────────
+// A phone freezes the page as soon as the person leaves it, and a week takes
+// minutes. With a compute server (compute/ in the repository) the week is
+// computed there and a notification says when it is ready; coming back to the
+// app picks the result up, even after the page was closed.
+//
+// What leaves the phone is anonymous by construction: every client becomes a
+// code (§s1, §s2…), group names and subjects become codes too, and the only
+// geography is a travel matrix between codes plus positions made up from that
+// matrix. No name, address, phone number, note or coordinate. The codes are
+// turned back into people here, on the phone, and nowhere else.
+//
+// Empty = off: the week is computed on the phone, as before.
+const COMPUTE_BASE = '';
+const VAPID_PUBLIC = '';   // the compute server's VAPID public key, for "ready" notifications
+
+const Remote = {
+  KEY: 'rp_remote_job',
+  available(){ return !!COMPUTE_BASE; },
+  _url(p){ return COMPUTE_BASE.replace(/\/$/, '') + p; },
+  STUDENT_FIELDS: ['lessonsPerWeek','lessonDuration','durations','hoursPerWeek','flexMinutes','minBlock','maxBlock',
+    'availability','availabilityExceptions','availabilityMode','type','mergeMode','forceMerge','maxMergeSessions'],
+  SETTING_FIELDS: ['workDays','dayHours','dateHours','blockedSlots','lunchBreak','maxPerDay','travelMargin','travelBuffer',
+    'travelMode','endFlexMin','avgCitySpeedKmh','osrmTimeFactor','scheduleQuality','profession','language','fuelConsumption'],
+
+  /** The anonymous job, and what is needed to turn its answer back into people. */
+  build(input){
+    const students = input.students, settings = input.settings;
+    const ids = new Map(), groups = new Map(), subjects = new Map();
+    students.forEach((st, i) => ids.set(st.id, '§s' + (i + 1)));
+    const code = (m, prefix, v) => { if(!v) return v; if(!m.has(v)) m.set(v, prefix + (m.size + 1)); return m.get(v); };
+    const anonStudents = students.map(st => {
+      const a = { id: ids.get(st.id), name: '', address: '', color: 0,
+        group: code(groups, '§g', st.group) || '', subject: code(subjects, '§x', st.subject) || '',
+        pairedWith: st.pairedWith && ids.has(st.pairedWith) ? ids.get(st.pairedWith) : null };
+      for(const f of this.STUDENT_FIELDS) if(st[f] !== undefined) a[f] = JSON.parse(JSON.stringify(st[f]));
+      return a;
+    });
+    const anonSettings = { homeAddress: '' };
+    for(const f of this.SETTING_FIELDS) if(settings[f] !== undefined) anonSettings[f] = JSON.parse(JSON.stringify(settings[f]));
+    // The travel matrix, asked of the same estimator every plan uses (HERE,
+    // OSRM or the straight line), in both traffic bands.
+    const realIds = ['home', ...students.map(st => st.id)];
+    const addrOf = (id) => id === 'home' ? (settings.homeAddress || '') : (students.find(x => x.id === id) || {}).address || '';
+    const band = (at) => {
+      const durations = [], distances = [];
+      for(const a of realIds){
+        const dr = [], kr = [];
+        for(const b of realIds){
+          if(a === b){ dr.push(0); kr.push(0); continue; }
+          dr.push(Scheduler.travelEstMin(a, addrOf(a), b, addrOf(b), 1, at) * 60);
+          kr.push(Math.round(Scheduler.travelEstKm(a, addrOf(a), b, addrOf(b), 1, at) * 1000));
+        }
+        durations.push(dr); distances.push(kr);
+      }
+      return { coordIds: ['home', ...anonStudents.map(x => x.id)], durations, distances };
+    };
+    const peak = band(Scheduler.PEAK_FROM);
+    const off = state.travelMatrixOffPeak ? band(Scheduler.PEAK_TO) : null;
+    const coords = this._embed(peak);
+    const warm = input.warm ? this._rename(input.warm, ids) : null;
+    const job = { v: 1, input: { students: anonStudents, settings: anonSettings, coords, attempts: input.attempts, warm },
+      matrix: { peak, off } };
+    const back = { ids: [...ids].map(([r, a]) => [a, r]), groups: [...groups].map(([r, a]) => [a, r]),
+      subjects: [...subjects].map(([r, a]) => [a, r]) };
+    return { job, back };
+  },
+
+  // Positions for the codes, made up from the matrix alone (classical
+  // multidimensional scaling): the optimiser uses positions only to decide
+  // which clients are neighbours, and real ones would say where people live.
+  _embed(m){
+    const n = m.coordIds.length, D = m.distances;
+    const D2 = []; for(let i = 0; i < n; i++){ D2.push([]); for(let j = 0; j < n; j++) D2[i].push(((D[i][j] + D[j][i]) / 2000) ** 2); }
+    const rm = D2.map(r => r.reduce((a, b) => a + b, 0) / n), all = rm.reduce((a, b) => a + b, 0) / n;
+    const B = D2.map((r, i) => r.map((v, j) => -0.5 * (v - rm[i] - rm[j] + all)));
+    const vecs = [];
+    for(let e = 0; e < 2; e++){
+      let v = Array.from({ length: n }, (_, i) => Math.sin(i + 1 + e)), lam = 0;
+      for(let it = 0; it < 200; it++){
+        let w = B.map(r => r.reduce((a, b, j) => a + b * v[j], 0));
+        for(const [u] of vecs){ const p = w.reduce((a, b, j) => a + b * u[j], 0); w = w.map((x, j) => x - p * u[j]); }
+        const norm = Math.hypot(...w) || 1; lam = norm; v = w.map(x => x / norm);
+      }
+      vecs.push([v, lam]);
+    }
+    const KM = 111.32, LON = KM * Math.cos(38 * Math.PI / 180), out = {};
+    m.coordIds.forEach((id, i) => { out[id] = { lat: 38 + vecs[0][0][i] * Math.sqrt(vecs[0][1]) / KM, lon: 21 + vecs[1][0][i] * Math.sqrt(vecs[1][1]) / LON }; });
+    return out;
+  },
+
+  // Replace every id string by its counterpart: the schedule and the result
+  // carry ids in studentId, pairedStudentId and groupMemberIds.
+  _rename(x, map){
+    const get = (v) => (map instanceof Map ? map.get(v) : map[v]);
+    const walk = (v) => {
+      if(typeof v === 'string'){ const r = get(v); return r === undefined ? v : r; }
+      if(Array.isArray(v)) return v.map(walk);
+      if(v && typeof v === 'object'){ const o = {}; for(const k of Object.keys(v)) o[k] = walk(v[k]); return o; }
+      return v;
+    };
+    return walk(x);
+  },
+
+  /** The answer, back into people: ids, names, addresses, subjects, groups. */
+  restore(out, back, students){
+    const m = new Map([...back.ids, ...back.groups, ...back.subjects]);
+    const r = this._rename({ schedule: out.schedule, result: out.result, students: out.students }, m);
+    const byId = Object.fromEntries(students.map(st => [st.id, st]));
+    for(const d of Object.keys(r.schedule || {})){
+      r.schedule[d] = (r.schedule[d] || []).map(sl => {
+        const st = byId[sl.studentId];
+        if(!st) return sl;
+        const members = (sl.groupMemberIds || []).map(id => byId[id]).filter(Boolean);
+        return { ...sl, studentName: members.length > 1 ? members.map(x => x.name).join(' & ') : st.name,
+          address: st.address, subject: sl.isGroup ? (st.subject || '—') : (st.subject || sl.subject), color: st.color || 0 };
+      });
+    }
+    // Clients in the result are the real ones, not their anonymous copies.
+    const real = (v) => (v && typeof v === 'object' && v.id && byId[v.id]) ? byId[v.id] : v;
+    if(r.result && Array.isArray(r.result.unplaced)) r.result.unplaced = r.result.unplaced.map(real);
+    r.students = (r.students || []).map(a => byId[a.id] ? { ...byId[a.id], durations: a.durations, lessonsPerWeek: a.lessonsPerWeek,
+      hoursPerWeek: a.hoursPerWeek, lessonDuration: a.lessonDuration } : a);
+    return r;
+  },
+
+  _fingerprint(job){
+    const s = JSON.stringify([job.input.students, job.input.settings, job.matrix.peak.durations]);
+    let h = 2166136261; for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(16);
+  },
+  _pending(){ try{ return JSON.parse(localStorage.getItem(this.KEY)); }catch(e){ return null; } },
+  _setPending(v){ try{ v ? localStorage.setItem(this.KEY, JSON.stringify(v)) : localStorage.removeItem(this.KEY); }catch(e){} },
+  hasPending(){ const p = this._pending(); return !!(p && p.id && Date.now() - (p.at || 0) < 20 * 3600 * 1000); },
+
+  async _push(){
+    try{
+      if(!VAPID_PUBLIC || typeof navigator === 'undefined' || !navigator.serviceWorker || typeof Notification === 'undefined') return null;
+      if(Notification.permission === 'default') await Notification.requestPermission();
+      if(Notification.permission !== 'granted') return null;
+      const reg = await navigator.serviceWorker.ready;
+      const raw = atob(VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - VAPID_PUBLIC.length % 4) % 4));
+      const key = Uint8Array.from(raw, c => c.charCodeAt(0));
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      return sub.toJSON();
+    }catch(e){ return null; }
+  },
+
+  /**
+   * The week, computed on the server. Same answer shape as _optimizeParallel.
+   * A job already running for the same input is picked up, not started again.
+   */
+  async optimize(input, onProgress, stopped){
+    const { job, back } = this.build(input);
+    const fp = this._fingerprint(job);
+    let p = this._pending();
+    let id = p && p.fp === fp && this.hasPending() ? p.id : null;
+    if(!id){
+      const push = await this._push();
+      const res = await fetch(this._url('/jobs'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...job, push, notify: { title: t('notif_schedule_ready_title'), body: t('notif_schedule_ready_body') } }) });
+      if(!res.ok) throw new Error('remote-' + res.status);
+      id = (await res.json()).id;
+      this._setPending({ id, fp, back, at: Date.now() });
+    }
+    const saved = this._pending();
+    for(let failures = 0;;){
+      if(stopped && stopped()){
+        try{ fetch(this._url('/jobs/' + id), { method: 'DELETE' }).catch(() => {}); }catch(e){}
+        this._setPending(null);
+        throw new Error('cancelled');
+      }
+      let st = null;
+      try{
+        const r = await fetch(this._url('/jobs/' + id));
+        if(r.status === 404){ this._setPending(null); throw new Error('remote-lost'); }
+        st = await r.json(); failures = 0;
+      }catch(e){
+        if(e && e.message === 'remote-lost') throw e;
+        if(++failures > 30) throw new Error('remote-unreachable');      // about a minute without the server
+      }
+      if(st){
+        if(st.progress && onProgress) onProgress(...st.progress);
+        if(st.status === 'done'){ this._setPending(null); return this.restore(st.result, (saved || {}).back || back, input.students); }
+        if(st.status === 'failed' || st.status === 'cancelled'){ this._setPending(null); throw new Error('remote-' + st.status); }
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  },
+};
+
 // Anonymous usage counts, opt-in. Asked once, after the first plan; nothing
 // is sent before a yes, and nothing at all without a proxy (API_BASE). A ping
 // carries a random id made up here, what was done, and the saving the app
@@ -7547,6 +7739,10 @@ const App = {
     state.jobs = Storage.loadJobs();
     state.savings = Storage.loadSavings();
     try{ Usage.ping('open'); }catch(e){}
+    // A week that was being computed on the server when the app was left:
+    // pick it up. runAndNotify finds the job by its input and does not start
+    // a new one.
+    try{ if(Remote.available() && Remote.hasPending()) setTimeout(() => { if(!state._schedulingInProgress) App.runAndNotify(); }, 800); }catch(e){}
     } catch(e) {
       localStorage.clear();
       state.settings = defaultSettings();
@@ -8503,7 +8699,17 @@ const App = {
       const input = { students: state.students, settings: state.settings, coords: state.coords, attempts: attemptCount, warm };
       const P = (p, a, b, c) => schedProgress(p, t(a), c ? tf(b, c) : t(b));
       let out;
-      try{ out = await this._optimizeParallel(input, P); }
+      try{
+        if(Remote.available()){
+          try{ out = await Remote.optimize(input, P, () => state._schedulingCancelled || isStale()); }
+          catch(e){
+            if(e && e.message === 'cancelled') throw e;
+            // No server (offline, busy, gone): the phone computes it, as before.
+            console.warn('compute server unavailable; computing here', e && e.message);
+            out = await this._optimizeParallel(input, P);
+          }
+        } else out = await this._optimizeParallel(input, P);
+      }
       catch(e){
         if(state._schedulingCancelled || isStale()) return cancelledCleanup();
         if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler workers failed; running on the page', e);

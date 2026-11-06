@@ -21,7 +21,7 @@
 
 // Bump on deploy to retire old caches. Any change to this file also causes the
 // browser to treat the worker as updated.
-const CACHE = 'routepal-v4';   // bumped: Leaflet is now served from this site
+const CACHE = 'routepal-v5';   // bumped: Leaflet is now served from this site
 
 self.addEventListener('install', (event) => {
   // Take over as soon as possible rather than waiting for every existing tab
@@ -63,4 +63,20 @@ self.addEventListener('fetch', (event) => {
         )
       )
   );
+});
+
+// "Your week is ready", sent by the compute server when a week computed off
+// the phone is done. Tapping it opens the app, which picks the result up.
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) {}
+  event.waitUntil(self.registration.showNotification(d.title || 'RoutePal', {
+    body: d.body || '', tag: d.tag || 'plan', icon: 'icon-192.png', badge: 'icon-192.png', data: { job: d.job || null } }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) if ('focus' in c) return c.focus();
+    return self.clients.openWindow('routiq.html');
+  }));
 });
