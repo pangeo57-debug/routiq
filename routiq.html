@@ -5923,12 +5923,17 @@ const Scheduler = {
           const nA = A.slice(0, i).concat(B.slice(j)), nB = B.slice(0, j).concat(A.slice(i));
           if(!once(nA) || !once(nB)) continue;
           if(cap && (nA.length > cap || nB.length > cap)) continue;
-          const lA = lay(nA, d1); if(!lA) continue;
-          const lB = lay(nB, d2); if(!lB) continue;
+          // fast: keep the order and only re-time; the winner is re-ordered below
+          const lA = nA.length ? this.relayoutDay(nA.map(x => ({ ...x })), d1, students, settings) : [];
+          if(!lA) continue;
+          const lB = nB.length ? this.relayoutDay(nB.map(x => ({ ...x })), d2, students, settings) : [];
+          if(!lB) continue;
           const c = cost(lA, d1) + cost(lB, d2);
           if(c < c0 - 0.05 && (!best || c < best.c)) best = { c, lA, lB };
         }
         if(best){
+          const oA = lay(best.lA, d1), oB = lay(best.lB, d2);
+          if(oA && oB && cost(oA, d1) + cost(oB, d2) < best.c){ best.lA = oA; best.lB = oB; }
           const trial = { ...schedule, [d1]: best.lA, [d2]: best.lB };
           if(this.verifySchedule(trial, students, settings).length <= baseIssues){
             schedule[d1] = best.lA; schedule[d2] = best.lB; moves++; improved = true;
