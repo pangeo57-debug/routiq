@@ -53,6 +53,8 @@ const ALL = [
 const classOf = (name) => name.replace(/[0-9]+$/, '') + (Number(name.match(/[0-9]+$/)[0]) >= 200 ? '' : '');
 function chosenInstances(argv) {
   if (argv.includes('--all')) return ALL;
+  const oi = argv.indexOf('--only');
+  if (oi >= 0 && argv[oi + 1]) return argv[oi + 1].toUpperCase().split(',');
   const ci = argv.indexOf('--class');
   if (ci >= 0 && argv[ci + 1]) {
     const want = argv[ci + 1].toUpperCase();
@@ -68,6 +70,17 @@ function chosenInstances(argv) {
 async function runPipeline(app, sts, cfg, coords, budgets) {
   const S = app.Scheduler;
   const t0 = Date.now();
+  // --app: the app's own pipeline (Scheduler.optimizeWeek, full budgets),
+  // and with --rounds 2 a second round from the best, as the app does.
+  if (process.argv.includes('--app') && S.optimizeWeek) {
+    const input = { students: sts, settings: cfg, coords, attempts: budgets.attempts, warm: null };
+    let out = await S.optimizeWeek(input);
+    if (process.argv.includes('--rounds') && Number(process.argv[process.argv.indexOf('--rounds') + 1]) >= 2) {
+      const again = await S.optimizeWeek({ ...input, warm: out.schedule, skipPhase1: true });
+      if (S.isBetterStart(again.schedule, out.schedule, cfg)) out = again;
+    }
+    return { schedule: out.schedule, ms: Date.now() - t0 };
+  }
   const r = await S.runMultiAttempt(sts, cfg, coords, budgets.attempts, false);
   await S.alnsOptimize(r.schedule, sts, cfg, coords, budgets.alns);
   S.saRepair(r.schedule, sts, cfg, r);
