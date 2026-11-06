@@ -6445,3 +6445,42 @@ describe('the day solver (solveDay)', () => {
     assert.match(body, /this\.windowFlex\(clipped\[i\], k\)/);
   });
 });
+
+describe('each day of the week ordered by the day solver (polishDays)', () => {
+  function zigzag() {
+    const app = loadApp({ seed: 4 });
+    const S = app.Scheduler;
+    const sts = ['p', 'q', 'r', 's', 't'].map(id => student(id, { days: [1], window: { start: '09:00', end: '20:00' } }));
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '09:00', end: '20:00' } } });
+    const coords = { home: { lat: 38.24, lon: 21.73 } };
+    sts.forEach((s, i) => { coords[s.id] = { lat: 38.24 + (i + 1) / 100, lon: 21.73 }; });
+    app.setState({ students: sts, settings: cfg, coords, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    // far, near, far, near…: a line driven back and forth
+    const order = ['t', 'p', 's', 'q', 'r'];
+    const laid = S.relayoutDay(order.map(id => S._lessonSlot(sts.find(x => x.id === id), 60)), 1, sts, cfg);
+    return { app, S, sts, cfg, schedule: { 1: laid } };
+  }
+
+  test('a day driven back and forth comes back in order, every lesson kept, nothing broken', async () => {
+    const { S, sts, cfg, schedule } = zigzag();
+    const before = S.dayCost(schedule[1], 1, cfg);
+    await S.polishDays(schedule, sts, cfg, 300);
+    assert.equal(schedule[1].length, 5);
+    assert.ok(S.dayCost(schedule[1], 1, cfg) < before - 1, 'the day must get cheaper');
+    assertClean(S.verifySchedule(schedule, sts, cfg));
+  });
+
+  test('a day with a double lesson is left alone', async () => {
+    const { S, sts, cfg, schedule } = zigzag();
+    schedule[1][2] = { ...schedule[1][2], merged: true, mergedCount: 2 };
+    const was = JSON.stringify(schedule[1]);
+    await S.polishDays(schedule, sts, cfg, 300);
+    assert.equal(JSON.stringify(schedule[1]), was);
+  });
+
+  test('the week pipeline runs it after refineWeek', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const body = src.slice(src.indexOf('  async optimizeWeek('), src.indexOf('  // Make each flexible student'));
+    assert.ok(body.indexOf('this.refineWeek(') < body.indexOf('this.polishDays('));
+  });
+});

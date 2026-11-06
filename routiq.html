@@ -2731,9 +2731,40 @@ const Scheduler = {
       P(94, 'phase_refine_title', 'phase_refine_sub');
       await guard((x) => this.refineWeek(x, students, settings, B(20000), (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
     }catch(e){}
+    if(!stop()) await guard((x) => this.polishDays(x, students, settings, 700));
     try{ await this.flexFit(sch, students, settings, 6000, stop); }catch(e){}
     try{ this.rebalanceDays(sch, students, settings); }catch(e){}
     return done(stop());
+  },
+
+  // Each day's order, solved by the day solver. The week's passes decide who
+  // goes on which day; within a day the visit order is a TSPTW, and solveDay
+  // solves those to the optimum on the literature's instances. Days holding a
+  // pair, a group or a double lesson are left as they are — solveDay sees one
+  // client per stop. A day changes only if it keeps every lesson, the week
+  // gains no rule broken, and the day costs less.
+  async polishDays(schedule, students, settings, msPerDay = 700){
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const base = this.verifySchedule(schedule, students, settings).length;
+    for(const d of (settings.workDays || [])){
+      if(this._stopped()) return;
+      const slots = (schedule[d] || []).slice().sort((a, b) => this.toMin(a.start) - this.toMin(b.start));
+      if(slots.length < 3) continue;
+      if(slots.some(sl => sl.isGroup || sl.merged || (sl.mergedCount || 1) > 1 || sl.groupCode)) continue;
+      const ids = slots.map(sl => sl.studentId);
+      if(new Set(ids).size !== ids.length || ids.some(id => !byId[id])) continue;
+      if(ids.some(id => byId[id].pairedWith || byId[id].type === 'group' || byId[id].type === 'pair')) continue;
+      const clients = ids.map(id => byId[id]);
+      let sol = null;
+      try{ sol = await this.solveDay(clients, settings, Number(d), { budgetMs: msPerDay, durations: slots.map(sl => this._len(sl)), noVerify: true }); }catch(e){ sol = null; }
+      if(!sol || sol.out.length || sol.slots.length !== slots.length) continue;
+      const orig = Object.fromEntries(slots.map(sl => [sl.studentId, sl]));
+      const next = sol.slots.map(x => ({ ...orig[x.studentId], start: x.start, end: x.end }));
+      if(!(this.dayCost(next, Number(d), settings) < this.dayCost(slots, Number(d), settings) - 1e-6)) continue;
+      const trial = { ...schedule, [d]: next };
+      if(this.verifySchedule(trial, students, settings).length > base) continue;
+      schedule[d] = next;
+    }
   },
 
   // Make each flexible student's pieces describe the schedule actually kept:
@@ -4060,7 +4091,7 @@ const Scheduler = {
     const never = [];
     for(let i = 0; i < n; i++){
       const c = clients[i];
-      dur[i] = Number(c.lessonDuration) || 60;
+      dur[i] = (o.durations && Number(o.durations[i])) || Number(c.lessonDuration) || 60;
       clipped[i] = this.commonWindows([c], day, cfg).map(w => [Math.max(w[0], dayStart), Math.min(w[1], dayEnd)]);
       wins[i] = clipped[i].filter((w, k) => w[1] + this.windowFlex(clipped[i], k) - w[0] >= dur[i]);
       if(!wins[i].length){ never.push(i); continue; }
@@ -4334,7 +4365,7 @@ const Scheduler = {
     // Lay it out with relayoutDay and check it as every other plan is checked.
     const slots = this.relayoutDay(best.ord.map(i => this._lessonSlot(clients[i], dur[i])), day, clients, cfg);
     if(!slots) return null;
-    if(this.verifySchedule({ [day]: slots }, clients, cfg).length) return null;
+    if(!o.noVerify && this.verifySchedule({ [day]: slots }, clients, cfg).length) return null;
     const inBest = new Set(best.ord);
     return { slots, out: clients.filter((_, i) => !inBest.has(i)), iterations: iter, ms: Date.now() - t0 };
   },
