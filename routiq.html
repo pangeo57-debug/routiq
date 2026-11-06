@@ -4632,6 +4632,9 @@ const Scheduler = {
   //
   // A quarter less waiting for 1% more driving; no week worse; 45 adds nothing.
   IDLE_KM_PER_MIN: 0.5,
+  // km per minute between the start of the working day and its first stop,
+  // in the ALNS objective only. See alnsOptimize.
+  GAP_PENALTY_PER_MIN: 0.05,
 
   // ── Before / after ──────────────────────────────────────────────────────
   // The two sides are always measured by the same functions, on the same
@@ -6162,7 +6165,9 @@ const Scheduler = {
     // the same people removes them, so no objective can either. Only the gap
     // before a day's first lesson is worth penalising here, because that one
     // the optimizer really can close.
-    const GAP_PENALTY_PER_MIN=0.05;
+    // A property, not a literal, so the Solomon benchmark can price waiting
+    // at zero the way the literature does (test/benchmark.js --literature).
+    const GAP_PENALTY_PER_MIN=this.GAP_PENALTY_PER_MIN;
     const calcKm=(schObj)=>{
       let km=0;
       for(const d of wdays){

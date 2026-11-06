@@ -67,14 +67,34 @@ function chosenInstances(argv) {
 
 // ---------------------------------------------------------------------------
 
+// --literature: the Solomon problem as the literature states it, so the
+// distances can be set beside published ones.
+//   - edges truncated to one decimal, for distance AND time: the convention
+//     of the exact methods (Kohl et al. 1999 and after) and of the best-known
+//     costs in test/data/*.sol;
+//   - every time x10, so each one is a whole number of the app's minutes and
+//     nothing is rounded;
+//   - the vehicle leaves the depot at 0 and is back by the depot's due time;
+//   - waiting is free: the app's prices for idle time and for a late first
+//     stop are set to zero;
+//   - every route is re-checked against the raw instance by code that is not
+//     the app's, and a result is reported VALID only if that check passes.
+//     Capacity is not modelled by the app; a route over it makes the result
+//     invalid, it is not quietly ignored.
+// Objective: total distance, number of vehicles free — the objective of the
+// best-known costs we compare to. Routes are shown for information.
+const LITERATURE = process.argv.includes('--literature');
+
 // --timescale K: app minutes per instance time unit (10 = no rounding at all).
 function timeScale() {
   const i = process.argv.indexOf('--timescale');
-  return i >= 0 ? Number(process.argv[i + 1]) || 1 : 1;
+  if (i >= 0) return Number(process.argv[i + 1]) || 1;
+  return LITERATURE ? 10 : 1;
 }
 
 // --idle N: price waiting at N km per minute (the app's is 0.5; Solomon's is 0).
 function idleOverride(app) {
+  if (LITERATURE) { app.Scheduler.IDLE_KM_PER_MIN = 0; app.Scheduler.GAP_PENALTY_PER_MIN = 0; }
   const i = process.argv.indexOf('--idle');
   if (i >= 0 && process.argv[i + 1] != null) app.Scheduler.IDLE_KM_PER_MIN = Number(process.argv[i + 1]);
 }
@@ -154,7 +174,15 @@ async function solomonRun(name, maxRoutes, budgets) {
       `file says ${best.cost} — the distance convention is wrong, every number below would be meaningless`);
   }
 
-  const { sts, cfg, coords, days, matrix } = Solomon.toRoutePal(inst, fixtures, maxRoutes, timeScale());
+  // The independent checker must accept the published solution, or it is
+  // checking the wrong rules.
+  if (LITERATURE) {
+    const v = Solomon.verifyRoutes(inst, best.routes.map(r => r.map(c => c + 1)), 'trunc1');
+    if (!v.valid) throw new Error(`${name}: the checker rejects the published solution: ${v.errors[0]}`);
+  }
+
+  const { sts, cfg, coords, days, matrix } = Solomon.toRoutePal(inst, fixtures, maxRoutes, timeScale(),
+    { depot: LITERATURE });
   const app = loadApp({ seed: SEED });
   idleOverride(app);
   app.setState({ students: sts, settings: cfg, coords,
@@ -164,16 +192,19 @@ async function solomonRun(name, maxRoutes, budgets) {
     budgets || { attempts: 2, alns: 20000, lns: 8000 });
 
   const scored = Solomon.scheduleCost(inst, schedule, days);
+  const toMin = (x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; };
+  const routes = days.map(d => (schedule[d] || []).slice().sort((a, b) => toMin(a.start) - toMin(b.start))
+    .map(x => ({ node: Number(x.studentId.slice(1)), start: x.start, end: x.end }))).filter(r => r.length);
   // --dump DIR: keep the routes (stops in visit order, with start times) for
   // checking against the instance by code that is not the app's.
   { const di = process.argv.indexOf('--dump');
-    if (di >= 0 && process.argv[di + 1]) {
-      const routes = days.map(d => (schedule[d] || []).slice().sort((a, b) => ((x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; })(a.start) - ((x) => { const [h, m] = x.split(':').map(Number); return h * 60 + m; })(b.start))
-        .map(x => ({ node: Number(x.studentId.slice(1)), start: x.start, end: x.end }))).filter(r => r.length);
-      fs.writeFileSync(path.join(process.argv[di + 1], name + '.routes.json'), JSON.stringify(routes, null, 1));
-    } }
+    if (di >= 0 && process.argv[di + 1])
+      fs.writeFileSync(path.join(process.argv[di + 1], name + '.routes.json'), JSON.stringify(routes, null, 1)); }
+  const visits = routes.map(r => r.map(x => x.node));
   return { name, served: app.Scheduler.countTotal(schedule), total: inst.n - 1,
     ...scored, bestCost: best.cost, bestRoutes: best.routes.length,
+    check: Solomon.verifyRoutes(inst, visits, 'trunc1'),
+    exact: Solomon.verifyRoutes(inst, visits, 'exact'),
     violations: auditSchedule(app.Scheduler, schedule, sts, cfg).length, ms };
 }
 
@@ -218,12 +249,53 @@ async function collect(names, budgets) {
     solomon.push(await solomonRun(name, 25, budgets));
   }
   process.stderr.write('           \r');
-  return { solomon, own: await ownRun() };
+  // Our own scenario is not a Solomon problem; it has no place in a
+  // literature run, and with waiting free it would not be the app's anyway.
+  return { solomon, own: LITERATURE ? null : await ownRun() };
 }
 
 // ---------------------------------------------------------------------------
 
+function reportLiterature(res) {
+  console.log('\nSolomon VRPTW, literature convention (--literature)\n');
+  console.log('  edges truncated to 0.1 for distance and time, times x10 (no rounding),');
+  console.log('  depot departure at 0 and return by its due time, waiting free,');
+  console.log('  objective = total distance, vehicles free. Checked against the raw');
+  console.log('  instance by code that is not the app\'s.\n');
+  console.log('  instance  served    check    routes    distance           gap     exact dist');
+  console.log('  ' + '-'.repeat(78));
+  let invalid = 0;
+  for (const r of res.solomon) {
+    const c = r.check;
+    if (!c.valid) invalid++;
+    const why = c.valid ? 'VALID' : `INVALID`;
+    console.log('  ' + r.name.padEnd(10) + `${r.served}/${r.total}`.padEnd(10) + why.padEnd(9) +
+      `${c.routes} (${r.bestRoutes})`.padEnd(10) +
+      `${c.distance.toFixed(1)} vs ${r.bestCost}`.padEnd(19) +
+      `${c.distance >= r.bestCost ? '+' : ''}${(((c.distance / r.bestCost) - 1) * 100).toFixed(2)}%`.padStart(7) +
+      `${r.exact.distance.toFixed(2)}`.padStart(14));
+    if (!c.valid) {
+      console.log(`            late ${c.late}, over capacity ${c.overCapacity}, missing ${c.missing}`);
+      c.errors.slice(0, 5).forEach(e => console.log('              ' + e));
+    }
+  }
+  console.log('  ' + '-'.repeat(78));
+  console.log('  routes: ours (best-known solution\'s). "exact dist" = the same routes');
+  console.log('  measured with full-precision distances, for comparison with heuristic');
+  console.log('  papers; those papers minimise vehicles first, so compare it only at');
+  console.log('  the same number of routes.');
+  const valid = res.solomon.filter(r => r.check.valid);
+  if (valid.length) {
+    const gaps = valid.map(r => (r.check.distance / r.bestCost - 1) * 100);
+    console.log(`\n  valid ${valid.length}/${res.solomon.length}, mean gap over the valid ones ` +
+      `+${(gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(2)}%`);
+  }
+  if (invalid) console.log(`\n  INVALID RESULTS: ${invalid} — their distances are not comparable\n`);
+  return invalid;
+}
+
 function report(res) {
+  if (LITERATURE) return reportLiterature(res);
   console.log('\nAgainst published best-known solutions (Solomon 1987)\n');
   console.log('  instance   served      routes        distance      vs best   bad');
   console.log('  ' + '-'.repeat(70));
@@ -311,6 +383,7 @@ function compare(a, b) {
       `${y.served} -> ${x.served}`);
   });
   console.log('  ' + '-'.repeat(58));
+  if (a.own && b.own)
   console.log(`  ours        ${b.own.km.toFixed(1)} -> ${a.own.km.toFixed(1)} km` +
     `        ${b.own.served} -> ${a.own.served} lessons\n`);
 }

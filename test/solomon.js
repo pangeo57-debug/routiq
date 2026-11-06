@@ -75,7 +75,15 @@ const dist = (inst, a, b) =>
 // minutes and the instance's travel times have one decimal, so at 1 a lesson
 // can look reachable that is 0.1-0.6 units late. At 10 every time is a whole
 // number of minutes: nothing is rounded.
-function toRoutePal(inst, { student, settings }, maxRoutes, timeScale = 1) {
+//
+// depot: model the two depot legs the app has no notion of. The vehicle leaves
+// the depot at 0, so a customer cannot be started before it is reachable
+// (ready' = max(ready, d(depot, c))); and it must be back by the depot's due
+// time, so a customer cannot be started after due' = min(due, depotDue -
+// service - d(c, depot)). Both are exact: by the triangle inequality any
+// route that obeys the instance obeys these windows and vice versa, so the
+// windows narrow nothing the benchmark allows and admit nothing it forbids.
+function toRoutePal(inst, { student, settings }, maxRoutes, timeScale = 1, { depot = false } = {}) {
   const K = timeScale;
   const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m) % 60).padStart(2, '0')}`;
   const days = [];
@@ -94,7 +102,17 @@ function toRoutePal(inst, { student, settings }, maxRoutes, timeScale = 1) {
 
   const ids = ['home'], sts = [], coords = { home: place(inst.coord[1]) };
   for (let node = 2; node <= inst.n; node++) {
-    const [ready, due] = inst.tw[node].map(x => x * K);
+    let [ready, due] = inst.tw[node];
+    if (depot) {
+      ready = Math.max(ready, dist(inst, 1, node));
+      due = Math.min(due, inst.tw[1][1] - inst.service(node) - dist(inst, node, 1));
+      if (due < ready) throw new Error(`${inst.name}: customer ${node} cannot be served at all`);
+    }
+    // Every time in an instance has at most one decimal, so at K = 10 these
+    // are whole minutes. Anything else would be rounded, and say so.
+    ready = Math.round(ready * K * 1e6) / 1e6; due = Math.round(due * K * 1e6) / 1e6;
+    if (K === 10 && (!Number.isInteger(ready) || !Number.isInteger(due)))
+      throw new Error(`${inst.name}: customer ${node} window is not whole minutes at x10`);
     const service = inst.service(node) * K;
     const st = student('n' + node, { days, lessonsPerWeek: 1, lessonDuration: service,
       window: { start: hhmm(ready), end: hhmm(Math.max(ready + service, due + service - flex)) } });
@@ -113,6 +131,46 @@ function toRoutePal(inst, { student, settings }, maxRoutes, timeScale = 1) {
     }
   }
   return { sts, cfg, coords, days, matrix: { coordIds: ids, durations, distances } };
+}
+
+/**
+ * Check routes against the instance alone — nothing from the app. Each route
+ * is a list of customer node ids in visit order. The vehicle leaves the depot
+ * at 0, travel time equals distance, service starts at max(arrival, ready)
+ * and must not be after due, and the vehicle must be back by the depot's due
+ * time with a load within capacity. Every customer exactly once.
+ *
+ * mode 'trunc1' uses edges truncated to one decimal for both distance and
+ * time, the convention of the exact methods and of the best-known costs in
+ * test/data/*.sol. 'exact' uses full-precision Euclidean distances, the
+ * convention of most heuristic papers; it is reported for information.
+ */
+function verifyRoutes(inst, routes, mode = 'trunc1') {
+  const d = (a, b) => {
+    const e = Math.hypot(inst.coord[a].x - inst.coord[b].x, inst.coord[a].y - inst.coord[b].y);
+    return mode === 'exact' ? e : trunc1(e);
+  };
+  const EPS = 1e-9, errors = [], seen = new Set();
+  let distance = 0, overCapacity = 0, late = 0;
+  routes.forEach((r, k) => {
+    let t = 0, prev = 1, load = 0;
+    for (const c of r) {
+      if (seen.has(c)) errors.push(`route ${k + 1}: customer ${c} twice`);
+      seen.add(c);
+      const start = Math.max(t + d(prev, c), inst.tw[c][0]);
+      if (start > inst.tw[c][1] + EPS) { late++; errors.push(`route ${k + 1}: customer ${c} starts ${start.toFixed(2)} > due ${inst.tw[c][1]}`); }
+      distance += d(prev, c); load += inst.demand[c] || 0;
+      t = start + inst.service(c); prev = c;
+    }
+    const back = t + d(prev, 1);
+    distance += d(prev, 1);
+    if (back > inst.tw[1][1] + EPS) { late++; errors.push(`route ${k + 1}: back at depot ${back.toFixed(2)} > ${inst.tw[1][1]}`); }
+    if (load > inst.capacity) { overCapacity++; errors.push(`route ${k + 1}: load ${load} > capacity ${inst.capacity}`); }
+  });
+  let missing = 0;
+  for (let i = 2; i <= inst.n; i++) if (!seen.has(i)) { missing++; errors.push(`customer ${i} not served`); }
+  return { valid: errors.length === 0, distance, routes: routes.filter(r => r.length).length,
+    late, overCapacity, missing, errors };
 }
 
 /** Cost of a schedule under the benchmark's own metric, not the app's. */
@@ -136,4 +194,4 @@ function scheduleCost(inst, schedule, days) {
   return { cost: total, routes, overCapacity };
 }
 
-module.exports = { parseInstance, parseSolution, toRoutePal, scheduleCost, dist, trunc1 };
+module.exports = { parseInstance, parseSolution, toRoutePal, scheduleCost, verifyRoutes, dist, trunc1 };
