@@ -6576,3 +6576,191 @@ describe('clients who come to the professional\'s own place (workplace)', () => 
     assert.ok(job.input.students.every(s => s.address === '§p1'));
   });
 });
+
+describe('locked appointments stay where they are', () => {
+  function week() {
+    const app = loadApp({ seed: 6 });
+    const S = app.Scheduler;
+    const sts = Array.from({ length: 8 }, (_, i) => student('k' + i, { lessonsPerWeek: i < 3 ? 2 : 1,
+      days: [1, 2, 3, 4, 5], window: { start: '15:00', end: '21:00' } }));
+    const cfg = settings({});
+    const coords = cityCoords(sts);
+    app.setState({ students: sts, settings: cfg, coords, schedule: {}, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    return { app, S, sts, cfg, coords };
+  }
+  const find = (sch, id) => Object.entries(sch).flatMap(([d, l]) => l.filter(x => x.studentId === id).map(x => ({ d: Number(d), ...x })));
+
+  test('a locked lesson is on the same day at the same time after a whole new plan', async () => {
+    const { app, S, sts, cfg, coords } = week();
+    const first = await S.optimizeWeek({ students: sts, settings: cfg, coords, attempts: 1, warm: null, timeScale: 0.05 });
+    const sch = JSON.parse(JSON.stringify(first.schedule));
+    // lock one lesson of a twice-a-week client and one of a once-a-week client, at odd places
+    const a = find(sch, 'k0')[0], b = find(sch, 'k5')[0];
+    sch[a.d].find(x => x.studentId === 'k0').locked = true;
+    sch[b.d].find(x => x.studentId === 'k5').locked = true;
+
+    const lk = S.lockSplit(sts, sch, cfg);
+    assert.equal(Object.keys(lk.alias).length, 2);
+    assert.equal(lk.students.find(x => x.id === 'k0').lessonsPerWeek, 1, 'the client keeps the other lesson');
+    assert.ok(!lk.students.some(x => x.id === 'k5'), 'a client whose only lesson is locked is wholly the locked one');
+    for (const [v, real] of Object.entries(lk.alias)) app.state.coords[v] = app.state.coords[real];
+    app.setState({ idAlias: lk.alias });
+    const out = await S.optimizeWeek({ students: lk.students, settings: cfg, coords: app.state.coords, attempts: 1, warm: null, timeScale: 0.05 });
+    const joined = S.lockJoin(out.schedule, lk.alias);
+
+    for (const was of [a, b]) {
+      const now = find(joined, was.studentId).find(x => x.locked);
+      assert.ok(now, was.studentId + ' lost its locked lesson');
+      assert.deepStrictEqual([now.d, now.start, now.end], [was.d, was.start, was.end]);
+    }
+    assert.equal(S.countTotal(joined), 11);
+    assert.equal(find(joined, 'k0').length, 2);
+    assert.equal(new Set(find(joined, 'k0').map(x => x.d)).size, 2, 'the two lessons stay on different days');
+    assertClean(S.verifySchedule(joined, sts, cfg));
+  });
+
+  test('a lock that no longer fits the client\'s hours is let go, not forced', () => {
+    const { S, sts, cfg } = week();
+    const sch = { 1: [{ ...S._lessonSlot(sts[4], 60), start: '10:00', end: '11:00', locked: true }] };
+    const lk = S.lockSplit(sts, sch, cfg);
+    assert.equal(Object.keys(lk.alias).length, 0);
+    assert.equal(lk.dropped.length, 1);
+    assert.ok(!lk.schedule[1][0].locked);
+  });
+
+  test('the plan button goes through lockSplit and puts the lessons back', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
+    assert.match(body, /Scheduler\.lockSplit\(state\.students, scheduleBackup, state\.settings\)/);
+    assert.match(body, /Scheduler\.lockJoin\(out\.schedule, lk\.alias\)/);
+    assert.match(body, /students: lk\.students/);
+  });
+});
+
+describe('a new client goes into the week without moving anyone', () => {
+  test('every existing lesson keeps its day and time; the new ones are legal', async () => {
+    const app = loadApp({ seed: 7 });
+    const S = app.Scheduler;
+    const sts = Array.from({ length: 6 }, (_, i) => student('m' + i, { days: [1, 2, 3, 4, 5], window: { start: '15:00', end: '21:00' } }));
+    const cfg = settings({});
+    const coords = cityCoords(sts.concat([{ id: 'new' }]));
+    app.setState({ students: sts, settings: cfg, coords, schedule: {}, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const out = await S.optimizeWeek({ students: sts, settings: cfg, coords, attempts: 1, warm: null, timeScale: 0.05 });
+    const before = JSON.stringify(out.schedule);
+    const nu = student('new', { lessonsPerWeek: 2, days: [1, 2, 3, 4, 5], window: { start: '15:00', end: '21:00' } });
+    const all = sts.concat([nu]);
+    app.setState({ students: all });
+    const sch = JSON.parse(before);
+    const res = S.placeKeeping(sch, nu, all, cfg);
+    assert.equal(res.placed.length, 2); assert.equal(res.missing, 0);
+    const old = JSON.parse(before);
+    for (const d of Object.keys(old)) for (const sl of old[d])
+      assert.ok(sch[d].some(x => x.studentId === sl.studentId && x.start === sl.start && x.end === sl.end), `${sl.studentId} moved`);
+    assert.notEqual(res.placed[0].day, res.placed[1].day);
+    assertClean(S.verifySchedule(sch, all, cfg));
+  });
+
+  test('when there is no room it says so and changes nothing', () => {
+    const app = loadApp({ seed: 7 });
+    const S = app.Scheduler;
+    const a = student('a', { days: [1], window: { start: '15:00', end: '16:00' } });
+    const b = student('b', { days: [1], window: { start: '15:00', end: '16:00' } });
+    const cfg = settings({ workDays: [1] });
+    app.setState({ students: [a, b], settings: cfg, coords: cityCoords([a, b]), travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const sch = { 1: [{ ...S._lessonSlot(a, 60), start: '15:00', end: '16:00' }] };
+    const was = JSON.stringify(sch);
+    const res = S.placeKeeping(sch, b, [a, b], cfg);
+    assert.equal(res.placed.length, 0); assert.equal(res.missing, 1);
+    assert.equal(JSON.stringify(sch), was);
+  });
+});
+
+describe('the first minutes: less to fill in', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+
+  test('a pasted list becomes clients: name, address, times a week', () => {
+    const app = loadApp();
+    const rows = Array.from(app.App.parseClientLines('Μαρία, Κορίνθου 12, Πάτρα, 2\nΓιώργος; Ερμού 5\n\nΝίκος, Μαιζώνος 40, 3 φορές\nΆννα'));
+    assert.deepStrictEqual(rows.map(r => [r.name, r.address, r.freq]),
+      [['Μαρία', 'Κορίνθου 12, Πάτρα', 2], ['Γιώργος', 'Ερμού 5', 1], ['Νίκος', 'Μαιζώνος 40', 3], ['Άννα', '', 1]]);
+  });
+
+  test('a street number at the end of an address is not taken for times a week', () => {
+    const app = loadApp();
+    const rows = Array.from(app.App.parseClientLines('Μαρία, Κορίνθου 12'));
+    assert.equal(rows[0].address, 'Κορίνθου 12'); assert.equal(rows[0].freq, 1);
+  });
+
+  test('imported clients are free whenever the working day is open, and a line with no address is left out', () => {
+    const app = loadApp();
+    const cfg = settings({});
+    app.setState({ students: [], settings: cfg, coords: {}, schedule: {} });
+    app.App.importClients('Μαρία, Κορίνθου 12 Πάτρα, 2\nΆννα');
+    assert.equal(app.state.students.length, 1);
+    const m = app.state.students[0];
+    assert.equal(m.lessonsPerWeek, 2);
+    assert.equal(Object.values(m.availability).filter(a => a.on).length, cfg.workDays.length);
+  });
+
+  test('with a workplace, a line with only a name comes to the workplace', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({ workplaceAddress: 'Ερμού 20' }), coords: { workplace: { lat: 38.25, lon: 21.74 } }, schedule: {} });
+    app.App.importClients('Άννα');
+    assert.equal(app.state.students[0].atWorkplace, true);
+    assert.equal(app.state.students[0].address, 'Ερμού 20');
+    assert.deepStrictEqual({ ...app.state.coords[app.state.students[0].id] }, { lat: 38.25, lon: 21.74 });
+  });
+
+  test('the client form shows name, place, length and frequency; the rest is under "more"', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({}), coords: {}, schedule: {} });
+    const html = app.App.buildStudentForm(null);
+    const more = html.indexOf('<details id="st-more"');
+    assert.ok(more > 0);
+    for (const id of ['st-name', 'st-addr', 'st-dur', 'st-freq']) assert.ok(html.indexOf(`id="${id}"`) < more, id + ' must be in plain view');
+    for (const id of ['st-phone', 'st-subject', 'st-flex-hours', 'st-durations', 'st-type', 'st-paired', 'st-notes', 'avex-day'])
+      assert.ok(html.indexOf(`id="${id}"`) > more, id + ' belongs under "more"');
+    assert.ok(!/<details id="st-more" open/.test(html), 'closed for a new client');
+    const st = student('x'); app.setState({ students: [st] });
+    assert.match(app.App.buildStudentForm(st), /<details id="st-more" open/);
+  });
+
+  test('onboarding asks where the work happens and keeps the answer', () => {
+    assert.match(src, /App\._obSelectMode\('\$\{m\}',this\)/);
+    assert.match(src, /state\.settings\.workMode = this\._obMode \|\| 'clients'/);
+  });
+
+  test('with nothing entered, home offers the day first and hides the week statistics', () => {
+    const body = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  // Add from the home screen'));
+    assert.match(body, /const firstRun = !state\.students\.length && !\(state\.jobs \|\| \[\]\)\.length/);
+    assert.match(body, /App\.homeQuickAdd\('home-first-qn'\)/);
+    assert.match(body, /firstRun \? '' : this\._homeStatsHtml/);
+  });
+
+  test('a lesson can be locked from the week view, and only a plain one', () => {
+    assert.match(src, /Scheduler\.lockable\(slot, state\.students\.find/);
+    assert.match(src, /App\.toggleSlotLock\(/);
+  });
+});
+
+describe('the quick plan', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  test('is the default; the thorough setting or "search deeper" runs the long one', () => {
+    const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
+    assert.match(body, /const deep = state\.settings\.scheduleQuality==='thorough' \|\| !!state\._deepOnce/);
+    assert.match(body, /deep \? \{\} : \{ timeScale: 0\.25, p1: \{ backtrackMs: 3000, repairMs: 1500 \} \}/);
+    assert.match(body, /state\._deepOnce = true; App\.runAndNotify\(\)/);
+  });
+  test('a short budget still places every lesson of a week that fits, with no rule broken', async () => {
+    const app = loadApp({ seed: 3 });
+    const S = app.Scheduler;
+    const sts = Array.from({ length: 10 }, (_, i) => student('q' + i, { lessonsPerWeek: 1 + (i % 2), days: [1, 2, 3, 4, 5], window: { start: '15:00', end: '21:00' } }));
+    const cfg = settings({});
+    const coords = cityCoords(sts);
+    app.setState({ students: sts, settings: cfg, coords, schedule: {}, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const out = await S.optimizeWeek({ students: sts, settings: cfg, coords, attempts: 1, warm: null, shuffleFirst: true,
+      timeScale: 0.05, p1: { backtrackMs: 600, repairMs: 300 } });
+    assert.equal(S.countTotal(out.schedule), 15);
+    assertClean(S.verifySchedule(out.schedule, sts, cfg));
+  });
+});
