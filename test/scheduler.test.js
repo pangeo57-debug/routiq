@@ -5801,7 +5801,8 @@ describe('found on a phone: new users, a stuck button, the week map', () => {
 
   test('changing the day redraws the week map', () => {
     const L = src.slice(src.indexOf('  switchDay(d){'), src.indexOf('  switchDay(d){') + 1400);
-    assert.match(L, /this\.renderDaySlots\(\);\s*\/\/[^\n]*\n\s*try\{ this\._drawWeekMap\(\); \}/);
+    // The map is folded away by default; when open, it follows the day.
+    assert.match(L, /this\.renderDaySlots\(\);\s*\/\/[^\n]*\n\s*if\(state\.weekMapOpen\) try\{ this\._drawWeekMap\(\); \}/);
   });
 
   test('on a touch screen every tappable chip is at least 36px high', () => {
@@ -5890,7 +5891,7 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
 
   test('the home screen shows the next stop, the map, the day tools and the statistics', () => {
     const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
-    const home = src.slice(src.indexOf('  _homeMapHtml(){'), src.indexOf('  homeQuickAdd(){'));
+    const home = src.slice(src.indexOf('  _homeMapHtml(empty){'), src.indexOf('  homeQuickAdd(boxId){'));
     assert.match(home, /next-card/);
     assert.match(home, /id="home-map"/);
     assert.ok(!/id="home-qn"/.test(home), 'adding moved to the + button');
@@ -6672,6 +6673,43 @@ describe('a new client goes into the week without moving anyone', () => {
     const res = S.placeKeeping(sch, b, [a, b], cfg);
     assert.equal(res.placed.length, 0); assert.equal(res.missing, 1);
     assert.equal(JSON.stringify(sch), was);
+  });
+});
+
+describe('home, week and messages: less on screen', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  test('with no stop to show, the home map gives its room back', () => {
+    assert.match(src, /\.home-mapwrap\.empty\{height:92px\}/);
+    assert.match(src, /if\(!mapEmpty\) this\._drawStopsMap\('home-map'/);
+  });
+  test('the week statistics are one line, not six cards', () => {
+    const body = src.slice(src.indexOf('  _homeStatsHtml(L, placedCount'), src.indexOf("  // Home, top:"));
+    assert.ok(!/stat-card/.test(body));
+    assert.match(body, /class="home-weekline home-stats"/);
+  });
+  test('the week map and the "did not fit" panel start folded', () => {
+    assert.match(src, /\$\{state\.weekMapOpen \? `<div id="week-map"/);
+    assert.match(src, /<details class="fold fold-unplaced"/);
+  });
+  test('a locked appointment stands out, and the padlock is explained once', () => {
+    assert.match(src, /\$\{slot\.locked\?' locked':''\}/);
+    assert.match(src, /!this\._lockHintSeen\(\)/);
+  });
+  test('one message at a time', () => {
+    const app = loadApp();
+    const kids = [];
+    const box = { children: kids, appendChild(x){ kids.push(x); x.remove = () => { const i = kids.indexOf(x); if (i >= 0) kids.splice(i, 1); }; } };
+    const el = () => { const e = { style: {}, className: '', children: [], appendChild(c){ this.children.push(c); },
+      querySelector(q){ return q === '.toast-action' && this.children.some(c => c.className === 'toast-action') ? {} : null; } }; return e; };
+    app.ctx.document.getElementById = (id) => id === 'toast-container' ? box : null;
+    app.ctx.document.createElement = el;
+    app.Toast.show('one'); app.Toast.show('two'); app.Toast.show('three');
+    assert.equal(kids.length, 1);
+    app.Toast.show('undo me', 'info', 3000, { label: 'Undo', run(){} });
+    app.Toast.show('plain');
+    assert.equal(kids.length, 2, 'a plain message does not push out an Undo');
+    app.Toast.show('another undo', 'info', 3000, { label: 'Undo', run(){} });
+    assert.equal(kids.length, 1);
   });
 });
 
