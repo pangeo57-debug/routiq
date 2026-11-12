@@ -68,7 +68,7 @@ const dist = (inst, a, b) =>
  *    it is now a setting that defaults to zero, and copying the old number
  *    into this file would have gone on shortening every window for an overrun
  *    that no longer happens.
- *  - Day 6 is skipped. The optimizer charges a penalty for Saturday work and
+ *  - Days 6 and 7 are skipped. The optimizer charges a penalty for weekend work and
  *    treats it as off-peak traffic; neither belongs in this comparison.
  */
 // timeScale: app minutes per instance time unit. The app keeps time in whole
@@ -87,7 +87,7 @@ function toRoutePal(inst, { student, settings }, maxRoutes, timeScale = 1, { dep
   const K = timeScale;
   const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m) % 60).padStart(2, '0')}`;
   const days = [];
-  for (let d = 1; days.length < maxRoutes; d++) if (d !== 6) days.push(d);
+  for (let d = 1; days.length < maxRoutes; d++) if (d !== 6 && d !== 7) days.push(d);
 
   const horizon = inst.tw[1][1] * K;
   const dayHours = {};

@@ -942,6 +942,220 @@ function normalizeSearchText(str){
 }
 
 // ============================================================
+// CALENDAR IMPORT — a week of appointments out of an .ics file
+// ============================================================
+// Google Calendar (Settings → Import & export → Export), Apple and Outlook
+// all write .ics. One week is read out of it — the coming one if it has
+// appointments, else the most recent that does — with weekly repeats
+// expanded. Each title becomes a client: their appointments that week give
+// how many times a week and how long; the location gives the address.
+// All-day events are skipped. Read on the phone; nothing is sent anywhere.
+const CalendarImport = {
+  _unfold(text){ return String(text || '').replace(/\r\n/g, '\n').replace(/\n[ \t]/g, ''); },
+  _unescape(v){ return String(v || '').replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim(); },
+  // A DTSTART/DTEND value as a local Date. "Z" is UTC; TZID or nothing is
+  // read as the phone's own time zone, which is where the appointments are.
+  _date(prop){
+    if(!prop) return null;
+    const m = prop.value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/);
+    if(!m) return null;
+    if(!m[4]) return { allDay: true };
+    const [y, mo, d, h, mi] = [m[1], m[2], m[3], m[4], m[5]].map(Number);
+    return { date: m[7] ? new Date(Date.UTC(y, mo - 1, d, h, mi)) : new Date(y, mo - 1, d, h, mi) };
+  },
+  events(text){
+    const out = [];
+    for(const block of this._unfold(text).split('BEGIN:VEVENT').slice(1)){
+      const body = block.split('END:VEVENT')[0];
+      const props = {};
+      for(const line of body.split('\n')){
+        const i = line.indexOf(':'); if(i < 0) continue;
+        const [name, ...params] = line.slice(0, i).split(';');
+        props[name.toUpperCase()] = { value: line.slice(i + 1).trim(), params };
+      }
+      if(props.STATUS && /CANCELLED/i.test(props.STATUS.value)) continue;
+      const st = this._date(props.DTSTART), en = this._date(props.DTEND);
+      if(!st || st.allDay) continue;
+      let end = en && en.date;
+      if(!end && props.DURATION){
+        const m = props.DURATION.value.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+        if(m) end = new Date(st.date.getTime() + ((Number(m[1]) || 0) * 60 + (Number(m[2]) || 0)) * 60000);
+      }
+      if(!end || end <= st.date) continue;
+      const rrule = props.RRULE ? Object.fromEntries(props.RRULE.value.split(';').map(x => x.split('='))) : null;
+      out.push({ title: this._unescape(props.SUMMARY && props.SUMMARY.value), location: this._unescape(props.LOCATION && props.LOCATION.value),
+        start: st.date, end, rrule, uid: props.UID && props.UID.value });
+    }
+    return out;
+  },
+  _monday(d){ const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; },
+  // Every appointment that falls in the week starting `mon`.
+  inWeek(events, mon){
+    const end = new Date(mon); end.setDate(end.getDate() + 7);
+    const BY = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
+    const out = [];
+    for(const e of events){
+      const len = e.end - e.start;
+      const add = (s) => { if(s >= mon && s < end) out.push({ ...e, start: s, end: new Date(s.getTime() + len) }); };
+      const r = e.rrule;
+      if(!r || r.FREQ !== 'WEEKLY'){ add(e.start); continue; }
+      const until = r.UNTIL ? this._date({ value: r.UNTIL }) : null;
+      if(until && until.date && until.date < mon) continue;
+      if(e.start >= end) continue;
+      const interval = Number(r.INTERVAL) || 1;
+      const weeks = Math.round((this._monday(mon) - this._monday(e.start)) / (7 * 86400000));
+      if(weeks % interval) continue;
+      const days = r.BYDAY ? r.BYDAY.split(',').map(x => BY[x.slice(-2)]).filter(Boolean) : [((e.start.getDay() + 6) % 7) + 1];
+      for(const wd of days){
+        const s = new Date(mon); s.setDate(s.getDate() + wd - 1); s.setHours(e.start.getHours(), e.start.getMinutes(), 0, 0);
+        if(s < e.start) continue;
+        if(until && until.date && s > until.date) continue;
+        add(s);
+      }
+    }
+    return out.sort((a, b) => a.start - b.start);
+  },
+  // The week to read: the coming one if it has appointments, else the most
+  // recent one that does (up to eight weeks back).
+  pickWeek(events, today){
+    const mon = this._monday(today || new Date());
+    for(const k of [0, 1, -1, -2, -3, -4, -5, -6, -7, -8]){
+      const m = new Date(mon); m.setDate(m.getDate() + 7 * k);
+      const occ = this.inWeek(events, m);
+      if(occ.length) return { monday: m, occ };
+    }
+    return { monday: mon, occ: [] };
+  },
+  // Clients and the week as it stands, from a week of appointments.
+  toClients(occ){
+    const groups = new Map();
+    for(const o of occ){
+      const key = normalizeSearchText(o.title).replace(/\s+/g, ' ').trim();
+      if(!key) continue;
+      if(!groups.has(key)) groups.set(key, { name: o.title, address: '', slots: [] });
+      const g = groups.get(key);
+      if(!g.address && o.location) g.address = o.location;
+      const day = ((o.start.getDay() + 6) % 7) + 1;
+      const s = o.start.getHours() * 60 + o.start.getMinutes();
+      const e = s + Math.round((o.end - o.start) / 60000);
+      g.slots.push({ day, start: s, end: e, len: e - s });
+    }
+    return [...groups.values()];
+  },
+};
+
+// ============================================================
+// CLIENT COMMANDS — "Γιώργος δεν μπορεί Τρίτη από 5 μέχρι 7", spoken or typed
+// ============================================================
+// Understood on the phone, by rules, in Greek and English: nothing said is
+// sent anywhere. What is not understood is left to QuickNote as an errand.
+//   <client> δεν μπορεί <day> [από H μέχρι H]   — a time they cannot do
+//   <client> δεν μπορεί <day>                    — the whole day
+//   <client> <N> φορές [την εβδομάδα]            — lessons a week
+//   <client> μένει / διεύθυνση <address>         — a new address
+// Hours: "5", "17", "5:30", "5 και μισή", "πέντε"; 1–6 with no other sign
+// is the afternoon, as everywhere in the app.
+const ClientCommand = {
+  NUM_WORDS: { ενα:1, μια:1, μιαν:1, δυο:2, τρια:3, τρεις:3, τεσσερα:4, τεσσερις:4, πεντε:5, εξι:6, εφτα:7, επτα:7,
+    οχτω:8, οκτω:8, εννια:9, εννεα:9, δεκα:10, εντεκα:11, δωδεκα:12,
+    one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12 },
+  CANNOT: [['δεν','μπορει'], ['δε','μπορει'], ['δεν','μπορει','να'], ["can't"], ['cannot'], ['can','not'], ['not','available'], ['δεν','ειναι','διαθεσιμος'], ['δεν','ειναι','διαθεσιμη']],
+  FROM: new Set(['απο','απ','from']), TO: new Set(['μεχρι','εως','ως','to','till','until','-','–']),
+  TIMES: new Set(['φορες','φορα','times','x']), LIVES: new Set(['μενει','διευθυνση','address','lives']),
+  _n(w){ return normalizeSearchText(w).replace(/^[("']+|[.,;:!?)"']+$/g, ''); },
+  ENDINGS: ['ους','ου','ος','ον','οι','ων','ας','ες','ης','ις','ια','ο','ε','α','η','ι','υ','s'],
+  _stem(w){ for(const e of this.ENDINGS) if(w.length - e.length >= 3 && w.endsWith(e)) return w.slice(0, -e.length); return w; },
+  _num(w){ if(/^\d{1,2}$/.test(w)) return Number(w); return this.NUM_WORDS[w] ?? null; },
+  // The client named at the start: full name, first name, or a Greek case of
+  // it ("Γιώργο", "του Γιώργου") — matched on the stem, never on a guess.
+  findClient(toks, students){
+    const norm = (x) => normalizeSearchText(x).trim();
+    let best = null;
+    for(const st of students){
+      const parts = norm(st.name).split(/\s+/).filter(Boolean);
+      if(!parts.length) continue;
+      for(let skip = 0; skip <= 1; skip++){                 // "του Γιώργου", "ο Γιώργος"
+        if(skip && !['ο','η','του','της','τον','την','o'].includes(toks[0])) continue;
+        let k = skip, ok = 0;
+        for(const part of parts){
+          const w = toks[k]; if(!w) break;
+          // Greek cases change only the ending: Γιώργος / Γιώργο / Γιώργου.
+          // The stems must then be equal — Μαρίνα is not Μαρία.
+          if(w === part || (w.length >= 3 && this._stem(w) === this._stem(part))){ ok++; k++; } else break;
+        }
+        if(ok && (!best || ok > best.len || (ok === best.len && skip < best.skip))) best = { st, len: k, skip, full: ok === parts.length };
+      }
+    }
+    if(!best) return null;
+    // A first name shared by two clients is not a match: say so instead.
+    const same = students.filter(x => normalizeSearchText(x.name).split(/\s+/)[0] === normalizeSearchText(best.st.name).split(/\s+/)[0]);
+    if(same.length > 1 && !best.full) return { ambiguous: same };
+    return best;
+  },
+  _clock(toks, i){
+    let w = toks[i]; if(w == null) return null;
+    let h = null, m = 0, used = 1, explicit = false;
+    const hm = w.match(/^(\d{1,2})[:.](\d{2})$/);
+    if(hm){ h = Number(hm[1]); m = Number(hm[2]); explicit = h >= 13 || hm[1][0] === '0'; }
+    else { h = this._num(w); if(h == null) return null; explicit = h >= 13; }
+    if(toks[i + 1] === 'και' && toks[i + 2] === 'μιση'){ m = 30; used = 3; }
+    else if(toks[i + 1] === 'μιση' || toks[i + 1] === 'half'){ m = 30; used = 2; }
+    if(['πμ','am','πρωι'].includes(toks[i + used])){ used++; if(h === 12) h = 0; explicit = true; }
+    else if(['μμ','pm','απογευμα','βραδυ'].includes(toks[i + used])){ used++; if(h < 12) h += 12; explicit = true; }
+    if(!explicit && h >= 1 && h <= 6) h += 12;
+    if(h > 23 || m > 59) return null;
+    return { min: h * 60 + m, used };
+  },
+  parse(text, students){
+    const raw = String(text || '').trim();
+    // "17:00-19:30" is two times and a dash.
+    const toks = raw.replace(/(\d)\s*[-–]\s*(\d)/g, '$1 - $2').split(/\s+/).map(w => w === '-' || w === '–' ? w : this._n(w)).filter(Boolean);
+    if(toks.length < 2) return null;
+    const who = this.findClient(toks, students || []);
+    if(!who) return null;
+    if(who.ambiguous) return { kind: 'ambiguous', names: who.ambiguous.map(x => x.name) };
+    const rest = toks.slice(who.len);
+    const st = who.st;
+    // cannot …
+    for(const pat of this.CANNOT){
+      if(pat.every((w, k) => rest[k] === w)){
+        const r = rest.slice(pat.length);
+        const days = [];
+        let i = 0;
+        for(; i < r.length; i++){
+          const d = QuickNote.WEEKDAYS[r[i]];
+          if(d == null){ if(['και','and','την','τη','τις','on'].includes(r[i])) continue; break; }
+          days.push(d === 0 ? 7 : d);
+        }
+        if(!days.length) return null;
+        let start = null, end = null;
+        if(this.FROM.has(r[i])) i++;
+        const a = this._clock(r, i);
+        if(a){
+          i += a.used;
+          if(this.TO.has(r[i])) i++;
+          const b = this._clock(r, i);
+          if(!b) return null;
+          start = a.min; end = b.min <= a.min && b.min + 12 * 60 > a.min ? b.min + 12 * 60 : b.min;
+          if(end <= start || end > 24 * 60) return null;
+        }
+        return { kind: 'unavailable', id: st.id, name: st.name, days, start, end };
+      }
+    }
+    // N times a week
+    const n = this._num(rest[0]);
+    if(n != null && n >= 1 && n <= 7 && this.TIMES.has(rest[1])) return { kind: 'perweek', id: st.id, name: st.name, n };
+    // address
+    if(this.LIVES.has(rest[0])){
+      const words = raw.split(/\s+/);
+      const addr = words.slice(who.len + 1 + (['στην','στο','σε'].includes(rest[1]) ? 1 : 0)).join(' ').replace(/^[:,\s]+/, '').trim();
+      if(addr.length >= 3) return { kind: 'address', id: st.id, name: st.name, address: addr };
+    }
+    return null;
+  },
+};
+
+// ============================================================
 // QUICK NOTE — "dentist tomorrow at 11" into a job, without a form
 // ============================================================
 // A plain reader, no AI: it finds the few things people actually write (a day,
@@ -1245,9 +1459,9 @@ function defaultSettings(){
 // ============================================================
 const I18N = {
   el: {
-    days:['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'],
+    days:['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ','Κυρ'],
     subjects:{'Μαθηματικά':'Μαθηματικά','Φυσική':'Φυσική','Χημεία':'Χημεία','Βιολογία':'Βιολογία','Αγγλικά':'Αγγλικά','Ιστορία':'Ιστορία','Γεωγραφία':'Γεωγραφία','Λογοτεχνία':'Λογοτεχνία','Πληροφορική':'Πληροφορική','Άλγεβρα':'Άλγεβρα','Γεωμετρία':'Γεωμετρία','Άλλο':'Άλλο','physio_rehab':'Αποκατάσταση','physio_back':'Μέση / Αυχένας','physio_sports':'Αθλητική κάκωση','physio_post_op':'Μετεγχειρητική','physio_neuro':'Νευρολογική','physio_manual':'Χειροθεραπεία','physio_resp':'Αναπνευστική','mass_relax':'Χαλαρωτικό','mass_deep':'Βαθιών ιστών','mass_sports':'Αθλητικό','mass_lymph':'Λεμφικό','mass_preg':'Εγκυμοσύνης','mass_reflex':'Ρεφλεξολογία','beauty_facial':'Περιποίηση προσώπου','beauty_mani':'Μανικιούρ','beauty_pedi':'Πεντικιούρ','beauty_wax':'Αποτρίχωση','beauty_lash':'Βλεφαρίδες / Φρύδια','beauty_makeup':'Μακιγιάζ','beauty_hair':'Κόμμωση','pt_strength':'Ενδυνάμωση','pt_cardio':'Αερόβια','pt_hiit':'HIIT','pt_mobility':'Κινητικότητα','pt_pilates':'Pilates','pt_yoga':'Yoga','pt_rehab':'Επανένταξη','pt_assessment':'Αξιολόγηση','mus_piano':'Πιάνο','mus_guitar':'Κιθάρα','mus_violin':'Βιολί','mus_drums':'Ντραμς','mus_voice':'Φωνητική','mus_bass':'Μπάσο','mus_theory':'Θεωρία','sp_artic':'Άρθρωση','sp_lang':'Γλωσσική ανάπτυξη','sp_fluency':'Τραυλισμός','sp_voice':'Φωνή','sp_swallow':'Κατάποση','sp_learning':'Μαθησιακές δυσκολίες','psy_individual':'Ατομική','psy_couple':'Ζεύγους','psy_family':'Οικογενειακή','psy_child':'Παιδική','psy_cbt':'Γνωσιακή-συμπεριφορική','psy_assessment':'Αξιολόγηση','cl_general':'Γενική καθαριότητα','cl_deep':'Βαθύς καθαρισμός','cl_windows':'Τζάμια','cl_move':'Μετακόμιση','cl_office':'Γραφείο','cl_ironing':'Σιδέρωμα','pet_walk':'Βόλτα','pet_groom':'Καλλωπισμός','pet_train':'Εκπαίδευση','pet_sit':'Φύλαξη','pet_vet':'Κτηνιατρική επίσκεψη','rep_plumbing':'Υδραυλικά','rep_electrical':'Ηλεκτρολογικά','rep_appliance':'Οικιακές συσκευές','rep_hvac':'Θέρμανση / Κλιματισμός','rep_carpentry':'Ξυλουργικά','rep_paint':'Ελαιοχρωματισμοί','rep_it':'Υπολογιστές','gen_consult':'Συμβουλευτική','gen_meeting':'Συνάντηση','gen_service':'Παροχή υπηρεσίας','gen_followup':'Επανέλεγχος'},
-    daysFull:['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'],
+    daysFull:['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο','Κυριακή'],
     nav_home:'Home', nav_students:'Μαθητές', nav_schedule:'Πρόγραμμα', nav_route:'Διαδρομή', nav_settings:'Ρυθμίσεις',
     home_title:'Εβδομαδιαίο Πρόγραμμα', home_today:'Σήμερα', home_no_lessons_today:'Τίποτα προγραμματισμένο σήμερα',
     home_not_working_today:'Σήμερα δεν εργάζεστε', home_all_fit:'Χώρεσαν όλα!',
@@ -1342,6 +1556,9 @@ const I18N = {
     ob_where:'ΠΟΥ ΔΟΥΛΕΥΕΙΣ', ob_mode_clients:'Στους πελάτες', ob_mode_place:'Στον χώρο μου', ob_mode_both:'Και τα δύο', first_title:'Τι έχεις σήμερα;', first_sub:'Γράψε τις δουλειές σου με κόμμα, π.χ. «Παπαδόπουλος Κορίνθου 12 στις 10, φαρμακείο». Βγαίνουν σειρά, ώρες και διαδρομή.', first_go:'Πρόσθεσε και σχεδίασε τη μέρα', first_weekly:'Έχω σταθερούς πελάτες κάθε εβδομάδα', paste_btn:'Επικόλληση λίστας', paste_title:'Πολλοί πελάτες μαζί', paste_hint:'Ένας ανά γραμμή: όνομα, διεύθυνση, φορές την εβδομάδα. Π.χ. «Μαρία, Κορίνθου 12 Πάτρα, 2». Οι φορές είναι προαιρετικές.', paste_ph:'Μαρία, Κορίνθου 12 Πάτρα, 2\nΓιώργος, Ερμού 5 Πάτρα', paste_add:'Προσθήκη', paste_done:'Προστέθηκαν {n}', paste_skipped:'{n} γραμμές χωρίς διεύθυνση δεν μπήκαν', paste_none:'Δεν βρέθηκε κανένας. Γράψε έναν ανά γραμμή: όνομα, διεύθυνση.',
     deep_offer:'Κάποια ραντεβού δεν χώρεσαν. Μια πιο βαθιά αναζήτηση (2–3 λεπτά) ίσως τα χωρέσει.', deep_btn:'Ψάξε πιο βαθιά',
     week_map_toggle:'Χάρτης της μέρας', unplaced_see:'Δες λύσεις', lock_hint:'Πάτα το λουκέτο σε ένα ραντεβού για να μείνει στη μέρα και ώρα του σε κάθε νέο υπολογισμό.', lock_hint_ok:'Κατάλαβα',
+    settings_split_hint:'Δουλεύεις σπαστά; Πάτα «Πρόσθεσε διάστημα» σε μια μέρα, π.χ. 9:00–13:00 και 17:00–21:00. Ανάμεσα δεν μπαίνει ραντεβού.',
+    cmd_unavail:'{name}: δεν μπορεί {days} {from}–{to}. Ξανά υπολογισμός για να μπει στο πρόγραμμα.', cmd_unavail_day:'{name}: δεν μπορεί {days}. Ξανά υπολογισμός για να μπει στο πρόγραμμα.', cmd_perweek:'{name}: {n} φορές την εβδομάδα.', cmd_address:'{name}: νέα διεύθυνση {address}.', cmd_ambiguous:'Ποιος από όλους; {names}. Πες και το επώνυμο.', voice_examples:'Π.χ. «Γιώργος δεν μπορεί Τρίτη από 5 μέχρι 7», «Μαρία 2 φορές», «φαρμακείο αύριο στις 11».',
+    cal_import_btn:'Από ημερολόγιο (.ics)', cal_import_hint:'Google Calendar: Ρυθμίσεις → Εισαγωγή και εξαγωγή → Εξαγωγή, και διάλεξε το αρχείο .ics. Κάθε τίτλος ραντεβού γίνεται πελάτης.', cal_import_done:'Προστέθηκαν {n} πελάτες από {k} ραντεβού της εβδομάδας.', cal_import_skipped:'{n} χωρίς διεύθυνση δεν μπήκαν', cal_import_none:'Δεν βρέθηκαν ραντεβού με ώρα στο αρχείο.', ba_before_own:'Το πρόγραμμά σου (ημερολόγιο)',
     send_times_btn:'Στείλε ώρες', sync_title:'Συγχρονισμός συσκευών', sync_intro:'Κρατά αντίγραφο στο διαδίκτυο και το ανοίγεις και από άλλη συσκευή. Τα δεδομένα κρυπτογραφούνται εδώ, στη συσκευή — ο διακομιστής δεν μπορεί να τα διαβάσει.', sync_enable:'Ενεργοποίηση συγχρονισμού', sync_enable_title:'Να ενεργοποιηθεί ο συγχρονισμός;', sync_enable_text:'Ο κωδικός σου είναι:\n\n{code}\n\nΓράψ\u2019 τον κάπου. Είναι το κλειδί της κρυπτογράφησης και ΔΕΝ αποθηκεύεται πουθενά αλλού — αν χαθεί, χάνεται και το αντίγραφο στον διακομιστή.', sync_enable_ok:'Το έγραψα, συνέχισε', sync_enabled:'Ο συγχρονισμός ενεργοποιήθηκε', sync_unavailable:'Ο συγχρονισμός δεν είναι διαθέσιμος σε αυτή την έκδοση.', sync_this_is_primary:'Αυτή η συσκευή γράφει.', sync_this_is_reader:'Αυτή η συσκευή μόνο διαβάζει.', sync_last_push:'Τελευταία αποστολή: {when}', sync_copy_code:'Αντιγραφή κωδικού', sync_push:'Αποστολή', sync_pull:'Λήψη', sync_pushed:'Στάλθηκε', sync_pulled:'Ελήφθη', sync_nothing_yet:'Δεν υπάρχει ακόμα αντίγραφο.', sync_up_to_date:'Είσαι ήδη ενημερωμένος.', day_move_up:'Πιο νωρίς', day_move_down:'Πιο αργά', day_move_illegal:'Με αυτή τη σειρά δεν χωράει: κάποιο ωράριο ή διαθεσιμότητα θα έσπαγε. Δεν άλλαξε τίποτα.', day_moved:'Η σειρά άλλαξε — οι ώρες ξαναϋπολογίστηκαν.', qn_placeholder:'π.χ. οδοντίατρος αύριο στις 11', qn_add:'Προσθήκη', day_hours_for:'Ώρες αυτής της μέρας', day_hours_invalid:'Το «έως» πρέπει να είναι μετά το «από».', mode_errands:'Υποχρεώσεις', errand_title:'Οι υποχρεώσεις μου', errand_add:'Νέα υποχρέωση', errand_ph:'π.χ. φαρμακείο αύριο, τράπεζα στις 11', errand_none:'Γράψε παραπάνω ό,τι πρέπει να κάνεις και πάτα «Σχεδίασε τη μέρα».', errand_name:'Τι πρέπει να κάνεις', errand_name_ph:'π.χ. Φαρμακείο', day_to_next:'Στην επόμενη μέρα', day_moved_to:'Μεταφέρθηκε στις {date}', day_map_note:'Η γραμμή δείχνει τη σειρά, όχι τον δρόμο.', day_far_warn:'Η θέση είναι {km} χλμ από το σπίτι σου — μάλλον λάθος αναζήτηση. Άνοιξε «Επεξεργασία» και διάλεξε τη σωστή διεύθυνση.', phase_refine_title:'Χωράω όσους έμειναν', phase_refine_sub:'Μετακινώ ραντεβού ανάμεσα σε μέρες και μαζεύω τις διαδρομές', qn_added_many:'Προστέθηκαν {n} — έλεγξέ τα και πάτα «Σχεδίασε τη μέρα».', settings_fuel_price_label:'Τιμή βενζίνης (€/λίτρο)', gmaps_find:'Βρες στο Google Maps', gmaps_type_first:'Γράψε πρώτα όνομα ή διεύθυνση.', gmaps_paste_hint:'Βρες το μέρος, πάτα Κοινοποίηση → Αντιγραφή συνδέσμου και επικόλλησέ τον στη διεύθυνση.', gmaps_short_link:'Αυτός ο σύντομος σύνδεσμος δεν έχει τη θέση μέσα του. Άνοιξέ τον, και αντίγραψε από τη γραμμή διευθύνσεων τον πλήρη σύνδεσμο ή γράψε τη διεύθυνση.', gps_here:'Είμαι εδώ (GPS)', gps_locating:'Βρίσκω τη θέση σου…', gps_ok:'Θέση από GPS (±{m} μ) — μένει μόνιμα.', gps_rough:'Θέση από GPS με ακρίβεια ±{m} μ. Αν είσαι μέσα σε κτίριο, βγες έξω και ξαναπάτα.', gps_denied:'Δεν δόθηκε άδεια τοποθεσίας. Άνοιξέ την από τις ρυθμίσεις του κινητού.', gps_failed:'Δεν βρέθηκε θέση. Δοκίμασε ξανά σε ανοιχτό χώρο.', gps_unavailable:'Αυτή η συσκευή δεν δίνει θέση.', addr_street_only:'θέση στην οδό, όχι στο σπίτι', loc_approx:'θέση στην οδό', loc_temp:'προσωρινή θέση', loc_fix_hint:'Στην επόμενη επίσκεψη πάτα «Είμαι εδώ» (ή σύρε την καρφίτσα) για να μείνει η σωστή θέση.', form_flex_label:'Ώρες την εβδομάδα, ευέλικτα (προαιρετικό)', form_flex_ph:'π.χ. 4', form_flex_min:'Ελάχιστο κομμάτι', form_flex_min_opt:'τουλάχ. {n}′', form_flex_max:'Μεγαλύτερο κομμάτι', form_flex_max_opt:'έως {n}′', form_flex_hint:'Γράψε το σύνολο (π.χ. 4) αν δεν σε νοιάζει πώς θα σπάσει: ξεκινά από τα μεγαλύτερα κομμάτια και, αν δεν χωράει, σπάει σε μικρότερα — 2+2, 2+1+1, 1+1+1+1 — έως το ελάχιστο.', form_durations_label:'Διαφορετικές διάρκειες (προαιρετικό)', form_durations_ph:'π.χ. 120, 90', form_durations_hint:'Για ραντεβού με διαφορετική διάρκεια την ίδια εβδομάδα. Γράψε τα λεπτά με κόμμα: «120, 90» = ένα δίωρο και ένα μιάμιση. Άφησέ το κενό αν όλα έχουν την ίδια διάρκεια.', home_next:'Επόμενο', home_directions:'Οδηγίες από εδώ', home_add_ph:'Πρόσθεσε… π.χ. φαρμακείο, τράπεζα στις 11', home_today_empty:'Τίποτα για σήμερα. Γράψε κάτι παραπάνω ή δες το πρόγραμμα.', job_done:'Έγινε', qn_added_one:'Προστέθηκε: {name}', cal_add:'Ημερολόγιο', cal_nothing:'Δεν υπάρχει κάτι με ώρα σήμερα.', cal_saved:'{n} ραντεβού για το ημερολόγιο, με ειδοποίηση 15′ πριν. Άνοιξε το αρχείο για να προστεθούν.', remind_enable:'Ειδοποιήσεις', remind_on:'Θα ειδοποιείσαι 15′ πριν από κάθε ραντεβού όσο η εφαρμογή είναι ανοιχτή. Για ειδοποιήσεις με κλειστή εφαρμογή, πάτα «Ημερολόγιο».', remind_denied:'Οι ειδοποιήσεις δεν επιτράπηκαν. Πάτα «Ημερολόγιο» για ειδοποιήσεις από το ημερολόγιο του κινητού.', remind_title:'Σε {min}′: {name}', day_home_missing:'Δεν βρέθηκε η διεύθυνση του σπιτιού σου. Έλεγξέ την στις Ρυθμίσεις.', day_unlocated:'{n} δουλειές χωρίς θέση στον χάρτη — δεν προγραμματίστηκαν', day_no_address:'χωρίς διεύθυνση', day_times_here:'Χρόνοι διαδρομής: HERE, με κίνηση.', day_times_osrm:'Χρόνοι διαδρομής: χάρτης OpenStreetMap, χωρίς κίνηση.', day_times_estimate:'Οι χρόνοι διαδρομής είναι κατά προσέγγιση — δεν υπήρξε σύνδεση με τον χάρτη.', settings_time_factor:'Διόρθωση χρόνων χάρτη (%)', settings_time_factor_hint:'Ο χάρτης υπολογίζει χωρίς φανάρια και κίνηση, οπότε βγάζει συνήθως λιγότερο χρόνο απ\u2019 όσο παίρνει η διαδρομή. Βάλε πόσο % πιο αργά οδηγείς στην πράξη (0 = όπως ο χάρτης). Ισχύει από την επόμενη Ανανέωση, και μόνο όταν οι χρόνοι δεν έρχονται από HERE, που έχει ήδη κίνηση.', gap_refined:'Οι υπόλοιπες μέρες βελτιώθηκαν: {n} αλλαγές.', diag_btn:'Αρχείο για διάγνωση', diag_copy:'Αντιγραφή', diag_hint:'Για να μου στείλεις ένα πρόβλημα: κρατά το πρόγραμμα και τις διαθεσιμότητες, χωρίς ονόματα, διευθύνσεις ή τηλέφωνα.', diag_title:'Αρχείο χωρίς προσωπικά στοιχεία', diag_text:'Θα φτιαχτεί αρχείο με τους πελάτες σου ({n}) ως «Πελάτης 1, 2, …». Δεν περιέχει ονόματα, διευθύνσεις, τηλέφωνα, σημειώσεις, κλειδιά ούτε κωδικό συγχρονισμού. Οι θέσεις στρογγυλεύονται στα ~100 μέτρα. Περιέχει το πρόγραμμα, τις διαθεσιμότητες, τις διάρκειες και το ωράριό σου.', diag_ok:'Δημιουργία', diag_saved:'Το αρχείο αποθηκεύτηκε', gap_who_fits:'Ποιος χωράει εδώ;', gap_kind_relocate:'Μεταφέρεται σε άλλη μέρα ({day}) και κλείνει την αναμονή', gap_relocate_dearer:'(λίγο πιο ακριβό)', gap_why_not_head:'Ο/Η {name} δεν πάει αλλού:', gap_why_unavailable:'δεν είναι διαθέσιμος/η', gap_why_already:'είναι ήδη στο πρόγραμμα αυτή τη μέρα', gap_why_noroom:'δεν χωράει στο ωράριο', gap_why_illegal:'θα έσπαγε κάποιον περιορισμό', gap_why_unknown:'άγνωστο', gap_who_hint:'{day}, {from}–{to}. Διάλεξε ποιον να μπει στο κενό.', gap_kind_unplaced:'Δεν έχει μπει ακόμα στο πρόγραμμα', gap_kind_move:'Μεταφέρεται από {day}', gap_nobody:'Κανείς δεν χωράει σε αυτό το κενό χωρίς να σπάσει κάποιον περιορισμό.', gap_no_longer_fits:'Δεν χωράει πια — κάτι άλλαξε στο πρόγραμμα.', gap_filled:'{name} μπήκε στις {time}', addr_exact:'ακριβής αριθμός', sync_stale_title:'Το αντίγραφο έχει παλιώσει', sync_stale_sub:'Έχεις {days} μέρες να στείλεις. Μετά από {left} μέρες αδράνειας το αντίγραφο στον διακομιστή διαγράφεται.', sync_rotate:'Αλλαγή κωδικού', sync_rotate_title:'Να αλλάξει ο κωδικός;', sync_rotate_text:'Ο νέος κωδικός είναι:\n\n{code}\n\nΚάθε άλλη συσκευή με τον παλιό θα χάσει την πρόσβαση αμέσως. Γράψ\u2019 τον πριν συνεχίσεις.', sync_rotate_ok:'Το έγραψα, άλλαξέ τον', sync_rotated:'Ο κωδικός άλλαξε', sync_failed:'Ο συγχρονισμός απέτυχε', sync_bad_code:'Ο κωδικός δεν είναι σωστός.', sync_join:'Σύνδεση', sync_join_hint:'Έχεις ήδη κωδικό από άλλη συσκευή;', sync_off:'Απενεργοποίηση', sync_off_title:'Απενεργοποίηση συγχρονισμού;', sync_off_text:'Τα δεδομένα μένουν σε αυτή τη συσκευή. Το αντίγραφο στον διακομιστή δεν διαγράφεται.', sync_off_ok:'Απενεργοποίηση', sync_off_done:'Ο συγχρονισμός απενεργοποιήθηκε', sync_not_primary_title:'Γράφει άλλη συσκευή', sync_not_primary_text:'Άλλη συσκευή είναι ορισμένη ως η κύρια. Θες αυτή εδώ να πάρει τη θέση της;', sync_take_over:'Ανάληψη', sync_conflict_title:'Υπάρχει νεότερο αντίγραφο', sync_conflict_text:'Κάποια συσκευή αποθήκευσε στις {when}. Αν στείλεις τώρα θα σβηστεί. Θες να φέρεις πρώτα το δικό της;', sync_take_theirs:'Φέρε το νεότερο', sync_pull_title:'Λήψη αντιγράφου;', sync_pull_text:'Θα αντικατασταθούν τα δεδομένα αυτής της συσκευής με το αντίγραφο της {when}.', sync_pull_ok:'Αντικατάσταση', gap_because_day_start:'Η μέρα σου δεν έχει ανοίξει ακόμα.', gap_unexplained:'Κανένας περιορισμός δεν το εξηγεί — μπορεί να κλείσει με νέο υπολογισμό.', settings_end_flex:'Ανοχή στο τέλος της μέρας (λεπτά)', settings_end_flex_hint:'Πόσο μπορεί να ξεπεράσει ένα ραντεβού το ωράριό σου. 0 σημαίνει ούτε λεπτό.', day_hours_assumed:'Δεν έχεις ορίσει ωράριο για {day} — χρησιμοποιώ {from}–{to} από τις άλλες μέρες σου.', day_waiting_total:'Αναμονή: {n} λεπτά', day_wait_window:'{n} λεπτά πριν από «{before}» — ο πελάτης δίνει μόνο αυτό το παράθυρο.', day_wait_gap:'{n} λεπτά κενό μετά από «{after}».', day_reserved_max:'κρατημένο για {n} λεπτά (ελάχιστο {min})', send_title:'Στείλε τις ώρες', send_hint:'Άλλαξε το κείμενο αν θες και μετά διάλεξε τρόπο αποστολής.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Αντιγραφή', send_no_times:'Δεν έχει ώρες στο πρόγραμμα ακόμα.', send_no_phone:'Πρόσθεσε τηλέφωνο στην καρτέλα για WhatsApp ή SMS. Μπορείς πάντως να αντιγράψεις το κείμενο.', send_copied:'Το κείμενο αντιγράφηκε', send_copy_failed:'Δεν μπόρεσα να αντιγράψω — κράτα το κείμενο πατημένο και αντίγραψέ το.', send_intro:'Γεια σου! Οι ώρες μας:', send_job_intro:'Γεια σου! Θα είμαι εκεί:', send_sign:'— {name}', form_phone_label:'Τηλέφωνο (προαιρετικό)', form_phone_ph:'π.χ. 6941234567', student_phone_label:'Τηλέφωνο', settings_country_code:'Κωδικός χώρας (για WhatsApp)', settings_country_code_hint:'Μπαίνει μπροστά σε τοπικά νούμερα. Για Ελλάδα 30.', backup_student_bad_phone:'Ο πελάτης {name} έχει άκυρο τηλέφωνο', backup_jobs_not_list:'Οι δουλειές δεν είναι λίστα',
     backup_not_an_object:'Το αρχείο δεν είναι αντίγραφο RoutePal', backup_students_not_list:'Η λίστα πελατών λείπει ή είναι κατεστραμμένη', backup_student_bad:'Η εγγραφή #{n} δεν είναι έγκυρη', backup_student_no_id:'Η εγγραφή #{n} δεν έχει αναγνωριστικό', backup_student_no_name:'Η εγγραφή #{n} δεν έχει όνομα', backup_student_bad_duration:'{name}: μη έγκυρη διάρκεια', backup_student_bad_count:'{name}: μη έγκυρος αριθμός ραντεβού', backup_student_bad_avail:'{name}: κατεστραμμένη διαθεσιμότητα', backup_settings_bad:'Οι ρυθμίσεις λείπουν ή είναι κατεστραμμένες', backup_workdays_bad:'Μη έγκυρες εργάσιμες ημέρες', backup_dayhours_bad:'Μη έγκυρο ωράριο', backup_blocked_bad:'Μη έγκυρες μπλοκαρισμένες ώρες', backup_schedule_bad:'Κατεστραμμένο πρόγραμμα', backup_coords_bad:'Κατεστραμμένες συντεταγμένες', backup_and_more:' · και {n} ακόμα',
     pair_distance_unknown:'απόσταση άγνωστη (η διεύθυνση δεν έχει εντοπιστεί ακόμα)',
@@ -1441,9 +1658,9 @@ const I18N = {
     print_title:'Πρόγραμμα', print_h1_sub:'Εβδομαδιαίο Πρόγραμμα', print_export_pdf:'Εξαγωγή ως PDF',
   },
   en: {
-    days:['','Mon','Tue','Wed','Thu','Fri','Sat'],
+    days:['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
     subjects:{'Μαθηματικά':'Math','Φυσική':'Physics','Χημεία':'Chemistry','Βιολογία':'Biology','Αγγλικά':'English','Ιστορία':'History','Γεωγραφία':'Geography','Λογοτεχνία':'Literature','Πληροφορική':'Computer Science','Άλγεβρα':'Algebra','Γεωμετρία':'Geometry','Άλλο':'Other','physio_rehab':'Rehabilitation','physio_back':'Back & neck','physio_sports':'Sports injury','physio_post_op':'Post-operative','physio_neuro':'Neurological','physio_manual':'Manual therapy','physio_resp':'Respiratory','mass_relax':'Relaxing','mass_deep':'Deep tissue','mass_sports':'Sports','mass_lymph':'Lymphatic','mass_preg':'Prenatal','mass_reflex':'Reflexology','beauty_facial':'Facial','beauty_mani':'Manicure','beauty_pedi':'Pedicure','beauty_wax':'Waxing','beauty_lash':'Lashes & brows','beauty_makeup':'Make-up','beauty_hair':'Hair','pt_strength':'Strength','pt_cardio':'Cardio','pt_hiit':'HIIT','pt_mobility':'Mobility','pt_pilates':'Pilates','pt_yoga':'Yoga','pt_rehab':'Return to sport','pt_assessment':'Assessment','mus_piano':'Piano','mus_guitar':'Guitar','mus_violin':'Violin','mus_drums':'Drums','mus_voice':'Voice','mus_bass':'Bass','mus_theory':'Theory','sp_artic':'Articulation','sp_lang':'Language development','sp_fluency':'Fluency','sp_voice':'Voice','sp_swallow':'Swallowing','sp_learning':'Learning difficulties','psy_individual':'Individual','psy_couple':'Couples','psy_family':'Family','psy_child':'Child','psy_cbt':'CBT','psy_assessment':'Assessment','cl_general':'General clean','cl_deep':'Deep clean','cl_windows':'Windows','cl_move':'Move-in / move-out','cl_office':'Office','cl_ironing':'Ironing','pet_walk':'Walk','pet_groom':'Grooming','pet_train':'Training','pet_sit':'Sitting','pet_vet':'Vet visit','rep_plumbing':'Plumbing','rep_electrical':'Electrical','rep_appliance':'Appliances','rep_hvac':'Heating & cooling','rep_carpentry':'Carpentry','rep_paint':'Painting','rep_it':'Computers','gen_consult':'Consultation','gen_meeting':'Meeting','gen_service':'Service call','gen_followup':'Follow-up'},
-    daysFull:['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+    daysFull:['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
     nav_home:'Home', nav_students:'Students', nav_schedule:'Schedule', nav_route:'Route', nav_settings:'Settings',
     home_title:'Weekly Schedule', home_today:'Today', home_no_lessons_today:'Nothing scheduled today',
     home_not_working_today:'Not working today', home_all_fit:'Everything fits!',
@@ -1538,6 +1755,9 @@ const I18N = {
     ob_where:'WHERE DO YOU WORK', ob_mode_clients:'At clients', ob_mode_place:'At my place', ob_mode_both:'Both', first_title:'What do you have today?', first_sub:'Type your jobs separated by commas, e.g. “Smith 12 High St at 10, pharmacy”. You get an order, times and a route.', first_go:'Add and plan the day', first_weekly:'I have regular clients every week', paste_btn:'Paste a list', paste_title:'Several clients at once', paste_hint:'One per line: name, address, times per week. E.g. “Maria, 12 High St, 2”. Times per week is optional.', paste_ph:'Maria, 12 High St, 2\nGeorge, 5 Park Rd', paste_add:'Add', paste_done:'{n} added', paste_skipped:'{n} lines without an address were left out', paste_none:'Nobody found. Write one per line: name, address.',
     deep_offer:'Some appointments did not fit. A deeper search (2–3 minutes) may fit them.', deep_btn:'Search deeper',
     week_map_toggle:'Map of the day', unplaced_see:'See options', lock_hint:'Tap the padlock on an appointment to keep it on its day and time in every new plan.', lock_hint_ok:'Got it',
+    settings_split_hint:'Split shifts? Tap “Add an interval” on a day, e.g. 9:00–13:00 and 17:00–21:00. Nothing is booked in between.',
+    cmd_unavail:'{name}: can\'t do {days} {from}–{to}. Plan again to apply it.', cmd_unavail_day:'{name}: can\'t do {days}. Plan again to apply it.', cmd_perweek:'{name}: {n} times a week.', cmd_address:'{name}: new address {address}.', cmd_ambiguous:'Which one? {names}. Say the surname too.', voice_examples:'E.g. “George can’t Tuesday from 5 to 7”, “Maria 2 times”, “pharmacy tomorrow at 11”.',
+    cal_import_btn:'From a calendar (.ics)', cal_import_hint:'Google Calendar: Settings → Import & export → Export, then pick the .ics file. Each appointment title becomes a client.', cal_import_done:'{n} clients added from {k} appointments this week.', cal_import_skipped:'{n} without an address were left out', cal_import_none:'No timed appointments found in the file.', ba_before_own:'Your schedule (calendar)',
     send_times_btn:'Send times', sync_title:'Device sync', sync_intro:'Keeps a copy online so you can open it on another device. The data is encrypted here, on this device — the server cannot read it.', sync_enable:'Turn on sync', sync_enable_title:'Turn on sync?', sync_enable_text:'Your code is:\n\n{code}\n\nWrite it down. It is the encryption key and is NOT stored anywhere else — lose it and the copy on the server is gone with it.', sync_enable_ok:'Written down, continue', sync_enabled:'Sync is on', sync_unavailable:'Sync is not available in this build.', sync_this_is_primary:'This device writes.', sync_this_is_reader:'This device only reads.', sync_last_push:'Last sent: {when}', sync_copy_code:'Copy code', sync_push:'Send', sync_pull:'Fetch', sync_pushed:'Sent', sync_pulled:'Fetched', sync_nothing_yet:'There is no copy yet.', sync_up_to_date:'Already up to date.', day_move_up:'Earlier', day_move_down:'Later', day_move_illegal:'It does not fit in that order: some hours or availability would break. Nothing changed.', day_moved:'Order changed — the times were recalculated.', qn_placeholder:'e.g. dentist tomorrow at 11', qn_add:'Add', day_hours_for:'Hours for this day', day_hours_invalid:'The end must be after the start.', mode_errands:'Errands', errand_title:'My errands', errand_add:'New errand', errand_ph:'e.g. pharmacy tomorrow, bank at 11', errand_none:'Type what you need to do above and press Plan the day.', errand_name:'What you need to do', errand_name_ph:'e.g. Pharmacy', day_to_next:'To the next day', day_moved_to:'Moved to {date}', day_map_note:'The line shows the order, not the road.', day_far_warn:'This position is {km} km from your home — probably a wrong lookup. Open Edit and pick the right address.', phase_refine_title:'Fitting the rest', phase_refine_sub:'Moving appointments between days and tightening the routes', qn_added_many:'{n} added — check them and press Plan the day.', settings_fuel_price_label:'Fuel price (€/litre)', gmaps_find:'Find in Google Maps', gmaps_type_first:'Type a name or an address first.', gmaps_paste_hint:'Find the place, tap Share → Copy link, and paste it into the address.', gmaps_short_link:'This short link does not carry the position. Open it and copy the full link from the address bar, or type the address.', gps_here:'I am here (GPS)', gps_locating:'Finding your position…', gps_ok:'Position from GPS (±{m} m) — kept for good.', gps_rough:'Position from GPS, accurate to ±{m} m. If you are indoors, step outside and tap again.', gps_denied:'Location permission was not given. Turn it on in the phone settings.', gps_failed:'No position found. Try again in the open.', gps_unavailable:'This device does not give a position.', addr_street_only:'position on the street, not the house', loc_approx:'on the street', loc_temp:'temporary position', loc_fix_hint:'On the next visit tap "I am here" (or drag the pin) to keep the right position.', form_flex_label:'Hours a week, flexible (optional)', form_flex_ph:'e.g. 4', form_flex_min:'Shortest piece', form_flex_min_opt:'at least {n}′', form_flex_max:'Longest piece', form_flex_max_opt:'up to {n}′', form_flex_hint:'Type the total (e.g. 4) if the split does not matter: it starts from the longest pieces and, if they do not fit, splits them — 2+2, 2+1+1, 1+1+1+1 — down to the shortest piece.', form_durations_label:'Different lengths (optional)', form_durations_ph:'e.g. 120, 90', form_durations_hint:'For appointments of different lengths in the same week. Write the minutes with commas: "120, 90" = one of two hours and one of ninety minutes. Leave empty if they are all the same.', home_next:'Next', home_directions:'Directions from here', home_add_ph:'Add… e.g. pharmacy, bank at 11', home_today_empty:'Nothing for today. Type something above or open the schedule.', job_done:'Done', qn_added_one:'Added: {name}', cal_add:'Calendar', cal_nothing:'Nothing with a time today.', cal_saved:'{n} appointments for your calendar, with a reminder 15′ before. Open the file to add them.', remind_enable:'Reminders', remind_on:'You will be reminded 15′ before each appointment while the app is open. For reminders with the app closed, tap Calendar.', remind_denied:'Notifications were not allowed. Tap Calendar to be reminded by the phone\u2019s calendar.', remind_title:'In {min}′: {name}', day_home_missing:'Your home address could not be found. Check it in Settings.', day_unlocated:'{n} jobs with no position on the map — not planned', day_no_address:'no address', day_times_here:'Travel times: HERE, with traffic.', day_times_osrm:'Travel times: OpenStreetMap, no traffic.', day_times_estimate:'Travel times are approximate — the map could not be reached.', settings_time_factor:'Map time correction (%)', settings_time_factor_hint:'The map works out times with no traffic lights or queues, so it usually says less than a drive really takes. Enter how much slower you actually drive, in % (0 = as the map says). Applies from the next Refresh, and only when times do not come from HERE, which already includes traffic.', gap_refined:'The other days were refined: {n} changes.', diag_btn:'File for diagnosis', diag_copy:'Copy', diag_hint:'To send a problem: keeps the schedule and availability, without names, addresses or phone numbers.', diag_title:'A file with no personal details', diag_text:'A file will be made with your clients ({n}) as "Client 1, 2, …". It contains no names, addresses, phone numbers, notes, keys or sync code. Locations are rounded to ~100 metres. It holds the schedule, availability, durations and your working hours.', diag_ok:'Create', diag_saved:'File saved', gap_who_fits:'Who fits here?', gap_kind_relocate:'Moves to another day ({day}) and closes the wait', gap_relocate_dearer:'(slightly costlier)', gap_why_not_head:'{name} cannot go elsewhere:', gap_why_unavailable:'not available', gap_why_already:'is already scheduled that day', gap_why_noroom:'does not fit the hours', gap_why_illegal:'would break a constraint', gap_why_unknown:'unknown', gap_who_hint:'{day}, {from}–{to}. Pick who goes into the gap.', gap_kind_unplaced:'Not scheduled yet this week', gap_kind_move:'Moves over from {day}', gap_nobody:'Nobody fits this gap without breaking a constraint.', gap_no_longer_fits:'It no longer fits — something changed in the schedule.', gap_filled:'{name} added at {time}', addr_exact:'exact number', sync_stale_title:'The copy is out of date', sync_stale_sub:'It has been {days} days since you sent. After {left} more idle days the copy on the server is deleted.', sync_rotate:'Change the code', sync_rotate_title:'Change the code?', sync_rotate_text:'The new code is:\n\n{code}\n\nEvery other device holding the old one loses access immediately. Write it down before continuing.', sync_rotate_ok:'Written down, change it', sync_rotated:'The code has changed', sync_failed:'Sync failed', sync_bad_code:'That code is not right.', sync_join:'Connect', sync_join_hint:'Already have a code from another device?', sync_off:'Turn off', sync_off_title:'Turn off sync?', sync_off_text:'The data stays on this device. The copy on the server is not deleted.', sync_off_ok:'Turn off', sync_off_done:'Sync is off', sync_not_primary_title:'Another device writes', sync_not_primary_text:'Another device is set as the one that writes. Should this one take over?', sync_take_over:'Take over', sync_conflict_title:'There is a newer copy', sync_conflict_text:'A device saved at {when}. Sending now would erase it. Fetch theirs first?', sync_take_theirs:'Fetch the newer one', sync_pull_title:'Fetch the copy?', sync_pull_text:"This device's data will be replaced with the copy from {when}.", sync_pull_ok:'Replace', gap_because_day_start:'Your day has not started yet.', gap_unexplained:'No constraint accounts for this — recalculating may close it.', settings_end_flex:'End-of-day tolerance (minutes)', settings_end_flex_hint:'How far an appointment may run past your hours. 0 means not a minute.', day_hours_assumed:'You have set no hours for {day} — using {from}–{to} from your other days.', day_waiting_total:'Waiting: {n} minutes', day_wait_window:'{n} minutes before \u201c{before}\u201d — the customer only offers that window.', day_wait_gap:'{n} minutes idle after \u201c{after}\u201d.', day_reserved_max:'booked for {n} minutes (minimum {min})', send_title:'Send the times', send_hint:'Edit the text if you like, then pick how to send it.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copy', send_no_times:'Nothing scheduled for them yet.', send_no_phone:'Add a phone number on the card to use WhatsApp or SMS. You can still copy the text.', send_copied:'Text copied', send_copy_failed:"Couldn't copy — select the text and copy it by hand.", send_intro:'Hi {name}, here are our times:', send_job_intro:'Hi {name}, I will be there:', send_sign:'— {name}', form_phone_label:'Phone (optional)', form_phone_ph:'e.g. 6941234567', student_phone_label:'Phone', settings_country_code:'Country code (for WhatsApp)', settings_country_code_hint:'Added in front of local numbers. Greece is 30.', backup_student_bad_phone:'Client {name} has an invalid phone number', backup_jobs_not_list:'Jobs are not a list',
     backup_not_an_object:'This file is not a RoutePal backup', backup_students_not_list:'The client list is missing or corrupt', backup_student_bad:'Record #{n} is not valid', backup_student_no_id:'Record #{n} has no identifier', backup_student_no_name:'Record #{n} has no name', backup_student_bad_duration:'{name}: invalid session length', backup_student_bad_count:'{name}: invalid number of appointments', backup_student_bad_avail:'{name}: corrupt availability', backup_settings_bad:'The settings are missing or corrupt', backup_workdays_bad:'Invalid working days', backup_dayhours_bad:'Invalid working hours', backup_blocked_bad:'Invalid blocked times', backup_schedule_bad:'Corrupt schedule', backup_coords_bad:'Corrupt coordinates', backup_and_more:' · and {n} more',
     pair_distance_unknown:'distance unknown (the address is not located yet)',
@@ -1637,9 +1857,9 @@ const I18N = {
     print_title:'Schedule', print_h1_sub:'Weekly Schedule', print_export_pdf:'Export as PDF',
   },
   fr: {
-    days:['','Lun','Mar','Mer','Jeu','Ven','Sam'],
+    days:['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'],
     subjects:{'Μαθηματικά':'Mathématiques','Φυσική':'Physique','Χημεία':'Chimie','Βιολογία':'Biologie','Αγγλικά':'Anglais','Ιστορία':'Histoire','Γεωγραφία':'Géographie','Λογοτεχνία':'Littérature','Πληροφορική':'Informatique','Άλγεβρα':'Algèbre','Γεωμετρία':'Géométrie','Άλλο':'Autre','physio_rehab':'Rééducation','physio_back':'Dos et nuque','physio_sports':'Blessure sportive','physio_post_op':'Post-opératoire','physio_neuro':'Neurologique','physio_manual':'Thérapie manuelle','physio_resp':'Respiratoire','mass_relax':'Relaxant','mass_deep':'Tissus profonds','mass_sports':'Sportif','mass_lymph':'Lymphatique','mass_preg':'Prénatal','mass_reflex':'Réflexologie','beauty_facial':'Soin du visage','beauty_mani':'Manucure','beauty_pedi':'Pédicure','beauty_wax':'Épilation','beauty_lash':'Cils et sourcils','beauty_makeup':'Maquillage','beauty_hair':'Coiffure','pt_strength':'Renforcement','pt_cardio':'Cardio','pt_hiit':'HIIT','pt_mobility':'Mobilité','pt_pilates':'Pilates','pt_yoga':'Yoga','pt_rehab':'Reprise du sport','pt_assessment':'Évaluation','mus_piano':'Piano','mus_guitar':'Guitare','mus_violin':'Violon','mus_drums':'Batterie','mus_voice':'Chant','mus_bass':'Basse','mus_theory':'Théorie','sp_artic':'Articulation','sp_lang':'Développement du langage','sp_fluency':'Fluidité','sp_voice':'Voix','sp_swallow':'Déglutition','sp_learning':'Troubles des apprentissages','psy_individual':'Individuelle','psy_couple':'Couple','psy_family':'Familiale','psy_child':'Enfant','psy_cbt':'TCC','psy_assessment':'Évaluation','cl_general':'Ménage courant','cl_deep':'Grand ménage','cl_windows':'Vitres','cl_move':'Déménagement','cl_office':'Bureau','cl_ironing':'Repassage','pet_walk':'Promenade','pet_groom':'Toilettage','pet_train':'Éducation','pet_sit':'Garde','pet_vet':'Visite vétérinaire','rep_plumbing':'Plomberie','rep_electrical':'Électricité','rep_appliance':'Électroménager','rep_hvac':'Chauffage et clim','rep_carpentry':'Menuiserie','rep_paint':'Peinture','rep_it':'Informatique','gen_consult':'Consultation','gen_meeting':'Rendez-vous','gen_service':'Prestation','gen_followup':'Suivi'},
-    daysFull:['','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'],
+    daysFull:['','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'],
     nav_home:'Accueil', nav_students:'Élèves', nav_schedule:'Programme', nav_route:'Itinéraire', nav_settings:'Réglages',
     home_title:'Programme Hebdomadaire', home_today:"Aujourd'hui", home_no_lessons_today:"Pas de cours aujourd'hui",
     home_not_working_today:"Pas de travail aujourd'hui", home_all_fit:'Tout le monde est casé !',
@@ -1734,6 +1954,9 @@ const I18N = {
     ob_where:'OÙ TRAVAILLEZ-VOUS', ob_mode_clients:'Chez les clients', ob_mode_place:'Chez moi', ob_mode_both:'Les deux', first_title:'Qu\'avez-vous aujourd\'hui ?', first_sub:'Écrivez vos tâches séparées par des virgules, p. ex. « Dupont 12 rue Haute à 10 h, pharmacie ». Vous obtenez un ordre, des heures et un trajet.', first_go:'Ajouter et planifier la journée', first_weekly:'J\'ai des clients réguliers chaque semaine', paste_btn:'Coller une liste', paste_title:'Plusieurs clients à la fois', paste_hint:'Un par ligne : nom, adresse, fois par semaine. P. ex. « Marie, 12 rue Haute, 2 ». Le nombre de fois est facultatif.', paste_ph:'Marie, 12 rue Haute, 2\nGeorges, 5 rue du Parc', paste_add:'Ajouter', paste_done:'{n} ajoutés', paste_skipped:'{n} lignes sans adresse ont été ignorées', paste_none:'Personne trouvé. Écrivez un par ligne : nom, adresse.',
     deep_offer:'Certains rendez-vous n\'ont pas trouvé de place. Une recherche plus poussée (2–3 minutes) peut les caser.', deep_btn:'Chercher plus',
     week_map_toggle:'Carte du jour', unplaced_see:'Voir les solutions', lock_hint:'Touchez le cadenas d\'un rendez-vous pour le garder à son jour et son heure à chaque nouveau calcul.', lock_hint_ok:'Compris',
+    settings_split_hint:'Horaire coupé ? Touchez « Ajouter une plage » sur un jour, p. ex. 9:00–13:00 et 17:00–21:00. Rien n\'est placé entre les deux.',
+    cmd_unavail:'{name} : indisponible {days} {from}–{to}. Recalculez pour l\'appliquer.', cmd_unavail_day:'{name} : indisponible {days}. Recalculez pour l\'appliquer.', cmd_perweek:'{name} : {n} fois par semaine.', cmd_address:'{name} : nouvelle adresse {address}.', cmd_ambiguous:'Lequel ? {names}. Dites aussi le nom.', voice_examples:'P. ex. « pharmacie demain à 11 ».',
+    cal_import_btn:'Depuis un agenda (.ics)', cal_import_hint:'Google Agenda : Paramètres → Importer et exporter → Exporter, puis choisissez le fichier .ics. Chaque titre devient un client.', cal_import_done:'{n} clients ajoutés à partir de {k} rendez-vous de la semaine.', cal_import_skipped:'{n} sans adresse ignorés', cal_import_none:'Aucun rendez-vous avec heure dans le fichier.', ba_before_own:'Votre planning (agenda)',
     send_times_btn:'Envoyer les horaires', sync_title:'Synchronisation', sync_intro:'Garde une copie en ligne, ouvrable depuis un autre appareil. Les données sont chiffrées ici — le serveur ne peut pas les lire.', sync_enable:'Activer la synchronisation', sync_enable_title:'Activer la synchronisation ?', sync_enable_text:'Votre code :\n\n{code}\n\nNotez-le. C\u2019est la clé de chiffrement et elle n\u2019est stockée nulle part ailleurs — perdue, la copie sur le serveur l\u2019est aussi.', sync_enable_ok:'C\u2019est noté', sync_enabled:'Synchronisation activée', sync_unavailable:'La synchronisation n\u2019est pas disponible ici.', sync_this_is_primary:'Cet appareil écrit.', sync_this_is_reader:'Cet appareil lit seulement.', sync_last_push:'Dernier envoi : {when}', sync_copy_code:'Copier le code', sync_push:'Envoyer', sync_pull:'Récupérer', sync_pushed:'Envoyé', sync_pulled:'Récupéré', sync_nothing_yet:'Aucune copie pour l\u2019instant.', sync_up_to_date:'Déjà à jour.', day_move_up:'Plus tôt', day_move_down:'Plus tard', day_move_illegal:'Ça ne rentre pas dans cet ordre : un horaire ou une disponibilité serait enfreint. Rien n\u2019a changé.', day_moved:'Ordre modifié — les horaires ont été recalculés.', qn_placeholder:'ex. dentiste demain à 11h', qn_add:'Ajouter', day_hours_for:'Horaires de ce jour', day_hours_invalid:'La fin doit être après le début.', mode_errands:'Courses', errand_title:'Mes courses', errand_add:'Nouvelle course', errand_ph:'ex. pharmacie demain, banque à 11h', errand_none:'Écrivez ci-dessus ce que vous avez à faire, puis appuyez sur Planifier la journée.', errand_name:'Ce que vous avez à faire', errand_name_ph:'ex. Pharmacie', day_to_next:'Au jour suivant', day_moved_to:'Déplacé au {date}', day_map_note:'La ligne montre l\u2019ordre, pas la route.', day_far_warn:'Cette position est à {km} km de chez vous — probablement une mauvaise recherche. Ouvrez Modifier et choisissez la bonne adresse.', phase_refine_title:'Placer les derniers', phase_refine_sub:'Je déplace des cours entre les jours et resserre les trajets', qn_added_many:'{n} ajoutés — vérifiez-les puis appuyez sur Planifier la journée.', settings_fuel_price_label:'Prix du carburant (€/litre)', gmaps_find:'Chercher dans Google Maps', gmaps_type_first:'Saisissez d\u2019abord un nom ou une adresse.', gmaps_paste_hint:'Trouvez le lieu, appuyez sur Partager → Copier le lien, puis collez-le dans l\u2019adresse.', gmaps_short_link:'Ce lien court ne contient pas la position. Ouvrez-le et copiez le lien complet depuis la barre d\u2019adresse, ou saisissez l\u2019adresse.', gps_here:'Je suis ici (GPS)', gps_locating:'Recherche de votre position…', gps_ok:'Position GPS (±{m} m) — conservée.', gps_rough:'Position GPS à ±{m} m près. Si vous êtes à l\u2019intérieur, sortez et réessayez.', gps_denied:'L\u2019accès à la position n\u2019a pas été autorisé. Activez-le dans les réglages du téléphone.', gps_failed:'Aucune position trouvée. Réessayez à découvert.', gps_unavailable:'Cet appareil ne fournit pas de position.', addr_street_only:'position dans la rue, pas à la maison', loc_approx:'dans la rue', loc_temp:'position temporaire', loc_fix_hint:'À la prochaine visite, appuyez sur « Je suis ici » (ou déplacez l\u2019épingle) pour garder la bonne position.', form_flex_label:'Heures par semaine, flexibles (facultatif)', form_flex_ph:'ex. 4', form_flex_min:'Durée minimale', form_flex_min_opt:'au moins {n}′', form_flex_max:'Durée maximale', form_flex_max_opt:'jusqu\u2019à {n}′', form_flex_hint:'Indiquez le total (ex. 4) si le découpage importe peu : on part des plus longues séances puis, si cela ne tient pas, on découpe — 2+2, 2+1+1, 1+1+1+1 — jusqu\u2019à la durée minimale.', form_durations_label:'Durées différentes (facultatif)', form_durations_ph:'ex. 120, 90', form_durations_hint:'Pour des rendez-vous de durées différentes la même semaine. Indiquez les minutes séparées par des virgules : « 120, 90 ». Laissez vide si tous ont la même durée.', home_next:'Prochain', home_directions:'Itinéraire depuis ici', home_add_ph:'Ajouter… ex. pharmacie, banque à 11h', home_today_empty:'Rien aujourd\u2019hui. Écrivez quelque chose ci-dessus ou ouvrez le planning.', job_done:'Fait', qn_added_one:'Ajouté : {name}', cal_add:'Calendrier', cal_nothing:'Rien avec une heure aujourd\u2019hui.', cal_saved:'{n} rendez-vous pour votre calendrier, avec un rappel 15′ avant. Ouvrez le fichier pour les ajouter.', remind_enable:'Rappels', remind_on:'Vous serez prévenu 15′ avant chaque rendez-vous tant que l\u2019app est ouverte. Pour des rappels app fermée, appuyez sur Calendrier.', remind_denied:'Les notifications n\u2019ont pas été autorisées. Appuyez sur Calendrier pour des rappels du calendrier du téléphone.', remind_title:'Dans {min}′ : {name}', day_home_missing:'Votre adresse n\u2019a pas été trouvée. Vérifiez-la dans les Réglages.', day_unlocated:'{n} interventions sans position sur la carte — non planifiées', day_no_address:'sans adresse', day_times_here:'Durées de trajet : HERE, avec trafic.', day_times_osrm:'Durées de trajet : OpenStreetMap, sans trafic.', day_times_estimate:'Les durées de trajet sont approximatives — la carte n\u2019a pas pu être jointe.', settings_time_factor:'Correction des durées (%)', settings_time_factor_hint:'La carte calcule sans feux ni embouteillages, donc elle annonce souvent moins que le trajet réel. Indiquez de combien de % vous roulez plus lentement (0 = comme la carte). Appliqué au prochain rafraîchissement, et seulement si les durées ne viennent pas de HERE, qui inclut déjà le trafic.', gap_refined:'Les autres jours ont été affinés : {n} changements.', diag_btn:'Fichier de diagnostic', diag_copy:'Copier', diag_hint:'Pour signaler un problème : garde le planning et les disponibilités, sans noms, adresses ni téléphones.', diag_title:'Un fichier sans données personnelles', diag_text:'Un fichier sera créé avec vos clients ({n}) nommés « Client 1, 2, … ». Il ne contient ni noms, ni adresses, ni téléphones, ni notes, ni clés, ni code de synchronisation. Les positions sont arrondies à ~100 mètres. Il contient le planning, les disponibilités, les durées et vos horaires.', diag_ok:'Créer', diag_saved:'Fichier enregistré', gap_who_fits:'Qui rentre ici ?', gap_kind_relocate:'Change de jour ({day}) et supprime l\u2019attente', gap_relocate_dearer:'(un peu plus coûteux)', gap_why_not_head:'{name} ne peut pas aller ailleurs :', gap_why_unavailable:'indisponible', gap_why_already:'a déjà un cours', gap_why_noroom:'ne rentre pas dans les horaires', gap_why_illegal:'enfreindrait une contrainte', gap_why_unknown:'inconnu', gap_who_hint:'{day}, {from}–{to}. Choisissez qui met dans le créneau.', gap_kind_unplaced:'N\u2019a pas encore son cours', gap_kind_move:'Déplacé depuis {day}', gap_nobody:'Personne ne rentre dans ce créneau sans enfreindre une contrainte.', gap_no_longer_fits:'Ne rentre plus — le planning a changé.', gap_filled:'{name} ajouté à {time}', addr_exact:'numéro exact', sync_stale_title:'La copie est ancienne', sync_stale_sub:'{days} jours depuis le dernier envoi. Après {left} jours d\u2019inactivité, la copie sur le serveur est supprimée.', sync_rotate:'Changer le code', sync_rotate_title:'Changer le code ?', sync_rotate_text:'Le nouveau code :\n\n{code}\n\nTout autre appareil avec l\u2019ancien perd l\u2019accès immédiatement. Notez-le avant de continuer.', sync_rotate_ok:'Noté, changez-le', sync_rotated:'Le code a changé', sync_failed:'Échec de la synchronisation', sync_bad_code:'Ce code est incorrect.', sync_join:'Connecter', sync_join_hint:'Vous avez déjà un code ?', sync_off:'Désactiver', sync_off_title:'Désactiver la synchronisation ?', sync_off_text:'Les données restent sur cet appareil. La copie sur le serveur n\u2019est pas supprimée.', sync_off_ok:'Désactiver', sync_off_done:'Synchronisation désactivée', sync_not_primary_title:'Un autre appareil écrit', sync_not_primary_text:'Un autre appareil est celui qui écrit. Celui-ci doit-il prendre le relais ?', sync_take_over:'Prendre le relais', sync_conflict_title:'Une copie plus récente existe', sync_conflict_text:'Un appareil a enregistré à {when}. Envoyer maintenant l\u2019effacerait. Récupérer la sienne ?', sync_take_theirs:'Récupérer la plus récente', sync_pull_title:'Récupérer la copie ?', sync_pull_text:'Les données de cet appareil seront remplacées par la copie du {when}.', sync_pull_ok:'Remplacer', gap_because_day_start:'Votre journée n\u2019a pas encore commencé.', gap_unexplained:'Aucune contrainte ne l\u2019explique — un recalcul peut le combler.', settings_end_flex:'Tolérance en fin de journée (minutes)', settings_end_flex_hint:'De combien un rendez-vous peut dépasser vos horaires. 0 : pas une minute.', day_hours_assumed:'Aucun horaire défini pour {day} — j\u2019utilise {from}–{to}, vos horaires des autres jours.', day_waiting_total:'Attente : {n} minutes', day_wait_window:'{n} minutes avant « {before} » — le client ne propose que ce créneau.', day_wait_gap:'{n} minutes creuses après « {after} ».', day_reserved_max:'réservé {n} minutes (minimum {min})', send_title:'Envoyer les horaires', send_hint:'Modifiez le texte si besoin, puis choisissez le mode d\u2019envoi.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Copier', send_no_times:'Aucun horaire pour le moment.', send_no_phone:'Ajoutez un téléphone sur la fiche pour WhatsApp ou SMS. Vous pouvez tout de même copier le texte.', send_copied:'Texte copié', send_copy_failed:'Copie impossible — sélectionnez le texte et copiez-le manuellement.', send_intro:'Bonjour {name}, voici nos horaires :', send_job_intro:'Bonjour {name}, je serai là :', send_sign:'— {name}', form_phone_label:'Téléphone (facultatif)', form_phone_ph:'ex. 0612345678', student_phone_label:'Téléphone', settings_country_code:'Indicatif pays (pour WhatsApp)', settings_country_code_hint:'Ajouté devant les numéros locaux. France : 33.', backup_student_bad_phone:'Le client {name} a un téléphone invalide', backup_jobs_not_list:'Les interventions ne sont pas une liste',
     backup_not_an_object:'Ce fichier n\u2019est pas une sauvegarde RoutePal', backup_students_not_list:'La liste des clients est absente ou corrompue', backup_student_bad:'L\u2019entrée #{n} n\u2019est pas valide', backup_student_no_id:'L\u2019entrée #{n} n\u2019a pas d\u2019identifiant', backup_student_no_name:'L\u2019entrée #{n} n\u2019a pas de nom', backup_student_bad_duration:'{name} : durée invalide', backup_student_bad_count:'{name} : nombre de séances invalide', backup_student_bad_avail:'{name} : disponibilité corrompue', backup_settings_bad:'Les réglages sont absents ou corrompus', backup_workdays_bad:'Jours de travail invalides', backup_dayhours_bad:'Horaires invalides', backup_blocked_bad:'Heures bloquées invalides', backup_schedule_bad:'Planning corrompu', backup_coords_bad:'Coordonnées corrompues', backup_and_more:' · et {n} autres',
     pair_distance_unknown:'distance inconnue (adresse pas encore localisée)',
@@ -1833,9 +2056,9 @@ const I18N = {
     print_title:'Programme', print_h1_sub:'Programme Hebdomadaire', print_export_pdf:'Exporter en PDF',
   },
   de: {
-    days:['','Mo','Di','Mi','Do','Fr','Sa'],
+    days:['','Mo','Di','Mi','Do','Fr','Sa','So'],
     subjects:{'Μαθηματικά':'Mathematik','Φυσική':'Physik','Χημεία':'Chemie','Βιολογία':'Biologie','Αγγλικά':'Englisch','Ιστορία':'Geschichte','Γεωγραφία':'Geografie','Λογοτεχνία':'Literatur','Πληροφορική':'Informatik','Άλγεβρα':'Algebra','Γεωμετρία':'Geometrie','Άλλο':'Sonstiges','physio_rehab':'Rehabilitation','physio_back':'Rücken & Nacken','physio_sports':'Sportverletzung','physio_post_op':'Postoperativ','physio_neuro':'Neurologisch','physio_manual':'Manuelle Therapie','physio_resp':'Atemtherapie','mass_relax':'Entspannung','mass_deep':'Tiefengewebe','mass_sports':'Sport','mass_lymph':'Lymphdrainage','mass_preg':'Schwangerschaft','mass_reflex':'Reflexzonen','beauty_facial':'Gesichtsbehandlung','beauty_mani':'Maniküre','beauty_pedi':'Pediküre','beauty_wax':'Haarentfernung','beauty_lash':'Wimpern & Brauen','beauty_makeup':'Make-up','beauty_hair':'Frisur','pt_strength':'Kraft','pt_cardio':'Ausdauer','pt_hiit':'HIIT','pt_mobility':'Mobilität','pt_pilates':'Pilates','pt_yoga':'Yoga','pt_rehab':'Wiedereinstieg','pt_assessment':'Bestandsaufnahme','mus_piano':'Klavier','mus_guitar':'Gitarre','mus_violin':'Violine','mus_drums':'Schlagzeug','mus_voice':'Gesang','mus_bass':'Bass','mus_theory':'Theorie','sp_artic':'Artikulation','sp_lang':'Sprachentwicklung','sp_fluency':'Redefluss','sp_voice':'Stimme','sp_swallow':'Schlucken','sp_learning':'Lernschwierigkeiten','psy_individual':'Einzel','psy_couple':'Paar','psy_family':'Familie','psy_child':'Kind','psy_cbt':'Verhaltenstherapie','psy_assessment':'Diagnostik','cl_general':'Grundreinigung','cl_deep':'Tiefenreinigung','cl_windows':'Fenster','cl_move':'Umzug','cl_office':'Büro','cl_ironing':'Bügeln','pet_walk':'Gassi','pet_groom':'Fellpflege','pet_train':'Training','pet_sit':'Betreuung','pet_vet':'Tierarztbesuch','rep_plumbing':'Sanitär','rep_electrical':'Elektrik','rep_appliance':'Haushaltsgeräte','rep_hvac':'Heizung & Klima','rep_carpentry':'Tischlerei','rep_paint':'Malerarbeiten','rep_it':'Computer','gen_consult':'Beratung','gen_meeting':'Termin','gen_service':'Dienstleistung','gen_followup':'Nachkontrolle'},
-    daysFull:['','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],
+    daysFull:['','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'],
     nav_home:'Start', nav_students:'Schüler', nav_schedule:'Stundenplan', nav_route:'Route', nav_settings:'Einstellungen',
     home_title:'Wochenplan', home_today:'Heute', home_no_lessons_today:'Heute keine Stunden',
     home_not_working_today:'Heute arbeitsfrei', home_all_fit:'Alle passen rein!',
@@ -1930,6 +2153,9 @@ const I18N = {
     ob_where:'WO ARBEITEST DU', ob_mode_clients:'Bei Kunden', ob_mode_place:'Bei mir', ob_mode_both:'Beides', first_title:'Was steht heute an?', first_sub:'Schreib deine Termine mit Komma getrennt, z. B. „Müller Hauptstr. 12 um 10, Apotheke“. Du bekommst Reihenfolge, Zeiten und Route.', first_go:'Hinzufügen und Tag planen', first_weekly:'Ich habe jede Woche feste Kunden', paste_btn:'Liste einfügen', paste_title:'Mehrere Kunden auf einmal', paste_hint:'Einer pro Zeile: Name, Adresse, Male pro Woche. Z. B. „Maria, Hauptstr. 12, 2“. Die Anzahl ist optional.', paste_ph:'Maria, Hauptstr. 12, 2\nGeorg, Parkweg 5', paste_add:'Hinzufügen', paste_done:'{n} hinzugefügt', paste_skipped:'{n} Zeilen ohne Adresse wurden ausgelassen', paste_none:'Niemand gefunden. Einer pro Zeile: Name, Adresse.',
     deep_offer:'Einige Termine fanden keinen Platz. Eine gründlichere Suche (2–3 Minuten) findet vielleicht einen.', deep_btn:'Gründlicher suchen',
     week_map_toggle:'Karte des Tages', unplaced_see:'Lösungen ansehen', lock_hint:'Tippe auf das Schloss eines Termins, damit er bei jeder neuen Planung an seinem Tag und seiner Zeit bleibt.', lock_hint_ok:'Verstanden',
+    settings_split_hint:'Geteilte Schicht? Tippe bei einem Tag auf „Zeitraum hinzufügen“, z. B. 9:00–13:00 und 17:00–21:00. Dazwischen wird nichts gebucht.',
+    cmd_unavail:'{name}: kann {days} {from}–{to} nicht. Neu planen, um es zu übernehmen.', cmd_unavail_day:'{name}: kann {days} nicht. Neu planen, um es zu übernehmen.', cmd_perweek:'{name}: {n}-mal pro Woche.', cmd_address:'{name}: neue Adresse {address}.', cmd_ambiguous:'Welcher? {names}. Sag auch den Nachnamen.', voice_examples:'Z. B. „Apotheke morgen um 11“.',
+    cal_import_btn:'Aus einem Kalender (.ics)', cal_import_hint:'Google Kalender: Einstellungen → Importieren & exportieren → Exportieren, dann die .ics-Datei wählen. Jeder Termintitel wird ein Kunde.', cal_import_done:'{n} Kunden aus {k} Terminen der Woche hinzugefügt.', cal_import_skipped:'{n} ohne Adresse ausgelassen', cal_import_none:'Keine Termine mit Uhrzeit in der Datei gefunden.', ba_before_own:'Dein Plan (Kalender)',
     send_times_btn:'Zeiten senden', sync_title:'Geräte-Sync', sync_intro:'Hält eine Kopie online, die Sie auf einem anderen Gerät öffnen können. Die Daten werden hier verschlüsselt — der Server kann sie nicht lesen.', sync_enable:'Sync einschalten', sync_enable_title:'Sync einschalten?', sync_enable_text:'Ihr Code:\n\n{code}\n\nSchreiben Sie ihn auf. Er ist der Schlüssel und wird nirgends sonst gespeichert — ist er weg, ist auch die Kopie auf dem Server weg.', sync_enable_ok:'Notiert, weiter', sync_enabled:'Sync ist an', sync_unavailable:'Sync ist in dieser Version nicht verfügbar.', sync_this_is_primary:'Dieses Gerät schreibt.', sync_this_is_reader:'Dieses Gerät liest nur.', sync_last_push:'Zuletzt gesendet: {when}', sync_copy_code:'Code kopieren', sync_push:'Senden', sync_pull:'Holen', sync_pushed:'Gesendet', sync_pulled:'Geholt', sync_nothing_yet:'Es gibt noch keine Kopie.', sync_up_to_date:'Bereits aktuell.', day_move_up:'Früher', day_move_down:'Später', day_move_illegal:'In dieser Reihenfolge passt es nicht: eine Arbeitszeit oder Verfügbarkeit würde verletzt. Nichts wurde geändert.', day_moved:'Reihenfolge geändert — die Zeiten wurden neu berechnet.', qn_placeholder:'z.B. Zahnarzt morgen um 11 Uhr', qn_add:'Hinzufügen', day_hours_for:'Zeiten für diesen Tag', day_hours_invalid:'Das Ende muss nach dem Anfang liegen.', mode_errands:'Erledigungen', errand_title:'Meine Erledigungen', errand_add:'Neue Erledigung', errand_ph:'z.B. Apotheke morgen, Bank um 11 Uhr', errand_none:'Schreiben Sie oben, was zu tun ist, und drücken Sie Tag planen.', errand_name:'Was zu tun ist', errand_name_ph:'z.B. Apotheke', day_to_next:'Auf den nächsten Tag', day_moved_to:'Verschoben auf {date}', day_map_note:'Die Linie zeigt die Reihenfolge, nicht die Straße.', day_far_warn:'Diese Position liegt {km} km von zu Hause entfernt — wahrscheinlich eine falsche Suche. Öffnen Sie Bearbeiten und wählen Sie die richtige Adresse.', phase_refine_title:'Die letzten einplanen', phase_refine_sub:'Termine zwischen Tagen verschieben und Wege verkürzen', qn_added_many:'{n} hinzugefügt — prüfen Sie sie und drücken Sie Tag planen.', settings_fuel_price_label:'Kraftstoffpreis (€/Liter)', gmaps_find:'In Google Maps suchen', gmaps_type_first:'Zuerst einen Namen oder eine Adresse eingeben.', gmaps_paste_hint:'Ort finden, Teilen → Link kopieren tippen und in die Adresse einfügen.', gmaps_short_link:'Dieser Kurzlink enthält die Position nicht. Öffnen Sie ihn und kopieren Sie den vollständigen Link aus der Adresszeile, oder geben Sie die Adresse ein.', gps_here:'Ich bin hier (GPS)', gps_locating:'Position wird ermittelt…', gps_ok:'GPS-Position (±{m} m) — dauerhaft gespeichert.', gps_rough:'GPS-Position auf ±{m} m genau. Drinnen? Gehen Sie hinaus und tippen Sie erneut.', gps_denied:'Standortzugriff nicht erlaubt. Aktivieren Sie ihn in den Telefoneinstellungen.', gps_failed:'Keine Position gefunden. Im Freien erneut versuchen.', gps_unavailable:'Dieses Gerät liefert keine Position.', addr_street_only:'Position an der Straße, nicht am Haus', loc_approx:'an der Straße', loc_temp:'vorläufige Position', loc_fix_hint:'Beim nächsten Besuch "Ich bin hier" tippen (oder die Nadel ziehen), damit die richtige Position bleibt.', form_flex_label:'Stunden pro Woche, flexibel (optional)', form_flex_ph:'z.B. 4', form_flex_min:'Kürzester Teil', form_flex_min_opt:'mind. {n}′', form_flex_max:'Längster Teil', form_flex_max_opt:'bis {n}′', form_flex_hint:'Gesamtzahl eintragen (z.B. 4), wenn die Aufteilung egal ist: zuerst die längsten Teile, passt das nicht, wird geteilt — 2+2, 2+1+1, 1+1+1+1 — bis zum kürzesten Teil.', form_durations_label:'Unterschiedliche Dauern (optional)', form_durations_ph:'z.B. 120, 90', form_durations_hint:'Für Termine unterschiedlicher Dauer in derselben Woche. Minuten mit Komma: "120, 90". Leer lassen, wenn alle gleich lang sind.', home_next:'Als Nächstes', home_directions:'Route von hier', home_add_ph:'Hinzufügen… z.B. Apotheke, Bank um 11', home_today_empty:'Heute nichts. Oben etwas eingeben oder den Plan öffnen.', job_done:'Erledigt', qn_added_one:'Hinzugefügt: {name}', cal_add:'Kalender', cal_nothing:'Heute nichts mit Uhrzeit.', cal_saved:'{n} Termine für Ihren Kalender, mit Erinnerung 15′ vorher. Öffnen Sie die Datei, um sie hinzuzufügen.', remind_enable:'Erinnerungen', remind_on:'Sie werden 15′ vor jedem Termin erinnert, solange die App offen ist. Für Erinnerungen bei geschlossener App: Kalender.', remind_denied:'Benachrichtigungen wurden nicht erlaubt. Tippen Sie auf Kalender für Erinnerungen vom Telefonkalender.', remind_title:'In {min}′: {name}', day_home_missing:'Ihre Heimatadresse wurde nicht gefunden. Prüfen Sie sie in den Einstellungen.', day_unlocated:'{n} Aufträge ohne Position auf der Karte — nicht eingeplant', day_no_address:'keine Adresse', day_times_here:'Fahrzeiten: HERE, mit Verkehr.', day_times_osrm:'Fahrzeiten: OpenStreetMap, ohne Verkehr.', day_times_estimate:'Die Fahrzeiten sind ungefähr — die Karte war nicht erreichbar.', settings_time_factor:'Fahrzeit-Korrektur (%)', settings_time_factor_hint:'Die Karte rechnet ohne Ampeln und Stau und nennt deshalb meist weniger, als die Fahrt wirklich dauert. Geben Sie an, um wie viel % langsamer Sie tatsächlich fahren (0 = wie die Karte). Gilt ab der nächsten Aktualisierung und nur, wenn die Zeiten nicht von HERE kommen, das den Verkehr schon enthält.', gap_refined:'Die anderen Tage wurden verfeinert: {n} Änderungen.', diag_btn:'Datei zur Diagnose', diag_copy:'Kopieren', diag_hint:'Um ein Problem zu melden: enthält Plan und Verfügbarkeiten, ohne Namen, Adressen oder Telefonnummern.', diag_title:'Eine Datei ohne persönliche Angaben', diag_text:'Es wird eine Datei mit Ihren Kunden ({n}) als „Kunde 1, 2, …“ erstellt. Sie enthält keine Namen, Adressen, Telefonnummern, Notizen, Schlüssel oder Sync-Codes. Standorte werden auf ~100 Meter gerundet. Sie enthält Plan, Verfügbarkeiten, Dauern und Ihre Arbeitszeiten.', diag_ok:'Erstellen', diag_saved:'Datei gespeichert', gap_who_fits:'Wer passt hier rein?', gap_kind_relocate:'Wechselt den Tag ({day}) und beendet die Wartezeit', gap_relocate_dearer:'(etwas teurer)', gap_why_not_head:'{name} kann nicht woanders hin:', gap_why_unavailable:'nicht verfügbar', gap_why_already:'hat schon einen Termin', gap_why_noroom:'passt nicht in die Arbeitszeit', gap_why_illegal:'würde eine Einschränkung verletzen', gap_why_unknown:'unbekannt', gap_who_hint:'{day}, {from}–{to}. Wählen Sie, wer in die Lücke kommt.', gap_kind_unplaced:'Hat noch keinen Termin', gap_kind_move:'Kommt von {day}', gap_nobody:'Niemand passt in diese Lücke, ohne eine Einschränkung zu verletzen.', gap_no_longer_fits:'Passt nicht mehr — der Plan hat sich geändert.', gap_filled:'{name} um {time} eingetragen', addr_exact:'genaue Nummer', sync_stale_title:'Die Kopie ist veraltet', sync_stale_sub:'Seit {days} Tagen nichts gesendet. Nach weiteren {left} Tagen Inaktivität wird die Kopie auf dem Server gelöscht.', sync_rotate:'Code ändern', sync_rotate_title:'Code ändern?', sync_rotate_text:'Der neue Code:\n\n{code}\n\nJedes andere Gerät mit dem alten verliert sofort den Zugriff. Notieren Sie ihn, bevor Sie fortfahren.', sync_rotate_ok:'Notiert, ändern', sync_rotated:'Der Code wurde geändert', sync_failed:'Sync fehlgeschlagen', sync_bad_code:'Dieser Code stimmt nicht.', sync_join:'Verbinden', sync_join_hint:'Schon einen Code von einem anderen Gerät?', sync_off:'Ausschalten', sync_off_title:'Sync ausschalten?', sync_off_text:'Die Daten bleiben auf diesem Gerät. Die Kopie auf dem Server wird nicht gelöscht.', sync_off_ok:'Ausschalten', sync_off_done:'Sync ist aus', sync_not_primary_title:'Ein anderes Gerät schreibt', sync_not_primary_text:'Ein anderes Gerät ist als schreibendes gesetzt. Soll dieses übernehmen?', sync_take_over:'Übernehmen', sync_conflict_title:'Es gibt eine neuere Kopie', sync_conflict_text:'Ein Gerät hat um {when} gespeichert. Jetzt senden würde das löschen. Erst deren Kopie holen?', sync_take_theirs:'Neuere holen', sync_pull_title:'Kopie holen?', sync_pull_text:'Die Daten dieses Geräts werden durch die Kopie vom {when} ersetzt.', sync_pull_ok:'Ersetzen', gap_because_day_start:'Ihr Tag hat noch nicht begonnen.', gap_unexplained:'Keine Einschränkung erklärt das — neu berechnen kann es schließen.', settings_end_flex:'Toleranz am Tagesende (Minuten)', settings_end_flex_hint:'Wie weit ein Termin über Ihre Arbeitszeit laufen darf. 0 heißt keine Minute.', day_hours_assumed:'Für {day} ist keine Arbeitszeit gesetzt — ich nehme {from}–{to} von Ihren anderen Tagen.', day_waiting_total:'Wartezeit: {n} Minuten', day_wait_window:'{n} Minuten vor \u201e{before}\u201c — der Kunde bietet nur dieses Fenster.', day_wait_gap:'{n} Minuten Leerlauf nach \u201e{after}\u201c.', day_reserved_max:'{n} Minuten reserviert (mindestens {min})', send_title:'Zeiten senden', send_hint:'Text bei Bedarf anpassen, dann Versandweg wählen.', send_whatsapp:'WhatsApp', send_sms:'SMS', send_copy:'Kopieren', send_no_times:'Dafür ist noch nichts eingeplant.', send_no_phone:'Telefonnummer auf der Karte ergänzen für WhatsApp oder SMS. Kopieren geht trotzdem.', send_copied:'Text kopiert', send_copy_failed:'Kopieren nicht möglich — Text markieren und selbst kopieren.', send_intro:'Hallo {name}, unsere Zeiten:', send_job_intro:'Hallo {name}, ich komme:', send_sign:'— {name}', form_phone_label:'Telefon (optional)', form_phone_ph:'z.B. 01701234567', student_phone_label:'Telefon', settings_country_code:'Ländervorwahl (für WhatsApp)', settings_country_code_hint:'Wird lokalen Nummern vorangestellt. Deutschland: 49.', backup_student_bad_phone:'Kunde {name} hat eine ungültige Telefonnummer', backup_jobs_not_list:'Aufträge sind keine Liste',
     backup_not_an_object:'Diese Datei ist keine RoutePal-Sicherung', backup_students_not_list:'Die Kundenliste fehlt oder ist beschädigt', backup_student_bad:'Eintrag #{n} ist ungültig', backup_student_no_id:'Eintrag #{n} hat keine Kennung', backup_student_no_name:'Eintrag #{n} hat keinen Namen', backup_student_bad_duration:'{name}: ungültige Dauer', backup_student_bad_count:'{name}: ungültige Anzahl', backup_student_bad_avail:'{name}: beschädigte Verfügbarkeit', backup_settings_bad:'Die Einstellungen fehlen oder sind beschädigt', backup_workdays_bad:'Ungültige Arbeitstage', backup_dayhours_bad:'Ungültige Arbeitszeiten', backup_blocked_bad:'Ungültige blockierte Zeiten', backup_schedule_bad:'Beschädigter Plan', backup_coords_bad:'Beschädigte Koordinaten', backup_and_more:' · und {n} weitere',
     pair_distance_unknown:'Entfernung unbekannt (Adresse noch nicht lokalisiert)',
@@ -2057,8 +2283,8 @@ function tf(key, params){
   return _labelT(str);
 }
 
-const DAYS = ['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'];
-const DAYS_FULL = ['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'];
+const DAYS = ['','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ','Κυρ'];
+const DAYS_FULL = ['','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο','Κυριακή'];
 const COLORS = ['color-0','color-1','color-2','color-3','color-4','color-5','color-6','color-7','color-8','color-9'];
 const SUBJECTS = ['Μαθηματικά','Φυσική','Χημεία','Βιολογία','Αγγλικά','Ιστορία','Γεωγραφία','Λογοτεχνία','Πληροφορική','Άλγεβρα','Γεωμετρία','Άλλο'];
 
@@ -2097,7 +2323,7 @@ function applyLanguageArrays(){
   const lang = curLang();
   const d = (I18N[lang]&&I18N[lang].days) || I18N.el.days;
   const df = (I18N[lang]&&I18N[lang].daysFull) || I18N.el.daysFull;
-  for(let i=0;i<7;i++){ DAYS[i]=d[i]; DAYS_FULL[i]=df[i]; }
+  for(let i=0;i<8;i++){ DAYS[i]=d[i] || DAYS[i]; DAYS_FULL[i]=df[i] || DAYS_FULL[i]; }
 }
 
 // Students' `subject` field is always stored as one of the fixed Greek
@@ -2199,7 +2425,7 @@ const Scheduler = {
     const peak = state.dayMatrixPeak || null;
     const off  = state.dayMatrixOffPeak || null;
     if(!off) return peak;
-    if(day===6) return off;
+    if(day>=6) return off;
     if(atMin==null) return peak;
     return (atMin >= this.PEAK_FROM && atMin < this.PEAK_TO) ? peak : off;
   },
@@ -2228,7 +2454,7 @@ const Scheduler = {
     const peak = state.travelMatrixPeak || state.travelMatrix;
     const off  = state.travelMatrixOffPeak;
     if(!off) return peak;
-    if(day===6) return off;                                    // Saturday: quiet all day
+    if(day>=6) return off;                                     // weekend: quiet all day
     if(atMin==null) return peak;                               // caller has no time
     return (atMin >= this.PEAK_FROM && atMin < this.PEAK_TO) ? peak : off;
   },
@@ -2454,7 +2680,7 @@ const Scheduler = {
   // Run several attempts with different randomized starting orders and keep the
   // one that places the MOST students — placement count always wins, km is only
   // a tie-breaker. Every student matters more than a shorter drive.
-  async runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false, budget=null){
+  async runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false, budget=null, onAttempt=null){
     const hasRealCoords = Object.keys(coords).length > 0;
     const dist=(a,b)=>this.haversineKm(a,b)*1.4;
     const totalKm=(schedule)=>{
@@ -2511,6 +2737,10 @@ const Scheduler = {
       if(!best || placed>best.placed || (placed===best.placed && km<best.km)){
         best = { result, placed, km };
       }
+      // Each attempt moves the progress bar: with eight of them this phase
+      // takes a minute or two, and one report at its start left the bar
+      // standing still for all of it.
+      if(onAttempt) try{ onAttempt(i + 1, attempts); }catch(e){}
     }
     // Cancelled before even the first attempt finished — return a valid,
     // empty-but-well-formed result instead of crashing on best===null; the
@@ -2825,7 +3055,8 @@ const Scheduler = {
     } else {
       P(15, 'phase1b_title', 'phase1b_sub', { n: input.attempts });
       // Runs side by side must not all start from the same placement.
-      result = await this.runMultiAttempt(input.shuffleFirst ? this.shuffle(students) : students, settings, coords, input.attempts, false, input.p1 || null);
+      result = await this.runMultiAttempt(input.shuffleFirst ? this.shuffle(students) : students, settings, coords, input.attempts, false, input.p1 || null,
+        (k, n) => P(15 + Math.round(40 * k / n), 'phase1b_title', 'phase1b_sub', { n }));
       sch = result.schedule;
       if(input.warm && this.isBetterStart(input.warm, sch, settings)) sch = JSON.parse(JSON.stringify(input.warm));
     }
@@ -3458,7 +3689,7 @@ const Scheduler = {
           if(!prevS||prevS.studentId!==s.studentId) km+=distKm(prev,getC(s));
           prev=getC(s); prevS=s;
         }
-        if(day===6) km += slots.length*WEEKEND_PENALTY;
+        if(day>=6) km += slots.length*WEEKEND_PENALTY;
       }
       return km;
     };
@@ -4046,7 +4277,7 @@ const Scheduler = {
     const d = new Date(dateISO + 'T12:00:00');
     if(Number.isNaN(d.getTime())) return null;
     const wd = d.getDay();                 // 0 Sunday … 6 Saturday
-    return wd === 0 ? 6 : wd;
+    return wd === 0 ? 7 : wd;            // Sunday is day 7, not Saturday
   },
 
   // A job as the scheduler understands it: someone who needs one session, on
@@ -6726,7 +6957,7 @@ const Scheduler = {
         let prevId=HOME_ID, prevAddr=HOME_ADDR, prevS=null;
         for(const s of slots){ if(!prevS||prevS.studentId!==s.studentId) km+=roadKm(prevId,prevAddr,s.studentId,s.address,d); prevId=s.studentId; prevAddr=s.address; prevS=s; }
         km+=roadKm(prevId,prevAddr,HOME_ID,HOME_ADDR,d);
-        if(Number(d)===6) km+=slots.length*WEEKEND_PENALTY;
+        if(Number(d)>=6) km+=slots.length*WEEKEND_PENALTY;
         const dh=dayHours[d];
         if(dh){
           const gap = slots[0].start - this.toMin(dh.start);
@@ -7725,7 +7956,7 @@ function _schedFrame(ts){
   const dt=Math.max(0, Math.min(120, ts-(_schedLastTs||ts))); _schedLastTs=ts;
   // Creep toward a little past the last phase reported, not toward the end:
   // the bar keeps moving while a phase works, yet each new phase still moves it.
-  const cap = Math.min(_schedCeil, Math.max(_schedGoal, _schedLastPct + 12));
+  const cap = Math.min(_schedCeil, Math.max(_schedGoal, _schedLastPct + 8));
   _schedGoal  += (cap-_schedGoal ) * (1-Math.exp(-dt/5000));
   // The finish is deliberately much faster than the working animation: the
   // overlay only stays up for a moment after 100%, and a full green bar the
@@ -8639,6 +8870,11 @@ const App = {
         dayMatrixPeak: state.dayMatrixPeak, dayMatrixOffPeak: state.dayMatrixOffPeak, idAlias: state.idAlias || null } });
     });
   },
+  // Two rounds share one bar. A round reports 15..95; the first is drawn
+  // over 15..60 and the second over 60..98, so neither sits at a ceiling
+  // while it is still working (the second used to be squeezed into 90..99).
+  _round1Pct(p){ return p <= 15 ? p : Math.min(60, 15 + (p - 15) * 45 / 80); },
+  _round2Pct(p){ return Math.min(94, 60 + Math.max(0, p - 55) * 34 / 40); },
   // How many runs at once: one per spare core, at most three.
   _parallelRuns(){
     const n = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 2;
@@ -8660,10 +8896,10 @@ const App = {
       for(const o of good.slice(1)) if(Scheduler.isBetterStart(o.schedule, best.schedule, inp.settings)) best = o;
       return best;
     };
-    const first = await round(input, onProgress);
+    const first = await round(input, onProgress ? (p, a, b, c) => onProgress(this._round1Pct(p), a, b, c) : null);
     if(state._schedulingCancelled) return first;
     const second = await round({ ...input, students: first.students || input.students, warm: first.schedule, skipPhase1: true },
-      onProgress ? (p, a, b, c) => onProgress(Math.min(99, 90 + (p - 55) / 45 * 9), 'phase_refine_title', 'phase_refine_sub') : null).catch(e => {
+      onProgress ? (p, a, b, c) => onProgress(this._round2Pct(p), 'phase_refine_title', 'phase_refine_sub') : null).catch(e => {
         if(e && e.message === 'cancelled') throw e; return null; });
     const best = second && Scheduler.isBetterStart(second.schedule, first.schedule, input.settings) ? second : first;
     console.info(`parallel runs: ${k} at a time, two rounds; round 2 ${best === second ? 'improved' : 'kept round 1'}`);
@@ -8928,12 +9164,12 @@ const App = {
       catch(e){
         if(state._schedulingCancelled || isStale()){ unalias(); return cancelledCleanup(); }
         if(!/^(no-worker|no-source)$/.test(e && e.message)) console.warn('scheduler workers failed; running on the page', e);
-        const hooks = { progress: P, stopped: () => state._schedulingCancelled || isStale() };
+        const hooks = { progress: (p, a, b, c) => P(this._round1Pct(p), a, b, c), stopped: () => state._schedulingCancelled || isStale() };
         out = await Scheduler.optimizeWeek(input, hooks);
         // the same second round the workers do, from the best week found
         if(!hooks.stopped()){
           const again = await Scheduler.optimizeWeek({ ...input, warm: out.schedule, skipPhase1: true },
-            { ...hooks, progress: (p) => P(Math.min(99, 90 + (p - 55) / 45 * 9), 'phase_refine_title', 'phase_refine_sub') });
+            { ...hooks, progress: (p) => P(this._round2Pct(p), 'phase_refine_title', 'phase_refine_sub') });
           if(Scheduler.isBetterStart(again.schedule, out.schedule, state.settings)) out = { ...again, result: out.result };
         }
       }
@@ -9003,11 +9239,16 @@ const App = {
       state.scheduleKmBefore = km;
       state._keptPreviousSchedule = keptPrevious;
       try{
-        if(r && r._baseline){
-          const b = Scheduler.measureWeek(r._baseline, state.settings), a = Scheduler.measureWeek(state.schedule, state.settings);
-          b.km = await this._kmOf(r._baseline); a.km = km;       // the km the person reads, both sides
-          this.recordSavings('week', null, { kind: 'plain', before: b, after: a });
+        // The person's own week, imported from their calendar, is the real
+        // "before"; otherwise the first plain placement stands in for it.
+        const own = state._ownWeek && Scheduler.countTotal(scheduleBackup) ? scheduleBackup : null;
+        const base = own || (r && r._baseline);
+        if(base){
+          const b = Scheduler.measureWeek(base, state.settings), a = Scheduler.measureWeek(state.schedule, state.settings);
+          b.km = await this._kmOf(base); a.km = km;       // the km the person reads, both sides
+          this.recordSavings('week', null, { kind: own ? 'own' : 'plain', before: b, after: a });
         }
+        state._ownWeek = false;
       }catch(e){ console.warn('before/after failed', e); }
       Scheduler.flexSync(state.schedule, state.students);
       if(flexBackup.length) Storage.saveStudents(state.students);
@@ -9191,17 +9432,19 @@ const App = {
     if(where === 'today'){ try{ this.switchDay(Scheduler.weekdayOf(this.todayISO())); }catch(e){} }
   },
 
-  // The week in one line, and the way into it. Six cards used to sit here;
-  // the numbers people look for are these three.
   _homeStatsHtml(L, placedCount, totalLessons, weekKm){
-    if(!state.students.length) return '';
+    const todayCount = (state.schedule[Scheduler.weekdayOf(this.todayISO())] || []).length;
     const hours = state.schedule ? Object.values(state.schedule).flat().reduce((a,s)=>a+(s.duration||0),0)/60 : 0;
+    const card = (val, unit, label, cls, go) => `<div class="stat-card${cls ? ' ' + cls : ''}" role="button" tabindex="0" style="cursor:pointer" onclick="${go}"><div class="stat-val">${val}<span>${unit}</span></div><div class="stat-label">${label}</div></div>`;
     return `
-      <button class="home-weekline home-stats" onclick="App.homeGo('week')">
-        <b>${esc(t('home_week'))}</b>
-        <span>${placedCount}/${totalLessons} ${esc(L.sessions.toLowerCase())} · ${hours.toFixed(1)}${esc(t('unit_hr'))}${weekKm.km > 0 ? ' · ' + weekKm.km.toFixed(1) + ' km' : ''}</span>
-        <i aria-hidden="true">›</i>
-      </button>`;
+      <div class="stats-grid home-stats" style="margin-top:14px">
+        ${card(todayCount, ' ' + esc(t('home_today_suffix')), esc(L.sessions) + ' ' + esc(DAYS_FULL[Scheduler.weekdayOf(this.todayISO())] || ''), 'accent-green', 'App.homeGo(\'today\')')}
+        ${card(placedCount, '/' + totalLessons, esc(t('home_week')), 'accent-blue', 'App.homeGo(\'week\')')}
+        ${card(state.students.length, '', esc(L.clients), '', 'App.homeGo(\'students\')')}
+        ${card(hours.toFixed(1), esc(t('unit_hr')), esc(t('home_hours_wk_short')), '', 'App.homeGo(\'week\')')}
+        ${card(weekKm.km > 0 ? weekKm.km.toFixed(1) : '—', 'km', esc(weekKm.real ? t('home_km_optimized') : t('home_km_estimated')) + ' · ' + esc(t('km_incl_return')), '', 'App.homeGo(\'route\')')}
+        ${card(state.settings.travelMargin ?? 3, esc(t('unit_min')), esc(t('home_margin_safety')), '', 'App.homeGo(\'settings\')')}
+      </div>`;
   },
 
   // Home, top: the day's map with the date and Today/Tomorrow over it.
@@ -9322,6 +9565,9 @@ const App = {
     const box = document.getElementById(boxId || 'fab-qn');
     const text = box ? box.value.trim() : '';
     if(!text) return;
+    // A sentence about a client ("Γιώργος δεν μπορεί Τρίτη 5–7") changes the
+    // client; anything else is an errand, as before.
+    if(this.clientCommand(text)){ if(box) box.value = ''; this.renderHome(); return; }
     const known = [...(state.jobs || []).map(j => j.name), ...(state.students || []).map(s => s.name)];
     const base = this.homeDateISO();
     const items = QuickNote.parseMany(text, this.todayISO(), known);
@@ -9361,7 +9607,7 @@ const App = {
     const s = this.savingsOf(rec);
     if(!s) return '';
     const b = rec.before, a = rec.after;
-    const label = scope === 'week' ? t('ba_before_week') : (rec.kind === 'time' ? t('ba_before_time') : t('ba_before_typed'));
+    const label = scope === 'week' ? (rec.kind === 'own' ? t('ba_before_own') : t('ba_before_week')) : (rec.kind === 'time' ? t('ba_before_time') : t('ba_before_typed'));
     const row = (name, m, strong) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;${strong ? 'font-weight:700' : 'color:var(--text2)'}">
         <span>${esc(name)}</span><span style="white-space:nowrap">${m.km.toFixed(1)} km · ${Math.round(m.drive)}′ ${esc(t('ba_drive'))}${m.idle >= 1 ? ' · ' + Math.round(m.idle) + '′ ' + esc(t('ba_wait')) : ''}</span></div>`;
     let verdict;
@@ -9462,6 +9708,7 @@ const App = {
           <button class="btn btn-primary" style="flex:1" onclick="App.fabSheetAdd()">${esc(t('qn_add'))}</button>
         </div>
         <p style="font-size:12px;color:var(--text3);margin-top:10px">${esc(t('fab_errand_hint'))}</p>
+        ${state.students.length ? `<p style="font-size:12px;color:var(--text3);margin-top:6px">${ico('mic', 12)} ${esc(t('voice_examples'))}</p>` : ''}
       </div>`;
     document.getElementById('fab-sheet-overlay')?.classList.add('open');
     setTimeout(() => document.getElementById('fab-qn')?.focus(), 250);
@@ -9745,6 +9992,8 @@ const App = {
           <p>${tf('students_empty_sub',{client:L.client.toLowerCase()})}</p>
           <button class="btn btn-primary" onclick="App.openStudentDrawer(null)">${tf('students_add_btn',{client:L.client})}</button>
           <button class="btn btn-secondary" style="margin-top:8px" onclick="App.openPasteClients()">${esc(t('paste_btn'))}</button>
+          <button class="btn btn-secondary" style="margin-top:8px" onclick="App.openCalendarImport()">${ico('calendar', 14)} ${esc(t('cal_import_btn'))}</button>
+          <p class="settings-sub" style="margin-top:6px;max-width:320px">${esc(t('cal_import_hint'))}</p>
         </div>
       `:`
         ${Object.keys(state.coords).filter(k=>k!=='home'&&k!=='workplace').length>0?`
@@ -9761,6 +10010,10 @@ const App = {
             </div>
           </div>
         `:''}
+        <div style="display:flex;gap:8px;padding:0 16px 10px;flex-wrap:wrap">
+          <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.openPasteClients()">${esc(t('paste_btn'))}</button>
+          <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.openCalendarImport()">${ico('calendar', 13)} ${esc(t('cal_import_btn'))}</button>
+        </div>
         ${students.map(st=>this.studentCard(st)).join('')}
       `}
     `;
@@ -11295,6 +11548,116 @@ const App = {
     document.getElementById('paste-overlay')?.remove();
     Toast.show(tf('paste_done', { n: added }) + (skipped ? ' · ' + tf('paste_skipped', { n: skipped }) : ''), 'success', 5000);
     this.renderStudents(); this.renderHome();
+  },
+
+  openCalendarImport(){
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.ics,text/calendar';
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if(!f) return;
+      const rd = new FileReader();
+      rd.onload = () => this.importCalendarText(String(rd.result || ''));
+      rd.readAsText(f);
+    };
+    inp.click();
+  },
+  // The clients of one calendar week, and — if the week here is empty — that
+  // week as the current schedule, so the first plan is measured against what
+  // the person really drives today.
+  importCalendarText(text, today){
+    let evs;
+    try{ evs = CalendarImport.events(text); }catch(e){ evs = []; }
+    const wk = CalendarImport.pickWeek(evs, today);
+    const groups = CalendarImport.toClients(wk.occ);
+    if(!groups.length){ Toast.show(t('cal_import_none'), 'error', 6000); return { added: 0 }; }
+    const known = new Map(state.students.map(st => [normalizeSearchText(st.name).replace(/\s+/g, ' ').trim(), st]));
+    const work = state.settings.workplaceAddress || '';
+    const availability = this.computeAvailabilityFromExceptions([]);
+    let added = 0, skipped = 0;
+    const week = {};
+    const ownWeek = !Scheduler.countTotal(state.schedule || {});
+    for(const g of groups){
+      const key = normalizeSearchText(g.name).replace(/\s+/g, ' ').trim();
+      let st = known.get(key);
+      if(!st){
+        const atWork = !g.address && !!work;
+        if(!g.address && !atWork){ skipped++; continue; }
+        const lens = g.slots.map(x => x.len);
+        const same = lens.every(x => x === lens[0]);
+        st = { id: 's' + Date.now() + '_' + added, name: g.name, address: atWork ? work : g.address, phone: '',
+          subject: getSubjects()[0] || 'Μαθηματικά', lessonDuration: Math.max(...lens), lessonsPerWeek: lens.length, hoursPerWeek: lens.length,
+          ...(same ? {} : { durations: lens.slice().sort((a, b) => b - a) }),
+          type: 'solo', group: '', pairedWith: null, notes: '', mergeMode: 'off', forceMerge: false,
+          availability: JSON.parse(JSON.stringify(availability)), availabilityMode: 'exceptions', availabilityExceptions: [],
+          atWorkplace: atWork, color: state.students.length % 10 };
+        state.students.push(st); known.set(key, st); added++;
+        if(atWork && state.coords.workplace) state.coords[st.id] = { ...state.coords.workplace };
+        else if(!atWork) Router.geocode(st.address).then(c => { if(c && state.students.includes(st)){ state.coords[st.id] = c; Storage.saveCoords(state.coords); } }).catch(() => {});
+      }
+      for(const x of g.slots){
+        (week[x.day] = week[x.day] || []).push({ ...Scheduler._lessonSlot(st, x.len), start: Scheduler.minToTime(x.start), end: Scheduler.minToTime(x.end) });
+      }
+    }
+    // The week as it stands becomes the schedule only when there was none:
+    // it is what the person drives today, the "before" of the first plan.
+    if(ownWeek && Object.keys(week).length){
+      for(const d of Object.keys(week)) week[d].sort((a, b) => Scheduler.toMin(a.start) - Scheduler.toMin(b.start));
+      for(const d of Object.keys(week)) if(!(state.settings.workDays || []).includes(Number(d))){
+        state.settings.workDays = [...(state.settings.workDays || []), Number(d)].sort((a, b) => a - b);
+        const sl = week[d]; state.settings.dayHours = { ...(state.settings.dayHours || {}),
+          [d]: { start: sl[0].start, end: sl[sl.length - 1].end } };
+      }
+      state.schedule = week; state._ownWeek = true;
+      Storage.saveSchedule(state.schedule); Storage.saveSettings(state.settings);
+    }
+    state.travelMatrix = state.travelMatrixPeak = state.travelMatrixOffPeak = null;
+    Storage.saveStudents(state.students); Storage.saveCoords(state.coords);
+    state._scheduleStale = true;
+    Toast.show(tf('cal_import_done', { n: added, k: wk.occ.length }) + (skipped ? ' · ' + tf('cal_import_skipped', { n: skipped }) : ''), 'success', 8000);
+    if(state.currentScreen === 'students') this.renderStudents(); else if(state.currentScreen === 'home') this.renderHome();
+    return { added, skipped, ownWeek: ownWeek && Object.keys(week).length > 0 };
+  },
+
+  // Apply a sentence about a client. Returns true if it was one. Every change
+  // is said back in words, with Undo.
+  clientCommand(text){
+    let cmd = null;
+    try{ cmd = ClientCommand.parse(text, state.students || []); }catch(e){ cmd = null; }
+    if(!cmd) return false;
+    if(cmd.kind === 'ambiguous'){ Toast.show(tf('cmd_ambiguous', { names: cmd.names.join(', ') }), 'error', 6000); return true; }
+    const st = state.students.find(x => x.id === cmd.id);
+    if(!st) return false;
+    const before = JSON.parse(JSON.stringify(st));
+    let msg = '';
+    if(cmd.kind === 'unavailable'){
+      const ex = (st.availabilityMode === 'exceptions' ? (st.availabilityExceptions || []) : this.computeExceptionsFromAvailability(st)).map(e => ({ ...e }));
+      for(const d of cmd.days){
+        const dh = (state.settings.dayHours || {})[d];
+        const s0 = cmd.start != null ? Scheduler.minToTime(cmd.start) : (dh ? dh.start : '00:00');
+        const e0 = cmd.end != null ? Scheduler.minToTime(cmd.end) : (dh ? dh.end : '23:59');
+        ex.push({ day: d, start: s0, end: e0 });
+      }
+      st.availabilityExceptions = ex; st.availabilityMode = 'exceptions';
+      st.availability = this.computeAvailabilityFromExceptions(ex);
+      msg = tf(cmd.start != null ? 'cmd_unavail' : 'cmd_unavail_day', { name: st.name, days: cmd.days.map(d => DAYS_FULL[d]).join(', '),
+        from: cmd.start != null ? Scheduler.minToTime(cmd.start) : '', to: cmd.end != null ? Scheduler.minToTime(cmd.end) : '' });
+    } else if(cmd.kind === 'perweek'){
+      st.lessonsPerWeek = st.hoursPerWeek = cmd.n;
+      if(Array.isArray(st.durations) && st.durations.length && !st.flexMinutes) delete st.durations;
+      msg = tf('cmd_perweek', { name: st.name, n: cmd.n });
+    } else if(cmd.kind === 'address'){
+      st.address = cmd.address; st.atWorkplace = false;
+      delete state.coords[st.id];
+      state.travelMatrix = state.travelMatrixPeak = state.travelMatrixOffPeak = null;
+      Router.geocode(cmd.address).then(c => { if(c && state.students.includes(st) && st.address === cmd.address){ state.coords[st.id] = c; Storage.saveCoords(state.coords); } }).catch(() => {});
+      msg = tf('cmd_address', { name: st.name, address: cmd.address });
+    }
+    Storage.saveStudents(state.students); Storage.saveCoords(state.coords);
+    state._scheduleStale = true;
+    Toast.show(msg, 'success', 8000, { label: t('swipe_undo'), run: () => {
+      const i = state.students.indexOf(st); if(i >= 0){ Object.keys(st).forEach(k => delete st[k]); Object.assign(st, before); }
+      Storage.saveStudents(state.students); if(state.currentScreen === 'home') this.renderHome(); } });
+    return true;
   },
 
   // "This one stays here": the next plan is built around a locked lesson.
@@ -13340,7 +13703,7 @@ const App = {
       // different figures for the same drive.
       if(hereAvailable() && allCoords.length >= 2){
         const dep = new Date();
-        if(Number(day)===6) dep.setHours(11,0,0,0); else dep.setHours(17,0,0,0);
+        if(Number(day)>=6) dep.setHours(11,0,0,0); else dep.setHours(17,0,0,0);
         matrix = await Router.getHereMatrix(allCoords, hereKey, dep.toISOString()).catch(()=>null);
       }
       if(!matrix) matrix = await Router.getMatrix(allCoords);
@@ -13431,7 +13794,7 @@ const App = {
   renderSettings(){
     const s = document.getElementById('screen-settings');
     const st = state.settings;
-    const allDays = [1,2,3,4,5,6];
+    const allDays = [1,2,3,4,5,6,7];
 
     const blockedHtml = (st.blockedSlots||[]).length===0
       ? `<p style="font-size:13px;color:var(--text3);padding:8px 0">${t('no_blocked_times')}</p>`
@@ -13511,6 +13874,7 @@ const App = {
 
       <div class="section-title">${t('settings_hours_per_day')}</div>
       <div class="card">
+        <div class="settings-sub" style="margin-bottom:6px">${esc(t('settings_split_hint'))}</div>
         ${allDays.filter(d=>st.workDays.includes(d)).map(d=>`
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
             <span style="width:36px;font-size:13px;font-weight:600;color:var(--text2)">${DAYS[d]}</span>
@@ -13518,10 +13882,9 @@ const App = {
               ${(this.dayIntervals(d).length ? this.dayIntervals(d) : [{start:'',end:''}])
                 .map((iv,k)=>this._dayIntervalRowHtml(d,k,iv)).join('')}
             </div>
-            <button class="chip chip-gray" title="${esc(t('settings_add_interval'))}"
-              style="border:none;cursor:pointer;font-size:14px;padding:4px 9px;font-weight:700;align-self:flex-start"
-              onclick="App.addDayInterval(${d})">＋</button>
           </div>
+          <button class="chip chip-gray" style="border:none;cursor:pointer;font-size:12px;padding:6px 10px;min-height:36px;margin:4px 0 6px 46px"
+            onclick="App.addDayInterval(${d})">＋ ${esc(t('settings_add_interval'))}</button>
           ${!st.dayHours?.[d] ? `<p style="font-size:12px;color:var(--orange);padding:2px 0 6px">${tf('settings_day_hours_missing',{day:DAYS_FULL[d]})}</p>` : ''}`).join('')}
         <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">${t('settings_workday_hint')}</p>
         <div class="form-group" style="margin:10px 0 0">
@@ -13880,7 +14243,7 @@ const App = {
       <div class="form-group">
         <label>${t('block_day_label')}</label>
         <select id="bl-day">
-          ${[1,2,3,4,5,6].map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
+          ${[1,2,3,4,5,6,7].map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
         </select>
       </div>
       <div class="form-row">

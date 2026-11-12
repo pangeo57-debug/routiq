@@ -1720,15 +1720,33 @@ describe('planning one date, for work that does not repeat', () => {
     assert.ok(!plan.stops.some(x => x.job.id === 'j1'));
   });
 
-  test('a Sunday borrows Saturday hours rather than refusing', async () => {
+  test('Sunday is a day of its own (7), and a Sunday callout is still plannable', async () => {
     const app = loadApp({ seed: 2 });
     const { cfg, coords } = jobs(app);
-    cfg.workDays = [6]; cfg.dayHours = { 6: { start: '09:00', end: '15:00' } };
     const sunday = [{ id: 's1', name: 'Emergency', address: 'as', durationMin: 60, date: '2026-09-27' }];
     coords.s1 = { lat: 38.245, lon: 21.735 };
-    assert.equal(app.Scheduler.weekdayOf('2026-09-27'), 6, 'Sunday maps onto the Saturday slot');
-    const plan = await app.Scheduler.planDay(sunday, cfg, coords, '2026-09-27');
+    assert.equal(app.Scheduler.weekdayOf('2026-09-27'), 7, 'Sunday is not Saturday');
+    assert.equal(app.Scheduler.weekdayOf('2026-09-26'), 6);
+    // not a working day: it borrows the hours of the days that are
+    cfg.workDays = [6]; cfg.dayHours = { 6: { start: '09:00', end: '15:00' } };
+    let plan = await app.Scheduler.planDay(sunday, cfg, coords, '2026-09-27');
     assert.equal(plan.stops.length, 1, 'a Sunday callout must still be plannable');
+    // a working day: its own hours
+    cfg.workDays = [6, 7]; cfg.dayHours = { 6: { start: '09:00', end: '15:00' }, 7: { start: '10:00', end: '12:00' } };
+    plan = await app.Scheduler.planDay(sunday, cfg, coords, '2026-09-27');
+    assert.equal(plan.stops.length, 1);
+    assert.ok(app.Scheduler.toMin(plan.stops[0].start) >= 600, 'Sunday hours are Sunday\'s');
+  });
+
+  test('a week can include Sunday when the person chooses it', async () => {
+    const app = loadApp({ seed: 2 });
+    const S = app.Scheduler;
+    const sts = [student('u', { days: [7], window: { start: '10:00', end: '13:00' } })];
+    const cfg = settings({ workDays: [1, 7], dayHours: { 1: { start: '15:00', end: '22:00' }, 7: { start: '10:00', end: '13:00' } } });
+    app.setState({ students: sts, settings: cfg, coords: cityCoords(sts), schedule: {}, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const out = await S.optimizeWeek({ students: sts, settings: cfg, coords: cityCoords(sts), attempts: 1, warm: null, timeScale: 0.05 });
+    assert.equal((out.schedule[7] || []).length, 1);
+    assert.equal(app.DAYS_FULL[7], 'Κυριακή');
   });
 
   test('planning a day leaves the weekly schedule untouched', async () => {
@@ -6682,10 +6700,10 @@ describe('home, week and messages: less on screen', () => {
     assert.match(src, /\.home-mapwrap\.empty\{height:92px\}/);
     assert.match(src, /if\(!mapEmpty\) this\._drawStopsMap\('home-map'/);
   });
-  test('the week statistics are one line, not six cards', () => {
+  test('the week statistics stay as cards (km, hours, lessons), and only once there are clients', () => {
     const body = src.slice(src.indexOf('  _homeStatsHtml(L, placedCount'), src.indexOf("  // Home, top:"));
-    assert.ok(!/stat-card/.test(body));
-    assert.match(body, /class="home-weekline home-stats"/);
+    assert.match(body, /stat-card/);
+    assert.match(src, /firstRun \? '' : this\._homeStatsHtml/);
   });
   test('the week map and the "did not fit" panel start folded', () => {
     assert.match(src, /\$\{state\.weekMapOpen \? `<div id="week-map"/);
@@ -6800,5 +6818,122 @@ describe('the quick plan', () => {
       timeScale: 0.05, p1: { backtrackMs: 600, repairMs: 300 } });
     assert.equal(S.countTotal(out.schedule), 15);
     assertClean(S.verifySchedule(out.schedule, sts, cfg));
+  });
+});
+
+describe('sentences about a client, spoken or typed', () => {
+  function app2() {
+    const app = loadApp();
+    const cfg = settings({ workDays: [1, 2, 3, 4, 5], dayHours: Object.fromEntries([1, 2, 3, 4, 5].map(d => [d, { start: '14:00', end: '21:00' }])) });
+    const sts = [student('g', { name: 'Γιώργος Παπαδόπουλος' }), student('m', { name: 'Μαρία Νικολάου' }), student('e', { name: 'Ελένη' })];
+    app.setState({ students: sts, settings: cfg, coords: {}, schedule: {} });
+    return app;
+  }
+  const P = (app, txt) => { const r = app.ClientCommand ? app.ClientCommand.parse(txt, app.state.students) : null; return r && JSON.parse(JSON.stringify(r)); };
+
+  test('"cannot <day> from 5 to 7" becomes a time they cannot do', () => {
+    const app = app2();
+    const C = app.ctx.ClientCommand || null; void C;
+    const r = P(app, 'Γιώργος δεν μπορεί Τρίτη από 5 μέχρι 7');
+    assert.deepStrictEqual(r, { kind: 'unavailable', id: 'g', name: 'Γιώργος Παπαδόπουλος', days: [2], start: 17 * 60, end: 19 * 60 });
+  });
+  test('cases, half hours, number words, two days, the whole day', () => {
+    const app = app2();
+    assert.deepStrictEqual(P(app, 'ο Γιώργο δεν μπορεί Πέμπτη 5 και μισή μέχρι 7').start, 17 * 60 + 30);
+    assert.deepStrictEqual(P(app, 'Μαρία δεν μπορεί Δευτέρα από πέντε έως εφτά').end, 19 * 60);
+    assert.deepStrictEqual(P(app, 'Μαρία δεν μπορεί Δευτέρα και Τετάρτη 17:00-19:30').days, [1, 3]);
+    const whole = P(app, 'Ελένη δεν μπορεί Παρασκευή');
+    assert.equal(whole.start, null); assert.deepStrictEqual(whole.days, [5]);
+  });
+  test('times a week and a new address', () => {
+    const app = app2();
+    assert.deepStrictEqual(P(app, 'Μαρία 2 φορές την εβδομάδα'), { kind: 'perweek', id: 'm', name: 'Μαρία Νικολάου', n: 2 });
+    assert.equal(P(app, 'Ελένη μένει Κορίνθου 12, Πάτρα').address, 'Κορίνθου 12, Πάτρα');
+  });
+  test('anything that is not about a client is left to the errand box', () => {
+    const app = app2();
+    assert.equal(P(app, 'Μαρίνα δεν μπορεί Τρίτη'), null, 'Μαρίνα is not Μαρία');
+    assert.equal(P(app, 'του Γιώργου δεν μπορεί Τρίτη').id, 'g');
+    assert.equal(P(app, 'φαρμακείο αύριο στις 11'), null);
+    assert.equal(P(app, 'Γιώργος'), null);
+  });
+  test('applying it changes the client, says so, and can be undone', () => {
+    const app = app2();
+    let toast = null; app.Toast.show = (msg, type, d, action) => { toast = { msg, action }; };
+    assert.equal(app.App.clientCommand('Γιώργος δεν μπορεί Τρίτη από 5 μέχρι 7'), true);
+    const g = app.state.students[0];
+    assert.equal(g.availabilityExceptions.length, 1);
+    assert.deepStrictEqual(Array.from(g.availability[2].windows, w => Array.from(w)), [[14 * 60, 17 * 60], [19 * 60, 21 * 60]]);
+    assert.match(toast.msg, /Γιώργος Παπαδόπουλος: δεν μπορεί Τρίτη 17:00–19:00/);
+    toast.action.run();
+    assert.equal((g.availabilityExceptions || []).length, 0);
+  });
+});
+
+describe('clients and their week from a calendar file (.ics)', () => {
+  const ICS = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    // weekly Tue + Thu, 17:00-18:00, Athens
+    'BEGIN:VEVENT', 'UID:a', 'SUMMARY:Γιώργος Π.', 'LOCATION:Κορίνθου 12\\, Πάτρα',
+    'DTSTART;TZID=Europe/Athens:20261103T170000', 'DTEND;TZID=Europe/Athens:20261103T180000',
+    'RRULE:FREQ=WEEKLY;BYDAY=TU,TH', 'END:VEVENT',
+    // weekly Monday, 90 minutes, a folded long location line
+    'BEGIN:VEVENT', 'UID:b', 'SUMMARY:Μαρία', 'LOCATION:Ερμού 5\\, ',
+    ' Πάτρα', 'DTSTART:20261102T150000', 'DTEND:20261102T163000', 'RRULE:FREQ=WEEKLY', 'END:VEVENT',
+    // one-off this week, no location
+    'BEGIN:VEVENT', 'UID:c', 'SUMMARY:Ελένη', 'DTSTART:20261113T100000', 'DTEND:20261113T110000', 'END:VEVENT',
+    // all-day and cancelled are not appointments
+    'BEGIN:VEVENT', 'UID:d', 'SUMMARY:Αργία', 'DTSTART;VALUE=DATE:20261111', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:e', 'SUMMARY:Ακυρωμένο', 'STATUS:CANCELLED', 'DTSTART:20261112T100000', 'DTEND:20261112T110000', 'END:VEVENT',
+    // ended weekly series
+    'BEGIN:VEVENT', 'UID:f', 'SUMMARY:Παλιός', 'LOCATION:Πάτρα', 'DTSTART:20260901T090000', 'DTEND:20260901T100000', 'RRULE:FREQ=WEEKLY;UNTIL=20261001T000000Z', 'END:VEVENT',
+    'END:VCALENDAR'].join('\r\n');
+  const TODAY = new Date(2026, 10, 10, 12, 0);   // Tue 10 Nov 2026
+
+  test('one week is read: repeats expanded, all-day, cancelled and ended series left out', () => {
+    const app = loadApp();
+    const C = app.CalendarImport;
+    const wk = C.pickWeek(C.events(ICS), TODAY);
+    const got = Array.from(wk.occ, o => [o.title, o.start.getDay(), o.start.getHours(), Math.round((o.end - o.start) / 60000)]);
+    assert.deepStrictEqual(got.map(x => x.join('|')).sort(), [
+      'Γιώργος Π.|2|17|60', 'Γιώργος Π.|4|17|60', 'Ελένη|5|10|60', 'Μαρία|1|15|90'].sort());
+  });
+
+  test('each title becomes a client with its times a week, length and address; the week becomes the schedule', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({ workDays: [1, 2, 3, 4], dayHours: Object.fromEntries([1, 2, 3, 4].map(d => [d, { start: '14:00', end: '21:00' }])) }),
+      coords: {}, schedule: {} });
+    const res = app.App.importCalendarText(ICS, TODAY);
+    assert.equal(res.added, 2); assert.equal(res.skipped, 1, 'Ελένη has no address and no workplace');
+    const g = app.state.students.find(s => s.name === 'Γιώργος Π.');
+    assert.equal(g.lessonsPerWeek, 2); assert.equal(g.lessonDuration, 60); assert.equal(g.address, 'Κορίνθου 12, Πάτρα');
+    const m = app.state.students.find(s => s.name === 'Μαρία');
+    assert.equal(m.lessonDuration, 90); assert.equal(m.address, 'Ερμού 5, Πάτρα');
+    assert.deepStrictEqual(Array.from(app.state.schedule[2], x => x.start), ['17:00']);
+    assert.equal(app.state._ownWeek, true, 'the first plan is measured against this week');
+  });
+
+  test('a client already on the list is not added twice, and a week already planned is not replaced', () => {
+    const app = loadApp();
+    const g = student('g', { name: 'Γιώργος Π.' });
+    const planned = { 1: [{ studentId: 'g', start: '15:00', end: '16:00' }] };
+    app.setState({ students: [g], settings: settings({}), coords: {}, schedule: planned });
+    const res = app.App.importCalendarText(ICS, TODAY);
+    assert.equal(res.added, 1);
+    assert.equal(app.state.students.filter(s => s.name === 'Γιώργος Π.').length, 1);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(app.state.schedule)), planned);
+  });
+
+  test('with a workplace, a title with no location comes to the workplace', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({ workplaceAddress: 'Γυμναστήριο' }), coords: {}, schedule: {} });
+    const res = app.App.importCalendarText(ICS, TODAY);
+    assert.equal(res.added, 3);
+    assert.equal(app.state.students.find(s => s.name === 'Ελένη').atWorkplace, true);
+  });
+
+  test('the first plan after an import is measured against the imported week', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    assert.match(src, /const own = state\._ownWeek && Scheduler\.countTotal\(scheduleBackup\) \? scheduleBackup : null;/);
   });
 });
