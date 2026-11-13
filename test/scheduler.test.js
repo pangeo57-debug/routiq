@@ -7223,3 +7223,60 @@ describe('talking to it as to a person', () => {
     assert.equal(said('Να πάρω ψωμί αύριο').h, false);
   });
 });
+
+describe('understanding sentences with AI (opt-in, through the Worker)', () => {
+  const ANSWER = { intent: 'new_client', name: 'Γιώργος Κολυμπήτρας', address: 'Αρέθα 12, Πάτρα', phone: '6941234567',
+    minutes_per_lesson: 60, lessons_per_week: 2, flexible_total_minutes: 0, subject: '',
+    cannot: [{ days: [5], start: '16:00', end: '18:00' }, { days: [4], start: '15:00', end: '21:00' }, { days: [6], start: '', end: '' }] };
+  function setup({ on = true, answer = ANSWER, ok = true } = {}) {
+    const sent = [];
+    const app = loadApp({ apiBase: 'https://api.example', fetch: async (url, o) => { sent.push({ url, body: JSON.parse(o.body) });
+      return { ok, json: async () => answer }; } });
+    app.setState({ students: [student('m', { name: 'Μαρία Νικολάου' })], settings: settings({ aiAssist: on }), coords: {}, schedule: {} });
+    app.Toast.show = () => {};
+    return { app, sent };
+  }
+  const SENT = 'Πάμε να βάλουμε τον Γιώργο Κολυμπήτρα, Αρέθα δώδεκα, δύο ώρες ξεχωριστές. Δεν μπορεί Παρασκευή 4 με 6, Πέμπτη 3 με 9 και Σάββατο';
+
+  test('with AI on, a sentence about a client is read by AI and shown for confirmation', async () => {
+    const { app, sent } = setup();
+    assert.equal(await app.App.clientCommandSmart(SENT), true);
+    assert.equal(sent.length, 1); assert.match(sent[0].url, /\/ai\/client$/);
+    const p = app.App._proposal;
+    assert.equal(p.base, null); assert.equal(p.draft.viaAi, true);
+    assert.equal(p.st.name, 'Γιώργος Κολυμπήτρας'); assert.equal(p.st.phone, '6941234567');
+    assert.equal(p.st.lessonsPerWeek, 2); assert.equal(p.st.lessonDuration, 60);
+    assert.equal(p.st.availabilityExceptions.length, 3);
+    assert.equal(app.state.students.length, 1, 'nothing saved before "Correct"');
+  });
+  test('only the sentence, the date and the hours are sent: not the client list', async () => {
+    const { app, sent } = setup();
+    await app.App.clientCommandSmart(SENT);
+    const b = sent[0].body;
+    assert.deepStrictEqual(Object.keys(b).sort(), ['context', 'text']);
+    assert.deepStrictEqual(Object.keys(b.context).sort(), ['dayHours', 'lang', 'today']);
+    assert.ok(!JSON.stringify(b).includes('Νικολάου'));
+  });
+  test('errands never go to AI; with AI off nothing goes; on failure the rules read it', async () => {
+    let { app, sent } = setup();
+    assert.equal(await app.App.clientCommandSmart('φαρμακείο αύριο στις 11'), false);
+    assert.equal(sent.length, 0);
+    ({ app, sent } = setup({ on: false }));
+    await app.App.clientCommandSmart(SENT);
+    assert.equal(sent.length, 0);
+    assert.equal(app.App._proposal.draft.viaAi, undefined, 'the rules read it');
+    ({ app, sent } = setup({ ok: false }));
+    assert.equal(await app.App.clientCommandSmart(SENT), true);
+    assert.equal(sent.length, 1); assert.equal(app.App._proposal.draft.viaAi, undefined);
+  });
+  test('an AI answer naming someone on the list updates them', async () => {
+    const { app } = setup({ answer: { ...ANSWER, intent: 'update_client', name: 'Μαρία', address: '', phone: '', lessons_per_week: 3, minutes_per_lesson: 0, cannot: [] } });
+    await app.App.clientCommandSmart('Η Μαρία θέλει τρεις φορές');
+    assert.equal(app.App._proposal.base.id, 'm');
+    assert.equal(app.App._proposal.st.lessonsPerWeek, 3);
+  });
+  test('"not about a client" from AI falls back to the rules and the errand box', async () => {
+    const { app } = setup({ answer: { ...ANSWER, intent: 'not_about_a_client' } });
+    assert.equal(await app.App.clientCommandSmart('Να πάρω τηλέφωνο τον λογιστή για τις φορές'), false);
+  });
+});

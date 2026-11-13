@@ -151,8 +151,19 @@ async function main() {
   } else {
     warn('no GOOGLE_API_KEY in .dev.vars — house numbers come from HERE only');
   }
+  // Optional: a Claude key, for sentences the app's own rules cannot read.
+  const am = existsSync(devVars) && readFileSync(devVars, 'utf8').match(/ANTHROPIC_API_KEY\s*=\s*(.+)/);
+  if (am && am[1].trim()) {
+    execFileSync('npx', ['--yes', 'wrangler@latest', 'secret', 'put', 'ANTHROPIC_API_KEY'],
+      { cwd: here, input: am[1].trim() + '\n', encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
+    ok('Claude key uploaded from .dev.vars');
+  } else {
+    warn('no ANTHROPIC_API_KEY in .dev.vars — sentences are read by the app\'s rules only');
+  }
 
   step(6, 'Deploying');
+  // The Claude SDK is bundled into the Worker: it has to be installed first.
+  execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: here, stdio: 'inherit' });
   const out = wrangler(['deploy'], { quiet: true });
   process.stdout.write(out);
   const url = (out.match(/https:\/\/[^\s]+\.workers\.dev/) || [])[0];

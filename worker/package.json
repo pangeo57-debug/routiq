@@ -1,0 +1,10 @@
+{
+  "name": "routepal-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RoutePal API proxy (Cloudflare Worker)",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  },
+  "license": "UNLICENSED"
+}

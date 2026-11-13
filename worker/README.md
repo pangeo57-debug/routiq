@@ -238,3 +238,20 @@ weekly km and minutes saved):
     curl -H "Authorization: Bearer $ANALYTICS_KEY" https://<your-worker>/a/stats
 
 Without `ANALYTICS_KEY` the stats route does not exist.
+
+## Understanding sentences with AI (optional)
+
+The app reads sentences about clients ("πάμε να βάλουμε τον Γιώργο, Αρέθα
+12, δεν μπορεί Τρίτη 5 με 7") with its own rules, on the phone. With a
+Claude key here, and the person's yes in the app, a sentence the rules may
+miss goes to `POST /ai/client`, which asks Claude (`claude-opus-5-5`,
+structured output, low effort) and returns the fields; the app shows them
+as "understood: …" with Correct / Fix / Cancel. Nothing is saved here.
+
+Sent: the sentence, today's date, the working hours and the language. Not
+the client list (names are matched on the phone), never errands.
+
+Set it up: add `ANTHROPIC_API_KEY=...` to `.dev.vars` and re-run
+`npm run setup:api`, or `npx wrangler secret put ANTHROPIC_API_KEY`.
+Without the key the route answers 503 and the app uses its rules alone.
+Each sentence is one short request (about 1–2 thousand tokens).
