@@ -7097,3 +7097,65 @@ describe('a Google Calendar export as it comes: a .zip, phones, moved and cancel
     assert.equal(m.phone, '+306971234567'); assert.equal(m.lessonDuration, 90);
   });
 });
+
+describe('dictation in the new-client form', () => {
+  test('the form has a microphone, and a sentence fills it in', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({}), coords: {}, schedule: {} });
+    assert.match(app.App.buildStudentForm(null), /id="st-mic"/);
+    assert.ok(!/id="st-mic"/.test(app.App.buildStudentForm(student('x'))), 'not when editing someone');
+    let html = '';
+    app.ctx.document.getElementById = (id) => id === 'drawer-student-body' ? { set innerHTML(v){ html = v; }, get innerHTML(){ return html; } } : null;
+    app.Toast.show = () => {};
+    assert.equal(app.App.fillFormFromSentence('Γιώργος Αντωνίου, Μαιζώνος 52 Πάτρα, 90 λεπτά, δύο φορές, δεν μπορεί Τρίτη από 5 μέχρι 7'), true);
+    assert.match(html, /id="st-name"[^>]*value="Γιώργος Αντωνίου"/);
+    assert.match(html, /id="st-addr"[^>]*value="Μαιζώνος 52 Πάτρα"/);
+    assert.match(html, /id="st-dur"[^>]*value="90"/);
+    assert.match(html, /<option value="2" selected>/);
+    assert.match(html, /17:00/);
+    assert.match(html, /«Γιώργος Αντωνίου, Μαιζώνος 52/);
+  });
+});
+
+describe('sentences as speech writes them', () => {
+  function setup() {
+    const app = loadApp();
+    const sts = [student('g', { name: 'Γιώργος Παπαδόπουλος' })];
+    app.setState({ students: sts, settings: settings({}), coords: {}, schedule: {} });
+    app.Toast.show = () => {};
+    return app;
+  }
+  const said = (app, txt) => { app.App._proposal = null; const h = app.App.clientCommand(txt); const p = app.App._proposal;
+    return { h, base: p && p.base && p.base.id, d: p && JSON.parse(JSON.stringify(p.draft)) }; };
+
+  test('an existing client by first name, one fact is enough: length, times, cannot', () => {
+    const app = setup();
+    assert.equal(said(app, 'Γιώργος 3 ώρες').d.minutes, 180);
+    assert.equal(said(app, 'Γιώργος 3 ώρες').base, 'g');
+    const r = said(app, 'Γιώργος τρεις ώρες τρεις φορές την εβδομάδα');
+    assert.equal(r.d.minutes, 180); assert.equal(r.d.perWeek, 3);
+  });
+  test('"5 με 7", "από τις 5 μέχρι τις 7", "17:00 με 19:30", and "3 με 2" read as two to three', () => {
+    const app = setup();
+    const c = (txt) => said(app, txt).d.cannot[0];
+    assert.deepStrictEqual(c('Γιώργος δεν μπορεί Τετάρτη 5 με 7'), { days: [3], start: 17 * 60, end: 19 * 60 });
+    assert.deepStrictEqual(c('Γιώργος δεν μπορεί την Τετάρτη από τις 5 μέχρι τις 7'), { days: [3], start: 17 * 60, end: 19 * 60 });
+    assert.deepStrictEqual(c('Γιώργος δεν μπορεί Πέμπτη 17:00 με 19:30'), { days: [4], start: 17 * 60, end: 19 * 60 + 30 });
+    assert.deepStrictEqual(c('Γιώργος δεν μπορεί Τρίτη 3 με 2'), { days: [2], start: 14 * 60, end: 15 * 60 });
+  });
+  test('numbers in words, "τρίωρο", "οδός", "στην Πάτρα"', () => {
+    const app = setup();
+    let d = said(app, 'νέος πελάτης Νίκος μένει Μαιζώνος πενήντα δύο στην Πάτρα τρίωρο 3 φορές').d;
+    assert.equal(d.address, 'Μαιζώνος 52 Πάτρα'); assert.equal(d.minutes, 180); assert.equal(d.perWeek, 3); assert.equal(d.name, 'Νίκος');
+    d = said(app, 'νέος πελάτης Νίκος οδός Κορίνθου 12 Πάτρα 3 ώρες').d;
+    assert.equal(d.name, 'Νίκος'); assert.equal(d.address, 'οδός Κορίνθου 12 Πάτρα');
+    d = said(app, 'νέος πελάτης Νίκος Αγίου Ανδρέου εκατόν είκοσι Πάτρα μιάμιση ώρα δύο φορές').d;
+    assert.equal(d.address, 'Αγίου Ανδρέου 120 Πάτρα'); assert.equal(d.minutes, 90); assert.equal(d.perWeek, 2);
+  });
+  test('a time is never taken for a street number, and an errand stays an errand', () => {
+    const app = setup();
+    assert.equal(said(app, 'Γιώργος δεν μπορεί Τετάρτη 5 με 7').d.address, '');
+    assert.equal(said(app, 'φαρμακείο αύριο στις 11').h, false);
+    assert.equal(said(app, 'Γιώργος μένει Ερμού 5 στην Πάτρα').d.address, 'Ερμού 5 Πάτρα');
+  });
+});
