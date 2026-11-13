@@ -6857,16 +6857,63 @@ describe('sentences about a client, spoken or typed', () => {
     assert.equal(P(app, 'φαρμακείο αύριο στις 11'), null);
     assert.equal(P(app, 'Γιώργος'), null);
   });
-  test('applying it changes the client, says so, and can be undone', () => {
+  test('nothing is applied as heard: it is shown, and applied on "Correct", with Undo', () => {
     const app = app2();
     let toast = null; app.Toast.show = (msg, type, d, action) => { toast = { msg, action }; };
     assert.equal(app.App.clientCommand('Γιώργος δεν μπορεί Τρίτη από 5 μέχρι 7'), true);
     const g = app.state.students[0];
+    assert.equal((g.availabilityExceptions || []).length, 0, 'not applied before "Correct"');
+    const lines = Array.from(app.App._draftLines(app.App._proposal.draft, app.App._proposal.st), x => Array.from(x));
+    assert.deepStrictEqual(lines, [['Δεν μπορεί', 'Τρίτη 17:00–19:00']]);
+    app.App.proposalAccept();
     assert.equal(g.availabilityExceptions.length, 1);
     assert.deepStrictEqual(Array.from(g.availability[2].windows, w => Array.from(w)), [[14 * 60, 17 * 60], [19 * 60, 21 * 60]]);
-    assert.match(toast.msg, /Γιώργος Παπαδόπουλος: δεν μπορεί Τρίτη 17:00–19:00/);
+    assert.match(toast.msg, /Γιώργος Παπαδόπουλος: ενημερώθηκε/);
     toast.action.run();
     assert.equal((g.availabilityExceptions || []).length, 0);
+  });
+
+  test('a whole new client in one sentence', () => {
+    const app = app2();
+    const d = JSON.parse(JSON.stringify(app.ClientCommand.parseNew(
+      'Νέος πελάτης Νίκος Αντωνίου, Μαιζώνος 52 Πάτρα, 2 ώρες μαζί ή σπαστά, δεν μπορεί Τρίτη απόγευμα', ['Μαθηματικά'])));
+    assert.deepStrictEqual(d, { name: 'Νίκος Αντωνίου', address: 'Μαιζώνος 52 Πάτρα', minutes: 120, perWeek: null, flex: true, subject: null,
+      cannot: [{ days: [2], start: 13 * 60, end: 20 * 60 }], explicit: true });
+    assert.equal(app.App.clientCommand('Νέος πελάτης Νίκος Αντωνίου, Μαιζώνος 52 Πάτρα, 2 ώρες μαζί ή σπαστά, δεν μπορεί Τρίτη απόγευμα'), true);
+    app.App.proposalAccept();
+    const n = app.state.students.find(x => x.name === 'Νίκος Αντωνίου');
+    assert.ok(n); assert.equal(n.flexMinutes, 120); assert.equal(n.minBlock, 60); assert.equal(n.address, 'Μαιζώνος 52 Πάτρα');
+    assert.equal(n.availabilityExceptions[0].day, 2);
+  });
+
+  test('without "new client", a sentence needs a capitalised name, two facts and no errand words', () => {
+    const app = app2();
+    const N = (txt) => app.ClientCommand.parseNew(txt, ['Μαθηματικά']);
+    assert.ok(N('Αντώνης Κορίνθου 12, 90 λεπτά, 2 φορές'));
+    assert.equal(N('Οδοντίατρος Κορίνθου 12 στις 11 για 30 λεπτά'), null, 'an errand with a time');
+    assert.equal(N('φαρμακείο Κορίνθου 12 αύριο 30 λεπτά'), null);
+    assert.equal(N('Αντώνης Κορίνθου 12'), null, 'one fact is not enough');
+  });
+
+  test('a full sentence about someone already on the list updates them instead of adding a twin', () => {
+    const app = app2();
+    app.App.clientCommand('Ελένη Μαρκου, Κορίνθου 40 Πάτρα, 2 φορές');
+    assert.equal(app.App._proposal.base, null, 'another Ελένη, with a surname, is a new client');
+    app.App.clientCommand('Νέος πελάτης Ελένη, Κορίνθου 40 Πάτρα, 2 φορές');
+    assert.equal(app.App._proposal.base, null, '"new client" is always new');
+    app.App.clientCommand('Ελένη Κορίνθου 40 Πάτρα 2 φορές την εβδομάδα');
+    assert.equal(app.App._proposal.base.id, 'e');
+    app.App.proposalAccept();
+    assert.equal(app.state.students.length, 3);
+    const e = app.state.students.find(x => x.id === 'e');
+    assert.equal(e.lessonsPerWeek, 2); assert.equal(e.address, 'Κορίνθου 40 Πάτρα');
+  });
+
+  test('"Fix" opens the form filled in, and saving it is the usual save', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const body = src.slice(src.indexOf('  proposalFix(){'), src.indexOf('  // "This one stays here"'));
+    assert.match(body, /this\.buildStudentForm\(p\.st\)/);
+    assert.match(body, /state\.editingStudentId = p\.base \? p\.base\.id : null/);
   });
 });
 
@@ -6965,5 +7012,26 @@ describe('the first placement measures with the road matrix, not a straight line
     assert.ok(!/haversineKm\(a,b\)\*1\.4/.test(body));
     const geo = src.slice(src.indexOf('  geoOptimize('), src.indexOf('    // Step 1: reorder within each day'));
     assert.ok(!/haversineKm/.test(geo), 'no straight line in the placement');
+  });
+});
+
+describe('two clients at the very same position', () => {
+  test('back to back with no margin is legal, for the app and for the independent audit', () => {
+    const { auditSchedule } = require('./invariants');
+    const app = loadApp({ seed: 1 });
+    const S = app.Scheduler;
+    // cityCoords gives clients 5 and 45 the same position: what made the
+    // 60-client test fail now and then, depending on whether they met.
+    const sts = Array.from({ length: 46 }, (_, i) => student('s' + i, { days: [2], window: { start: '15:00', end: '22:00' } }));
+    const coords = cityCoords(sts);
+    assert.deepStrictEqual({ ...coords.s5 }, { ...coords.s45 });
+    const cfg = settings({ workDays: [2], travelMargin: 2 });
+    app.setState({ students: sts, settings: cfg, coords, travelMatrixPeak: null, travelMatrixOffPeak: null, travelMatrix: null });
+    const sch = { 2: [{ ...S._lessonSlot(sts[45], 60), start: '15:00', end: '16:00' }, { ...S._lessonSlot(sts[5], 60), start: '16:00', end: '17:00' }] };
+    assertClean(S.verifySchedule(sch, sts, cfg));
+    assertClean(auditSchedule(S, sch, sts, cfg));
+    // and a different place still needs its drive and margin
+    const far = { 2: [{ ...S._lessonSlot(sts[45], 60), start: '15:00', end: '16:00' }, { ...S._lessonSlot(sts[6], 60), start: '16:00', end: '17:00' }] };
+    assert.ok(auditSchedule(S, far, sts, cfg).some(e => /impossible travel/.test(e)));
   });
 });

@@ -81,7 +81,11 @@ function auditSchedule(Scheduler, schedule, students, settings) {
         if (s0 < pe) {
           errs.push(`[${d}] overlap: ${p.studentName || p.studentId} & ${who}`);
         } else if (p.studentId !== sl.studentId) {
-          const need = S.travelEstMin(p.studentId, p.address, sl.studentId, sl.address, d) + margin;
+          // Two stops at one place (same address or the same position — a
+          // gym, two clients in one building) need no drive and no margin:
+          // the app's rule since the workplace, and the one checked here.
+          const need = S.samePlace(p.studentId, p.address, sl.studentId, sl.address) ? 0
+            : S.travelEstMin(p.studentId, p.address, sl.studentId, sl.address, d) + margin;
           if (s0 < pe + need)
             errs.push(`[${d}] impossible travel ${p.studentName || p.studentId}→${who}: ${s0 - pe}min available, ${need}min needed`);
         }
