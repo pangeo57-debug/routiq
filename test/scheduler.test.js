@@ -6937,3 +6937,33 @@ describe('clients and their week from a calendar file (.ics)', () => {
     assert.match(src, /const own = state\._ownWeek && Scheduler\.countTotal\(scheduleBackup\) \? scheduleBackup : null;/);
   });
 });
+
+describe('the first placement measures with the road matrix, not a straight line', () => {
+  test('when the road distances disagree with the map, the order follows the roads', () => {
+    const app = loadApp({ seed: 1 });
+    const S = app.Scheduler;
+    const a = student('a', { days: [1], window: { start: '15:00', end: '21:00' } });
+    const b = student('b', { days: [1], window: { start: '15:00', end: '21:00' } });
+    const cfg = settings({ workDays: [1], dayHours: { 1: { start: '15:00', end: '21:00' } } });
+    // On the map A is next door and B across town; by road (a river, a
+    // one-way system) B is the near one.
+    const coords = { home: { lat: 38.240, lon: 21.730 }, a: { lat: 38.241, lon: 21.731 }, b: { lat: 38.300, lon: 21.800 } };
+    const ids = ['home', 'a', 'b'];
+    const km = { home: { a: 10, b: 1 }, a: { home: 10, b: 9 }, b: { home: 1, a: 9 } };
+    const matrix = { coordIds: ids,
+      distances: ids.map(x => ids.map(y => x === y ? 0 : km[x][y] * 1000)),
+      durations: ids.map(x => ids.map(y => x === y ? 0 : km[x][y] * 120)) };
+    app.setState({ students: [a, b], settings: cfg, coords, travelMatrixPeak: matrix, travelMatrixOffPeak: null, travelMatrix: null });
+    const sch = { 1: [{ ...S._lessonSlot(a, 60), start: '15:00', end: '16:00' }, { ...S._lessonSlot(b, 60), start: '17:00', end: '18:00' }] };
+    S.geoOptimize(sch, [a, b], cfg, coords);
+    assert.equal(sch[1][0].studentId, 'b', 'nearest by road goes first');
+  });
+  test('the attempts are compared on dayKm, the same kilometres everything else uses', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const body = src.slice(src.indexOf('  async runMultiAttempt('), src.indexOf('  // _SCHED_BUFFER kept'));
+    assert.match(body, /km\+=this\.dayKm\(slots, day, settings\)/);
+    assert.ok(!/haversineKm\(a,b\)\*1\.4/.test(body));
+    const geo = src.slice(src.indexOf('  geoOptimize('), src.indexOf('    // Step 1: reorder within each day'));
+    assert.ok(!/haversineKm/.test(geo), 'no straight line in the placement');
+  });
+});

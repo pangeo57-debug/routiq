@@ -2682,21 +2682,15 @@ const Scheduler = {
   // a tie-breaker. Every student matters more than a shorter drive.
   async runMultiAttempt(students, settings, coords={}, attempts=6, fullBudget=false, budget=null, onAttempt=null){
     const hasRealCoords = Object.keys(coords).length > 0;
-    const dist=(a,b)=>this.haversineKm(a,b)*1.4;
+    // The attempts are compared on the kilometres every other pass uses —
+    // HERE's road distances when there is a matrix, OSRM's, and only then
+    // the straight line — not on a straight line of their own.
     const totalKm=(schedule)=>{
       if(!hasRealCoords) return 0;
-      const home = coords['home']||{lat:0,lon:0};
       let km=0;
       for(const day of settings.workDays){
         const slots=(schedule[day]||[]).slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
-        if(!slots.length) continue;
-        let prev=home, prevId=null;
-        for(const s of slots){
-          const c=coords[s.studentId]||home;
-          if(prevId!==s.studentId) km+=dist(prev,c);
-          prev=c; prevId=s.studentId;
-        }
-        km+=dist(prev,home);
+        if(slots.length) km+=this.dayKm(slots, day, settings);
       }
       return km;
     };
@@ -3670,8 +3664,10 @@ const Scheduler = {
   geoOptimize(schedule, students, settings, coords, travelMinFn=null){
     const HOME=this.safeCoord(coords, 'home', (settings&&settings.homeAddress)||'Πάτρα');
     const getC=(slot)=>this.safeCoord(coords, slot.studentId, slot.address||'');
-    const distKm=(a,b)=>this.haversineKm(a,b)*1.4;
-    const trvMin=(a,b)=>travelMinFn?travelMinFn(a,b):Math.max(1,Math.round(distKm(a,b)/((settings&&settings.avgCitySpeedKmh)||25)*60));
+    // Distances between two stops (or home), from the same road estimator as
+    // everything else: HERE / OSRM matrix first, the straight line last.
+    const HOME_STOP={ studentId:'home', address:(settings&&settings.homeAddress)||'' };
+    const roadKm=(a,b,day)=>Scheduler.travelEstKm(a.studentId, a.address||'', b.studentId, b.address||'', day);
 
     // Compute total km for a schedule snapshot. Includes a small per-slot
     // Saturday penalty (matching saOptimize) so cross-day moves/swaps prefer
@@ -3684,10 +3680,10 @@ const Scheduler = {
       for(const day of settings.workDays){
         const slots=(sch[day]||[]).slice().sort((a,b)=>this.toMin(a.start)-this.toMin(b.start));
         if(!slots.length) continue;
-        let prev=HOME; let prevS=null;
+        let prevS=null;
         for(const s of slots){
-          if(!prevS||prevS.studentId!==s.studentId) km+=distKm(prev,getC(s));
-          prev=getC(s); prevS=s;
+          if(!prevS||prevS.studentId!==s.studentId) km+=roadKm(prevS||HOME_STOP, s, day);
+          prevS=s;
         }
         if(day>=6) km += slots.length*WEEKEND_PENALTY;
       }
@@ -3699,11 +3695,11 @@ const Scheduler = {
       if(!slots.length) return [];
       const dayH=settings.dayHours[day];
       // nearest-neighbor order from HOME
-      const rem=[...slots]; const order=[]; let cur=HOME;
+      const rem=[...slots]; const order=[]; let cur=HOME_STOP;
       while(rem.length){
         let nearest=null,minD=Infinity;
-        for(const s of rem){const d=distKm(cur,getC(s));if(d<minD){minD=d;nearest=s;}}
-        order.push(nearest); rem.splice(rem.indexOf(nearest),1); cur=getC(nearest);
+        for(const s of rem){const d=roadKm(cur,s,day);if(d<minD){minD=d;nearest=s;}}
+        order.push(nearest); rem.splice(rem.indexOf(nearest),1); cur=nearest;
       }
       let t=this.toMin(dayH.start), prev=HOME, prevSlot=null; const newSlots=[];
       let first=true;
