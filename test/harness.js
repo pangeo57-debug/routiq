@@ -118,6 +118,8 @@ function loadApp(opts = {}) {
       { createObjectURL: () => 'blob:test', revokeObjectURL() {} }),
     URLSearchParams,
     Blob: function Blob(parts) { this.parts = parts; },
+    // The browser's own decompression, for calendar .zip files.
+    DecompressionStream: globalThis.DecompressionStream, Response: globalThis.Response,
     L: undefined, // Leaflet absent — map init paths no-op
   };
   // After the defaults above, or the plain `Math` would overwrite the override.

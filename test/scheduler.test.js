@@ -7035,3 +7035,65 @@ describe('two clients at the very same position', () => {
     assert.ok(auditSchedule(S, far, sts, cfg).some(e => /impossible travel/.test(e)));
   });
 });
+
+describe('a Google Calendar export as it comes: a .zip, phones, moved and cancelled lessons', () => {
+  const zlib = require('zlib');
+  // A real .zip: local headers, deflated data, central directory, end record.
+  function makeZip(files) {
+    const parts = [], central = []; let offset = 0;
+    for (const [name, text] of files) {
+      const raw = Buffer.from(text, 'utf8'), data = zlib.deflateRawSync(raw), nm = Buffer.from(name);
+      const crc = zlib.crc32 ? zlib.crc32(raw) : 0;
+      const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(8, 8);
+      lh.writeUInt32LE(crc >>> 0, 14); lh.writeUInt32LE(data.length, 18); lh.writeUInt32LE(raw.length, 22); lh.writeUInt16LE(nm.length, 26);
+      const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(8, 10);
+      ch.writeUInt32LE(crc >>> 0, 16); ch.writeUInt32LE(data.length, 20); ch.writeUInt32LE(raw.length, 24); ch.writeUInt16LE(nm.length, 28); ch.writeUInt32LE(offset, 42);
+      parts.push(lh, nm, data); central.push(ch, nm); offset += 30 + nm.length + data.length;
+    }
+    const cd = Buffer.concat(central), end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
+    end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...parts, cd, end]);
+  }
+  const cal = (events) => ['BEGIN:VCALENDAR', 'VERSION:2.0', 'X-WR-TIMEZONE:Europe/Athens', ...events, 'END:VCALENDAR'].join('\r\n');
+  const WORK = cal([
+    // weekly Mon+Wed, one Wednesday cancelled (EXDATE), one Monday moved to Tuesday
+    'BEGIN:VEVENT', 'UID:g1@google.com', 'SUMMARY:Γιώργος Αντωνίου - 6941234567', 'LOCATION:Μαιζώνος 52\\, Πάτρα 262 21\\, Ελλάδα',
+    'DTSTART;TZID=Europe/Athens:20261102T170000', 'DTEND;TZID=Europe/Athens:20261102T180000',
+    'RRULE:FREQ=WEEKLY;BYDAY=MO,WE', 'EXDATE;TZID=Europe/Athens:20261111T170000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:g1@google.com', 'RECURRENCE-ID;TZID=Europe/Athens:20261109T170000', 'SUMMARY:Γιώργος Αντωνίου - 6941234567',
+    'LOCATION:Μαιζώνος 52\\, Πάτρα 262 21\\, Ελλάδα', 'DTSTART;TZID=Europe/Athens:20261110T180000', 'DTEND;TZID=Europe/Athens:20261110T190000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:m1@google.com', 'SUMMARY:Μαρία Ν.', 'LOCATION:Κορίνθου 12\\, Πάτρα', 'DESCRIPTION:τηλ. +30 697 123 4567\\nκουδούνι 3ος',
+    'DTSTART;TZID=Europe/Athens:20261105T160000', 'DTEND;TZID=Europe/Athens:20261105T173000', 'RRULE:FREQ=WEEKLY', 'END:VEVENT']);
+  const PERSONAL = cal(['BEGIN:VEVENT', 'UID:p1', 'SUMMARY:Οδοντίατρος', 'DTSTART:20261112T100000', 'DTEND:20261112T110000', 'END:VEVENT']);
+  const TODAY = new Date(2026, 10, 10, 12, 0);   // Tue 10 Nov 2026: the week of 9-15 Nov
+
+  test('the .zip is opened in the app and every calendar in it read', async () => {
+    const app = loadApp();
+    const zip = makeZip([['work@group.calendar.google.com.ics', WORK], ['me@gmail.com.ics', PERSONAL]]);
+    const text = await app.CalendarImport.unzipIcs(new Uint8Array(zip).buffer);
+    assert.match(text, /Γιώργος Αντωνίου/); assert.match(text, /Οδοντίατρος/);
+  });
+
+  test('a cancelled date and a moved lesson are counted once, where they really are', () => {
+    const app = loadApp();
+    const C = app.CalendarImport;
+    const occ = Array.from(C.inWeek(C.events(WORK), C._monday(TODAY)), o => `${o.title}|${o.start.getDay()}|${o.start.getHours()}`);
+    // Mon 9 moved to Tue 10 at 18:00; Wed 11 cancelled; Maria on Thursday
+    assert.deepStrictEqual(occ.sort(), ['Γιώργος Αντωνίου - 6941234567|2|18', 'Μαρία Ν.|4|16'].sort());
+  });
+
+  test('the phone in the title or the description goes on the client, and out of the name', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({}), coords: {}, schedule: {} });
+    // the week before has the full pattern
+    app.App.importCalendarText(WORK, new Date(2026, 10, 3, 12, 0));
+    const g = app.state.students.find(s => /Γιώργος/.test(s.name));
+    assert.equal(g.name, 'Γιώργος Αντωνίου');
+    assert.equal(g.phone, '6941234567');
+    assert.equal(g.lessonsPerWeek, 2);
+    assert.equal(g.address, 'Μαιζώνος 52, Πάτρα 262 21, Ελλάδα');
+    const m = app.state.students.find(s => s.name === 'Μαρία Ν.');
+    assert.equal(m.phone, '+306971234567'); assert.equal(m.lessonDuration, 90);
+  });
+});
