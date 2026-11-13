@@ -6731,6 +6731,20 @@ describe('home, week and messages: less on screen', () => {
   });
 });
 
+describe('four tabs, one spelling of units', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  test('the route is reached from the schedule and lights the schedule tab', () => {
+    assert.ok(!/class="nav-btn" data-screen="route"/.test(src));
+    assert.match(src, /screen === 'route' \? 'schedule' : screen/);
+    assert.match(src, /state\.routeDay=state\.scheduleDay;App\.nav\('route'\)/);
+  });
+  test('Greek says Αρχική, minutes are ′ and kilometres km', () => {
+    const app = loadApp();
+    assert.equal(app.I18N.el.nav_home, 'Αρχική');
+    assert.equal(app.I18N.el.unit_min, '′'); assert.equal(app.I18N.el.unit_km, 'km');
+  });
+});
+
 describe('the first minutes: less to fill in', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
 
@@ -6776,9 +6790,12 @@ describe('the first minutes: less to fill in', () => {
     for (const id of ['st-name', 'st-addr', 'st-dur', 'st-freq']) assert.ok(html.indexOf(`id="${id}"`) < more, id + ' must be in plain view');
     for (const id of ['st-phone', 'st-subject', 'st-flex-hours', 'st-durations', 'st-type', 'st-paired', 'st-notes', 'avex-day'])
       assert.ok(html.indexOf(`id="${id}"`) > more, id + ' belongs under "more"');
-    assert.ok(!/<details id="st-more" open/.test(html), 'closed for a new client');
+    assert.ok(!/<details id="st-more"[^>]* open/.test(html), 'closed for a new client');
     const st = student('x'); app.setState({ students: [st] });
-    assert.match(app.App.buildStudentForm(st), /<details id="st-more" open/);
+    assert.match(app.App.buildStudentForm(st), /<details id="st-more"[^>]* open/);
+    // length is picked with buttons, and an unusual one keeps its value
+    assert.match(html, /class="seg-btn on"[^>]*>60′</);
+    assert.match(app.App.buildStudentForm(student('y', { lessonDuration: 75 })), /id="st-dur-other"[^>]*value="75"/);
   });
 
   test('onboarding asks where the work happens and keeps the answer', () => {
