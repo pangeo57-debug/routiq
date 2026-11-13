@@ -7186,3 +7186,40 @@ describe('several "cannot" in one sentence', () => {
     assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τρίτη 5 με 7 το απόγευμα και Πέμπτη 9 με 11 το πρωί'), ['2 17:00-19:00', '4 09:00-11:00']);
   });
 });
+
+describe('talking to it as to a person', () => {
+  function said(txt) {
+    const app = loadApp();
+    app.setState({ students: [student('x', { name: 'Ελένη' })], settings: settings({}), coords: {}, schedule: {} });
+    app.Toast.show = () => {};
+    app.App._proposal = null;
+    const h = app.App.clientCommand(txt);
+    const p = app.App._proposal;
+    return { h, base: p && p.base && p.base.id, d: p && JSON.parse(JSON.stringify(p.draft)) };
+  }
+  const hm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  test('"Πάμε να βάλουμε Γιώργος Κολυμπήτρας, Αρέθα 12. Δεν μπορεί Παρασκευή 4 με 6, Πέμπτη 3 με 9 και Σάββατο"', () => {
+    const { h, base, d } = said('Πάμε να βάλουμε Γιώργος Κολυμπήτρας, Αρέθα 12. Δεν μπορεί Παρασκευή 4 με 6, Πέμπτη 3 με 9 και Σάββατο');
+    assert.equal(h, true); assert.equal(base, null);
+    assert.equal(d.name, 'Γιώργος Κολυμπήτρας'); assert.equal(d.address, 'Αρέθα 12');
+    assert.deepStrictEqual(d.cannot.map(c => c.days.join() + ' ' + (c.start == null ? 'all' : hm(c.start) + '-' + hm(c.end))),
+      ['5 16:00-18:00', '4 15:00-21:00', '6 all']);
+  });
+  test('"2 ώρες ξεχωριστές" is two lessons of an hour; "3 ώρες χωριστά 3 φορές" three of an hour', () => {
+    let d = said('Πάμε να βάλουμε τον Γιώργο Κολυμπήτρα, Αρέθα 12, 2 ώρες ξεχωριστές').d;
+    assert.equal(d.minutes, 60); assert.equal(d.perWeek, 2);
+    assert.equal(d.name, 'Γιώργος Κολυμπήτρας', 'back to the nominative');
+    d = said('θέλω να προσθέσω τον Νίκο Αντωνίου Μαιζώνος 52 3 ώρες χωριστά 3 φορές').d;
+    assert.equal(d.minutes, 60); assert.equal(d.perWeek, 3); assert.equal(d.name, 'Νίκος Αντωνίου');
+    const e = said('Ελένη 2 ώρες ξεχωριστές');
+    assert.equal(e.base, 'x'); assert.equal(e.d.perWeek, 2); assert.equal(e.d.minutes, 60);
+  });
+  test('"βάλε έναν καινούριο, τη Μαρία Παππά, … θέλει δύο ώρες μαζί"', () => {
+    const d = said('Βάλε έναν καινούριο, τη Μαρία Παππά, Κορίνθου 40, θέλει δύο ώρες μαζί').d;
+    assert.equal(d.name, 'Μαρία Παππά'); assert.equal(d.address, 'Κορίνθου 40'); assert.equal(d.minutes, 120);
+  });
+  test('errands stay errands', () => {
+    assert.equal(said('φαρμακείο αύριο στις 11').h, false);
+    assert.equal(said('Να πάρω ψωμί αύριο').h, false);
+  });
+});

@@ -1139,7 +1139,8 @@ const ClientCommand = {
   NW_HUND: { εκατο:100, εκατον:100, διακοσια:200, τριακοσια:300, τετρακοσια:400, πεντακοσια:500, εξακοσια:600, εφτακοσια:700, επτακοσια:700, οχτακοσια:800, εννιακοσια:900 },
   HOURS_WORD: { μονοωρο:1, μονωρο:1, ωρακι:1, διωρο:2, τριωρο:3, τετραωρο:4, πεντωρο:5 },
   _words(raw){
-    const src = String(raw || '').replace(/(\d)\s*[-–]\s*(\d)/g, '$1 - $2').split(/[\s,;]+/).filter(Boolean);
+    const src = String(raw || '').replace(/(\d)\s*[-–]\s*(\d)/g, '$1 - $2').replace(/[.!?;:]+(\s|$)/g, ' ')
+      .split(/[\s,;]+/).map(w => w.replace(/[.,;:!?]+$/, '')).filter(Boolean);
     const words = [], norm = [];
     for(let i = 0; i < src.length; i++){
       const n = src[i] === '-' || src[i] === '–' ? src[i] : this._n(src[i]);
@@ -1212,9 +1213,15 @@ const ClientCommand = {
     return { min: h * 60 + m, used, explicit };
   },
   NEW_WORDS: [['νεος','πελατης'],['νεα','πελατισσα'],['νεα','πελατης'],['νεος','μαθητης'],['νεα','μαθητρια'],['new','client'],['νεος'],['νεα'],['προσθεσε'],['add']],
+  LEAD: new Set(['παμε','να','βαλουμε','βαλω','βαλε','βαλτε','προσθεσε','προσθεσουμε','προσθεσω','καταχωρησε','καταχωρησουμε','γραψε','σημειωσε','θελω','θελουμε',
+    'εναν','ενα','μια','μιαν','καινουριο','καινουργιο','καινουρια','καινουργια','νεο','νεα','νεος','πελατη','πελατισσα','πελατης','μαθητη','μαθητρια','μαθητης',
+    'τον','την','τη','το','ο','η','λοιπον','λεγεται','ονομα','ειναι','ok','οκ','add','new','client','a']),
+  LEAD_VERB: new Set(['βαλουμε','βαλω','βαλε','βαλτε','προσθεσε','προσθεσουμε','προσθεσω','καταχωρησε','καταχωρησουμε','γραψε','σημειωσε','καινουριο','καινουργιο','καινουρια','καινουργια','νεο','νεα','νεος','add','new']),
+  SEPARATE_W: new Set(['ξεχωριστες','ξεχωριστα','ξεχωριστη','ξεχωριστος','χωριστα','χωριστες','χωρια','ξεχωρα','separate','separately']),
+  FILLER: new Set(['θελει','κανει','εχει','θα','κανουμε','wants']),
   HOUR_W: new Set(['ωρα','ωρες','ωρ','hour','hours','h']), MIN_W: new Set(['λεπτα','λεπτο','λ','min','mins','minutes']),
   FLEX_W: new Set(['σπαστα','σπαστη','σπαστες','split']),
-  STOP: new Set(['μενει','διευθυνση','address','στη','στην','στο','σε','δεν','δε','μαζι','η','ή','και','την','εβδομαδα','φορες','φορα','times','x','με','τις','στις','απο','μεχρι','εως','ως','οδος','οδο','οδου']),
+  STOP: new Set(['θελει','κανει','εχει','θα','μενει','διευθυνση','address','στη','στην','στο','σε','δεν','δε','μαζι','η','ή','και','την','εβδομαδα','φορες','φορα','times','x','με','τις','στις','απο','μεχρι','εως','ως','οδος','οδο','οδου']),
   // "<name>, <street> <number> [<town>], <length>, <N> times / together or
   // split, <subject>, cannot <day> [from H to H]" — the parts in any order,
   // with or without commas. Returns a draft client, or null.
@@ -1225,6 +1232,12 @@ const ClientCommand = {
     // optional "νέος πελάτης"
     let explicit = false;
     for(const pat of this.NEW_WORDS) if(pat.every((w, k) => norm[k] === w)){ words = words.slice(pat.length); norm = norm.slice(pat.length); explicit = true; break; }
+    // the way people start: "πάμε να βάλουμε (έναν καινούριο,) τον …",
+    // "βάλε μια καινούρια, τη …", "θέλω να προσθέσω …" — a new client.
+    let masculineAcc = false;
+    { let k = 0, verb = false;
+      while(k < norm.length && this.LEAD.has(norm[k])){ if(this.LEAD_VERB.has(norm[k])) verb = true; k++; }
+      if(k && (verb || explicit)){ masculineAcc = norm[k - 1] === 'τον'; words = words.slice(k); norm = norm.slice(k); explicit = true; } }
     const used = new Array(words.length).fill(false);
     const d = { name: '', address: '', minutes: null, perWeek: null, flex: false, subject: null, cannot: [], explicit: false };
     // cannot … : one or more days, each with a time range, a part of the
@@ -1322,6 +1335,17 @@ const ClientCommand = {
       }
       if(norm[i] === 'την' && ['εβδομαδα','βδομαδα'].includes(norm[i + 1])){ used[i] = used[i + 1] = true; }
     }
+    // "2 ώρες ξεχωριστές": that many separate hours — lessons of an hour
+    // (or of the length that divides them by the times given)
+    for(let i = 0; i < norm.length; i++){
+      if(used[i] || !this.SEPARATE_W.has(norm[i])) continue;
+      used[i] = true;
+      if(d.minutes){
+        if(d.perWeek && d.perWeek > 1){ d.minutes = Math.round(d.minutes / d.perWeek / 15) * 15; }
+        else { d.perWeek = Math.max(2, Math.round(d.minutes / 60)); d.minutes = Math.round(d.minutes / d.perWeek / 15) * 15; }
+        d.separate = true;
+      }
+    }
     // together or split
     for(let i = 0; i < norm.length; i++){
       if(used[i]) continue;
@@ -1364,7 +1388,10 @@ const ClientCommand = {
       if(/\d/.test(norm[i])) break;
       left.push(words[i].replace(/[,.;:]+$/, ''));
     }
-    d.name = left.slice(0, 2).join(' ');
+    // "τον Γιώργο Κολυμπήτρα" is "Γιώργος Κολυμπήτρας": a man's name after
+    // "τον" goes back to the nominative (-ο, -α, -η take a final ς; a
+    // genitive surname such as Αντωνίου stays as it is).
+    d.name = left.slice(0, 2).map(w => masculineAcc && /[οόαάηή]$/.test(w) ? w + 'ς' : w).join(' ');
     if(!d.name) return null;
     // Without "νέος πελάτης": a capitalised name, at least two of address /
     // length / times / cannot, and nothing that marks an errand — a date
@@ -1377,6 +1404,7 @@ const ClientCommand = {
       if(norm.some((w, i) => !used[i] && (QuickNote.MARKERS.has(w) || Object.prototype.hasOwnProperty.call(QuickNote.DAY_OFFSETS, w)))) return null;
     }
     if(d.flex && !d.minutes) d.flex = false;
+    if(norm.some((w, i) => w === 'μαζι' && !used[i])) d.together = true;
     d.explicit = explicit;
     return d;
   },
