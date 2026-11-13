@@ -1190,7 +1190,7 @@ const ClientCommand = {
     let skip = 0;
     while(this.AT && this.AT.has(toks[i + skip])) skip++;
     const r = this._clock0(toks, i + skip);
-    return r ? { min: r.min, used: r.used + skip } : null;
+    return r ? { min: r.min, used: r.used + skip, explicit: r.explicit } : null;
   },
   _clock0(toks, i){
     let w = toks[i]; if(w == null) return null;
@@ -1200,11 +1200,16 @@ const ClientCommand = {
     else { h = this._num(w); if(h == null) return null; explicit = h >= 13; }
     if(toks[i + 1] === 'και' && toks[i + 2] === 'μιση'){ m = 30; used = 3; }
     else if(toks[i + 1] === 'μιση' || toks[i + 1] === 'half'){ m = 30; used = 2; }
-    if(['πμ','am','πρωι'].includes(toks[i + used])){ used++; if(h === 12) h = 0; explicit = true; }
-    else if(['μμ','pm','απογευμα','βραδυ'].includes(toks[i + used])){ used++; if(h < 12) h += 12; explicit = true; }
+    // "το πρωί / το απόγευμα" after a time says which half of the day
+    const lead = toks[i + used] === 'το' && ['πρωι','απογευμα','βραδυ','μεσημερι'].includes(toks[i + used + 1]) ? 1 : 0;
+    const mark = toks[i + used + lead];
+    if(['πμ','am'].includes(mark)){ used += 1 + lead; if(h === 12) h = 0; explicit = true; }
+    else if(mark === 'πρωι'){ used += 1 + lead; explicit = true; }                 // "12 το πρωί" is noon
+    else if(['μμ','pm','απογευμα','βραδυ'].includes(mark)){ used += 1 + lead; if(h < 12) h += 12; explicit = true; }
+    else if(mark === 'μεσημερι'){ used += 1 + lead; if(h < 5) h += 12; explicit = true; }
     if(!explicit && h >= 1 && h <= 6) h += 12;
     if(h > 23 || m > 59) return null;
-    return { min: h * 60 + m, used };
+    return { min: h * 60 + m, used, explicit };
   },
   NEW_WORDS: [['νεος','πελατης'],['νεα','πελατισσα'],['νεα','πελατης'],['νεος','μαθητης'],['νεα','μαθητρια'],['new','client'],['νεος'],['νεα'],['προσθεσε'],['add']],
   HOUR_W: new Set(['ωρα','ωρες','ωρ','hour','hours','h']), MIN_W: new Set(['λεπτα','λεπτο','λ','min','mins','minutes']),
@@ -1222,35 +1227,76 @@ const ClientCommand = {
     for(const pat of this.NEW_WORDS) if(pat.every((w, k) => norm[k] === w)){ words = words.slice(pat.length); norm = norm.slice(pat.length); explicit = true; break; }
     const used = new Array(words.length).fill(false);
     const d = { name: '', address: '', minutes: null, perWeek: null, flex: false, subject: null, cannot: [], explicit: false };
-    // cannot … (to the end of the sentence or the next part)
+    // cannot … : one or more days, each with a time range, a part of the
+    // day, or nothing (the whole day), joined by "και" or commas, as long
+    // as the sentence goes on naming days and times:
+    // "δεν μπορεί Τρίτη 5 με 7 και Πέμπτη 3 με 4, και Παρασκευή".
+    const rangeAt = (k, timesOnly) => {
+      let q = k; if(this.FROM.has(norm[q])) q++;
+      const a = this._clock(norm, q);
+      if(a){
+        q += a.used;
+        if(!this.TO.has(norm[q])) return null;
+        q++;
+        const b = this._clock(norm, q);
+        if(!b) return null;
+        let start = a.min, end = b.min <= a.min && b.min + 720 > a.min && b.min + 720 <= 24 * 60 ? b.min + 720 : b.min;
+        if(end < start){ const x = start; start = end; end = x; }    // "3 με 2": two to three
+        // "7 με 8" with no am/pm: morning or evening, whichever falls in the
+        // working day. Someone who works 14:00–22:00 means 19:00–20:00.
+        // "10 με 12 το πρωί": the half said once covers both ends.
+        if(!a.explicit && b.explicit && b.min < 13 * 60 && start >= 13 * 60){ start -= 720; }
+        if(!a.explicit && b.explicit && b.min >= 13 * 60 && start < 12 * 60 && start + 720 < end){ start += 720; }
+        if(!a.explicit && !b.explicit && end <= 12 * 60 + 59){
+          const hrs = Object.values(((typeof state !== 'undefined' && state.settings) || {}).dayHours || {});
+          if(hrs.length){
+            const lo = Math.min(...hrs.map(h => Scheduler.toMin(h.start))), hi = Math.max(...hrs.map(h => Scheduler.toMin(h.end)));
+            const inside = (x, y) => Math.max(0, Math.min(y, hi) - Math.max(x, lo));
+            if(inside(start + 720, end + 720) > inside(start, end)){ start += 720; end += 720; }
+          }
+        }
+        return { start, end, next: q + b.used };
+      }
+      const pod = norm[k] === 'το' ? norm[k + 1] : norm[k];
+      if(!timesOnly && ['απογευμα','πρωι','βραδυ'].includes(pod)){
+        const [start, end] = pod === 'πρωι' ? [8 * 60, 13 * 60] : pod === 'απογευμα' ? [13 * 60, 20 * 60] : [19 * 60, 23 * 60];
+        return { start, end, next: k + (norm[k] === 'το' ? 2 : 1) };
+      }
+      return null;
+    };
+    const daysAt = (k) => {
+      const days = [];
+      for(; k < norm.length; k++){
+        const wd = QuickNote.WEEKDAYS[norm[k]];
+        if(wd == null){
+          if(['και','and','την','τη','τις','on'].includes(norm[k]) && QuickNote.WEEKDAYS[norm[k + 1]] != null) continue;
+          break;
+        }
+        days.push(wd === 0 ? 7 : wd);
+      }
+      return { days, next: k };
+    };
     for(let i = 0; i < norm.length; i++){
       const pat = this.CANNOT.find(p => p.every((w, k) => norm[i + k] === w));
       if(!pat) continue;
-      let j = i + pat.length; const days = [];
-      for(; j < norm.length; j++){
-        const wd = QuickNote.WEEKDAYS[norm[j]];
-        if(wd == null){ if(['και','and','την','τη','τις','on'].includes(norm[j]) && QuickNote.WEEKDAYS[norm[j + 1]] != null) continue; break; }
-        days.push(wd === 0 ? 7 : wd);
+      let j = i + pat.length;
+      let cur = daysAt(j);
+      if(!cur.days.length) continue;
+      j = cur.next;
+      for(;;){
+        const r = rangeAt(j);
+        d.cannot.push({ days: cur.days, start: r ? r.start : null, end: r ? r.end : null });
+        if(r) j = r.next;
+        // goes on? "και" / "," then another range for the same days, or more days
+        let k = j; while(['και','and'].includes(norm[k]) || (norm[k] && this.CANNOT.some(p => p.every((w, z) => norm[k + z] === w)) && false)) k++;
+        // another range for the same days needs "και" before it: "3 με 4 και 6 με 8"
+        const more = k > j ? rangeAt(k, true) : null;
+        if(more && r){ d.cannot.push({ days: cur.days, start: more.start, end: more.end }); j = more.next; k = j;
+          while(['και','and'].includes(norm[k])) k++; }
+        const nextDays = daysAt(k);
+        if(!nextDays.days.length) break;
+        cur = nextDays; j = nextDays.next;
       }
-      if(!days.length) continue;
-      let start = null, end = null;
-      let k = j; if(this.FROM.has(norm[k])) k++;
-      const a = this._clock(norm, k);
-      if(a){
-        k += a.used; if(this.TO.has(norm[k])) k++;
-        const b = this._clock(norm, k);
-        if(b){
-          start = a.min; end = b.min <= a.min && b.min + 720 > a.min && b.min + 720 <= 24 * 60 ? b.min + 720 : b.min;
-          // "3 με 2" said for two to three: the earlier one starts.
-          if(end < start){ const x = start; start = end; end = x; }
-          j = k + b.used;
-        }
-      } else if(['απογευμα','πρωι','βραδυ'].includes(norm[j]) || (['το'].includes(norm[j]) && ['απογευμα','πρωι','βραδυ'].includes(norm[j + 1]))){
-        const w = norm[j] === 'το' ? norm[j + 1] : norm[j];
-        [start, end] = w === 'πρωι' ? [8 * 60, 13 * 60] : w === 'απογευμα' ? [13 * 60, 20 * 60] : [19 * 60, 23 * 60];
-        j += norm[j] === 'το' ? 2 : 1;
-      }
-      d.cannot.push({ days, start, end });
       for(let q = i; q < j; q++) used[q] = true;
       i = j - 1;
     }

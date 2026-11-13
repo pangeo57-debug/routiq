@@ -7159,3 +7159,30 @@ describe('sentences as speech writes them', () => {
     assert.equal(said(app, 'Γιώργος μένει Ερμού 5 στην Πάτρα').d.address, 'Ερμού 5 Πάτρα');
   });
 });
+
+describe('several "cannot" in one sentence', () => {
+  const hm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  function read(txt, cfgOv) {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings(cfgOv || {}), coords: {}, schedule: {} });
+    const d = app.ClientCommand.parseNew(txt, []);
+    return Array.from(d.cannot, c => Array.from(c.days).join(',') + ' ' + (c.start == null ? 'all' : hm(c.start) + '-' + hm(c.end)));
+  }
+  test('days and times go on after "και" and commas, without repeating "δεν μπορεί"', () => {
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τρίτη 5 με 7 και Πέμπτη 3 με 4'), ['2 17:00-19:00', '4 15:00-16:00']);
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τρίτη 5 με 7, Πέμπτη 3 με 4 και Παρασκευή'), ['2 17:00-19:00', '4 15:00-16:00', '5 all']);
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τρίτη 3 με 4 και 6 με 8'), ['2 15:00-16:00', '2 18:00-20:00']);
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Δευτέρα και Τετάρτη 5 με 7 και Παρασκευή το πρωί'), ['1,3 17:00-19:00', '5 08:00-13:00']);
+  });
+  test('the second one is never taken for an address', () => {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({}), coords: {}, schedule: {} });
+    assert.equal(app.ClientCommand.parseNew('νέος πελάτης Νίκος δεν μπορεί Τρίτη 5 με 7 και Πέμπτη 3 με 4', []).address, '');
+  });
+  test('morning or evening from the working day, or as said', () => {
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τετάρτη 7 με 8'), ['3 19:00-20:00'], 'works 15:00-22:00');
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τετάρτη 9 με 11', { dayHours: { 3: { start: '08:00', end: '14:00' } } }), ['3 09:00-11:00']);
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τρίτη 10 με 12 το πρωί'), ['2 10:00-12:00']);
+    assert.deepStrictEqual(read('νέος πελάτης Νίκος δεν μπορεί Τρίτη 5 με 7 το απόγευμα και Πέμπτη 9 με 11 το πρωί'), ['2 17:00-19:00', '4 09:00-11:00']);
+  });
+});
