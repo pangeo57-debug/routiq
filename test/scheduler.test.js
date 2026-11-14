@@ -7448,3 +7448,30 @@ describe('start-time grid', () => {
     assert.equal(Scheduler.timeGrid(null), 5);
   });
 });
+
+describe('a length said in any of the usual ways', () => {
+  const CASES = [
+    ['2 ώρες', 120], ['δίωρο', 120], ['κανά δίωρο', 120], ['2 ωρών', 120], ['2h', 120], ['2ωρο', 120], ['τρίωρο', 180],
+    ['μία ώρα', 60], ['ένα ωράκι', 60], ['ωρίτσα', 60], ['εξήντα λεπτά', 60],
+    ['μιάμιση ώρα', 90], ['ενάμιση ώρα', 90], ['μία και μισή ώρα', 90], ['μια ώρα και μισή', 90], ['ώρα και μισή', 90],
+    ['1,5 ώρα', 90], ['1.5 ώρες', 90], ['90 λεπτά', 90], ["90'", 90], ['90′', 90], ['90λ', 90], ['1h30', 90], ['1 ώρα 30 λεπτά', 90],
+    ['μισή ώρα', 30], ['μισάωρο', 30], ['τρία τέταρτα', 45], ['ένα τέταρτο', 15],
+    ['ώρα και τέταρτο', 75], ['μία ώρα και ένα τέταρτο', 75], ['1 ώρα και 15', 75], ['1 ώρα και 15 λεπτά', 75],
+    ['δυόμισι ώρες', 150], ['2,5 ώρες', 150], ['2 ώρες και 30 λεπτά', 150], ['δυο ώρες και 15', 135],
+  ];
+  test('each one in a sentence gives its minutes', () => {
+    const { ClientCommand } = loadApp();
+    const wrong = CASES.map(([said, min]) => [said, min, ClientCommand.parseNew('Νέος πελάτης Γιώργος Παπάς, ' + said + ' την εβδομάδα', []).minutes])
+      .filter(([, min, got]) => got !== min);
+    assert.deepStrictEqual(wrong, []);
+  });
+  test('a house number before "ώρα" is not hours, and "και" before a range is not minutes', () => {
+    const { ClientCommand } = loadApp();
+    assert.equal(ClientCommand.parseNew('νέα μαθήτρια Κατερίνα, Ερμού 5, ώρα και τέταρτο, δύο φορές', []).minutes, 75);
+    const d = ClientCommand.parseNew('νέος πελάτης Πέτρος, Αγίου Νικολάου 15, 2 ώρες και 5 με 7 δεν μπορεί Πέμπτη', []);
+    assert.equal(d.minutes, 120);
+    const m = ClientCommand.parseNew('Νέος πελάτης Μαρία Παπαδοπούλου Κορίνθου 52 Πάτρα 1,5 ώρα 2 φορές δεν μπορεί Τρίτη 5,30 με 7', []);
+    assert.equal(m.minutes, 90); assert.equal(m.address, 'Κορίνθου 52 Πάτρα');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(m.cannot)), [{ days: [2], start: 1050, end: 1140 }]);
+  });
+});

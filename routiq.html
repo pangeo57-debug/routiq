@@ -1146,9 +1146,17 @@ const ClientCommand = {
     δεκαεφτα:17, δεκαεπτα:17, δεκαοχτω:18, δεκαοκτω:18, δεκαεννια:19, δεκαεννεα:19 },
   NW_TENS: { εικοσι:20, τριαντα:30, σαραντα:40, πενηντα:50, εξηντα:60, εβδομηντα:70, ογδοντα:80, ενενηντα:90 },
   NW_HUND: { εκατο:100, εκατον:100, διακοσια:200, τριακοσια:300, τετρακοσια:400, πεντακοσια:500, εξακοσια:600, εφτακοσια:700, επτακοσια:700, οχτακοσια:800, εννιακοσια:900 },
-  HOURS_WORD: { μονοωρο:1, μονωρο:1, ωρακι:1, διωρο:2, τριωρο:3, τετραωρο:4, πεντωρο:5 },
+  HOURS_WORD: { μονοωρο:1, μονωρο:1, ωρακι:1, ωριτσα:1, ωρουλα:1, διωρο:2, διωρα:2, διωρακι:2, τριωρο:3, τριωρα:3, τετραωρο:4, πεντωρο:5,
+    μισαωρο:0.5, μισαωρακι:0.5 },
+  // "μιάμιση", "ενάμιση", "δυόμισι": hours and a half, in one word
+  HALF_W: { μιαμιση:1.5, μιαμισι:1.5, εναμιση:1.5, εναμισι:1.5, εναμισης:1.5, δυομισι:2.5, δυομιση:2.5, τρεισημισι:3.5, τρεισημιση:3.5, τριμισι:3.5 },
   _words(raw){
-    const src = String(raw || '').replace(/(\d)\s*[-–]\s*(\d)/g, '$1 - $2').replace(/[.!?;:]+(\s|$)/g, ' ')
+    // Written short: "1,5" is a number, "90'" "90λ" minutes, "2h" "1h30" "3ωρο" hours.
+    const E = '(?=[\\s,.;!?]|$)';
+    const src = String(raw || '').replace(/(\d),(\d)/g, '$1.$2')
+      .replace(/(\d+)\s*h\s*(\d{1,2})(?=\D|$)/gi, '$1 ωρες $2 λεπτα').replace(new RegExp('(\\d+)\\s?h' + E, 'gi'), '$1 ωρες')
+      .replace(new RegExp('(\\d+)\\s?(?:[\'′’]|λ|λεπτ[αά])' + E, 'g'), '$1 λεπτα').replace(new RegExp('(\\d+)\\s?[ωώ]ρ(?:ο|α|ες|ου)' + E, 'gi'), '$1 ωρες')
+      .replace(/(\d)\s*[-–]\s*(\d)/g, '$1 - $2').replace(/[.!?;:]+(\s|$)/g, ' ')
       .split(/[\s,;]+/).map(w => w.replace(/[.,;:!?]+$/, '')).filter(Boolean);
     const words = [], norm = [];
     for(let i = 0; i < src.length; i++){
@@ -1228,7 +1236,8 @@ const ClientCommand = {
   LEAD_VERB: new Set(['βαλουμε','βαλω','βαλε','βαλτε','προσθεσε','προσθεσουμε','προσθεσω','καταχωρησε','καταχωρησουμε','γραψε','σημειωσε','καινουριο','καινουργιο','καινουρια','καινουργια','νεο','νεα','νεος','add','new']),
   SEPARATE_W: new Set(['ξεχωριστες','ξεχωριστα','ξεχωριστη','ξεχωριστος','χωριστα','χωριστες','χωρια','ξεχωρα','separate','separately']),
   FILLER: new Set(['θελει','κανει','εχει','θα','κανουμε','wants']),
-  HOUR_W: new Set(['ωρα','ωρες','ωρ','hour','hours','h']), MIN_W: new Set(['λεπτα','λεπτο','λ','min','mins','minutes']),
+  HOUR_W: new Set(['ωρα','ωρες','ωρ','ωρων','ωριτσες','ωρακια','hour','hours','h']), MIN_W: new Set(['λεπτα','λεπτο','λεπτων','λεπτακια','λ','min','mins','minutes']),
+  QUARTER_W: new Set(['τεταρτο','τεταρτα']), RANGE_W: new Set(['με','μεχρι','εως','ως','-','–','to','till','until']),
   FLEX_W: new Set(['σπαστα','σπαστη','σπαστες','split']),
   STOP: new Set(['θελει','κανει','εχει','θα','μενει','διευθυνση','address','στη','στην','στο','σε','δεν','δε','μαζι','η','ή','και','την','εβδομαδα','φορες','φορα','times','x','με','τις','στις','απο','μεχρι','εως','ως','οδος','οδο','οδου']),
   // "<name>, <street> <number> [<town>], <length>, <N> times / together or
@@ -1322,17 +1331,38 @@ const ClientCommand = {
       for(let q = i; q < j; q++) used[q] = true;
       i = j - 1;
     }
-    // length: "2 ώρες", "90 λεπτά", "μιάμιση ώρα", "1,5 ώρα"
-    for(let i = 0; i < norm.length; i++){
-      if(used[i]) continue;
-      let n = null, span = 1;
-      if(norm[i] === 'μιαμιση' && this.HOUR_W.has(norm[i + 1])){ n = 1.5; span = 2; }
-      else {
-        const v = /^\d+([.,]5)?$/.test(norm[i]) ? Number(norm[i].replace(',', '.')) : this._num(norm[i]);
-        if(v != null && this.HOUR_W.has(norm[i + 1])){ n = v; span = 2; if(norm[i + 2] === 'και' && norm[i + 3] === 'μιση'){ n += 0.5; span = 4; } }
-        else if(v != null && this.MIN_W.has(norm[i + 1])){ d.minutes = v; for(let q = i; q < i + 2; q++) used[q] = true; continue; }
+    // length: "2 ώρες", "90 λεπτά", "μιάμιση ώρα", "1,5 ώρα", "μισή ώρα", "τρία
+    // τέταρτα", "ώρα και τέταρτο", "2 ώρες και 15 (λεπτά)", "δυόμισι ώρες"
+    const length = (i) => {
+      const w = (k) => norm[k], num = (k) => (/^\d+(\.\d+)?$/.test(w(k) || '') ? Number(w(k)) : this._num(w(k)));
+      let h = null, j = i;
+      if(this.HALF_W[w(i)] != null){ h = this.HALF_W[w(i)]; j = i + 1 + (this.HOUR_W.has(w(i + 1)) ? 1 : 0); }
+      else if(w(i) === 'μιση' && this.HOUR_W.has(w(i + 1))) return { min: 30, next: i + 2 };
+      else if(num(i) != null && w(i + 1) === 'και' && w(i + 2) === 'μιση' && this.HOUR_W.has(w(i + 3))){ h = num(i) + 0.5; j = i + 4; }
+      // "5 ώρα" is not five hours: after 2 or more Greek says "ώρες". The 5 is a
+      // house number ("Ερμού 5, ώρα και τέταρτο"), and "ώρα" stands alone.
+      else if(num(i) != null && this.HOUR_W.has(w(i + 1)) && !(w(i + 1) === 'ωρα' && num(i) >= 2)){ h = num(i); j = i + 2; }
+      else if(w(i) === 'ωρα' && w(i + 1) === 'και' && (w(i + 2) === 'μιση' || this.QUARTER_W.has(w(i + 2)) || this.QUARTER_W.has(w(i + 3)))){ h = 1; j = i + 1; }
+      else if(num(i) != null && this.QUARTER_W.has(w(i + 1))) return { min: num(i) * 15, next: i + 2 };
+      else if(w(i) === 'τεταρτο') return { min: 15, next: i + 1 + (w(i + 1) === 'της' && /^ωρα/.test(w(i + 2) || '') ? 2 : 0) };
+      else if(num(i) != null && this.MIN_W.has(w(i + 1))) return { min: num(i), next: i + 2 };
+      if(h == null) return null;
+      let min = h * 60;
+      if(w(j) === 'και'){
+        if(w(j + 1) === 'μιση'){ min += 30; j += 2; }
+        else if(this.QUARTER_W.has(w(j + 1))){ min += 15; j += 2; }
+        else if(num(j + 1) != null && this.QUARTER_W.has(w(j + 2))){ min += num(j + 1) * 15; j += 3; }
+        else if(/^\d{1,2}$/.test(w(j + 1) || '') && Number(w(j + 1)) < 60 && !this.RANGE_W.has(w(j + 2))){
+          min += Number(w(j + 1)); j += 2; if(this.MIN_W.has(w(j))) j++;
+        }
       }
-      if(n != null && d.minutes == null){ d.minutes = Math.round(n * 60); for(let q = i; q < i + span; q++) used[q] = true; }
+      else if(/^\d{1,2}$/.test(w(j) || '') && this.MIN_W.has(w(j + 1))){ min += Number(w(j)); j += 2; }   // "1 ώρα 30 λεπτά", "1h30"
+      return { min, next: j };
+    };
+    for(let i = 0; i < norm.length && d.minutes == null; i++){
+      if(used[i]) continue;
+      const L = length(i);
+      if(L && L.min > 0){ d.minutes = Math.round(L.min); for(let q = i; q < L.next; q++) used[q] = true; }
     }
     // times a week
     for(let i = 0; i < norm.length; i++){
