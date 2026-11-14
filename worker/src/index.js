@@ -331,15 +331,20 @@ async function handle(request, env, ctx) {
 
   // ---- Understanding a sentence about a client (opt-in in the app) --------
   if (group === 'ai' && action === 'client') {
-    if (!env.ANTHROPIC_API_KEY) return json({ error: 'not configured' }, 503, cors);
+    const who = AI.provider(env);
+    if (!who) return json({ error: 'not configured' }, 503, cors);
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, cors);
     const raw = await request.text();
     if (raw.length > 4096) return json({ error: 'body too large' }, 413, cors);
     let body;
     try { body = JSON.parse(raw); } catch { return json({ error: 'body is not JSON' }, 400, cors); }
-    // The SDK is loaded only here, so nothing else in the Worker pays for it.
-    const client = env._aiClient || new (await import('@anthropic-ai/sdk')).default({ apiKey: env.ANTHROPIC_API_KEY });
-    const out = await AI.understand(client, body);
+    let out;
+    if (who === 'ollama') out = await AI.understandOllama(env._fetch || fetch, env, body);
+    else {
+      // The SDK is loaded only here, so nothing else in the Worker pays for it.
+      const client = env._aiClient || new (await import('@anthropic-ai/sdk')).default({ apiKey: env.ANTHROPIC_API_KEY });
+      out = await AI.understand(client, body);
+    }
     return json(out.body || { error: out.error }, out.status, cors);
   }
 

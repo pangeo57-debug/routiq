@@ -255,3 +255,22 @@ Set it up: add `ANTHROPIC_API_KEY=...` to `.dev.vars` and re-run
 `npm run setup:api`, or `npx wrangler secret put ANTHROPIC_API_KEY`.
 Without the key the route answers 503 and the app uses its rules alone.
 Each sentence is one short request (about 1–2 thousand tokens).
+
+### Or a model on your own server (Ollama), free per sentence
+
+One setting switches the provider. In `.dev.vars`:
+
+    AI_PROVIDER=ollama
+    OLLAMA_URL=https://llm.your-server.example
+    OLLAMA_MODEL=qwen2.5:7b
+    OLLAMA_TOKEN=...        # only if a proxy in front of Ollama asks for one
+
+then `npm run setup:api`. The Worker sends the same instructions and the
+same JSON schema to Ollama's `/api/chat` (`format`), checks the answer the
+same way, and never calls Claude. Nothing leaves your server. A model of
+7–8B parameters needs about 8 GB of RAM; without a GPU expect a few seconds
+to ten per sentence (the Worker waits 30 s, `OLLAMA_TIMEOUT_MS`). Ollama
+must be reachable from the internet over HTTPS; put it behind a reverse
+proxy with a token, never open as it is. Greek quality depends on the
+model: try a few sentences before relying on it. `AI_PROVIDER=claude`
+(or nothing) goes back to Claude.

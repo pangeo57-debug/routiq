@@ -160,6 +160,14 @@ async function main() {
   } else {
     warn('no ANTHROPIC_API_KEY in .dev.vars — sentences are read by the app\'s rules only');
   }
+  // Optional: a local model instead (AI_PROVIDER=ollama, OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TOKEN).
+  for (const name of ['AI_PROVIDER', 'OLLAMA_URL', 'OLLAMA_MODEL', 'OLLAMA_TOKEN']) {
+    const m = existsSync(devVars) && readFileSync(devVars, 'utf8').match(new RegExp('^' + name + '\\s*=\\s*(.+)$', 'm'));
+    if (!(m && m[1].trim())) continue;
+    execFileSync('npx', ['--yes', 'wrangler@latest', 'secret', 'put', name],
+      { cwd: here, input: m[1].trim() + '\n', encoding: 'utf8', stdio: ['pipe', 'inherit', 'inherit'] });
+    ok(name + ' uploaded from .dev.vars');
+  }
 
   step(6, 'Deploying');
   // The Claude SDK is bundled into the Worker: it has to be installed first.

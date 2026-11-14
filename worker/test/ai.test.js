@@ -79,3 +79,57 @@ describe('through the Worker', () => {
     assert.equal((await on.json()).name, 'Γιώργος Κολυμπήτρας');
   });
 });
+
+describe('a local model through Ollama, chosen by one setting', () => {
+  const ORIGIN = 'https://pangeo57-debug.github.io';
+  const kv = () => { const m = new Map(); return { async get(k) { return m.has(k) ? m.get(k) : null; }, async put(k, v) { m.set(k, v); } }; };
+  const OLL = { AI_PROVIDER: 'ollama', OLLAMA_URL: 'https://llm.example/', OLLAMA_MODEL: 'qwen2.5:7b' };
+  function fakeFetch(reply, status = 200) {
+    const calls = [];
+    const f = async (url, init) => { calls.push({ url, init, body: JSON.parse(init.body) });
+      if (reply instanceof Error) throw reply;
+      return new Response(JSON.stringify({ message: { role: 'assistant', content: typeof reply === 'string' ? reply : JSON.stringify(reply) } }), { status }); };
+    f.calls = calls; return f;
+  }
+  test('which provider: the setting decides, and a half-set one is off', () => {
+    assert.equal(AI.provider({ ANTHROPIC_API_KEY: 'k' }), 'claude');
+    assert.equal(AI.provider({ AI_PROVIDER: 'ollama', ANTHROPIC_API_KEY: 'k', OLLAMA_URL: 'u', OLLAMA_MODEL: 'm' }), 'ollama');
+    assert.equal(AI.provider({ AI_PROVIDER: 'ollama', OLLAMA_URL: 'u' }), null, 'no model named');
+    assert.equal(AI.provider({ AI_PROVIDER: 'claude' }), null, 'no key');
+    assert.equal(AI.provider({ AI_PROVIDER: 'something' , ANTHROPIC_API_KEY: 'k' }), null);
+    assert.equal(AI.provider({}), null);
+  });
+  test('the same instructions and schema as Claude get, nothing more', async () => {
+    const f = fakeFetch(GOOD);
+    const out = await AI.understandOllama(f, { ...OLL, OLLAMA_TOKEN: 't' }, { text: 'Πάμε να βάλουμε τον Γιώργο', context: { today: '2026-11-13', clients: ['Ζαχαρούλα'] } });
+    assert.equal(out.status, 200); assert.equal(out.body.cannot.length, 3);
+    const c = f.calls[0];
+    assert.equal(c.url, 'https://llm.example/api/chat');
+    assert.equal(c.init.headers.Authorization, 'Bearer t');
+    assert.deepStrictEqual(c.body.format, AI.SCHEMA);
+    assert.equal(c.body.stream, false); assert.equal(c.body.model, 'qwen2.5:7b');
+    assert.equal(c.body.messages[0].content, AI.buildParams('x', {}).system);
+    assert.match(c.body.messages[1].content, /2026-11-13/);
+    assert.ok(!/Ζαχαρούλα/.test(JSON.stringify(c.body)), 'the client list is never sent');
+  });
+  test('its answer is cleaned the same way; silence, errors and junk are errors', async () => {
+    const bad = (await AI.understandOllama(fakeFetch({ ...GOOD, lessons_per_week: 99, intent: 'x' }), OLL, { text: 'x' })).body;
+    assert.equal(bad.lessons_per_week, 0); assert.equal(bad.intent, 'not_about_a_client');
+    assert.equal((await AI.understandOllama(fakeFetch(new Error('down')), OLL, { text: 'x' })).status, 504);
+    assert.equal((await AI.understandOllama(fakeFetch(GOOD, 500), OLL, { text: 'x' })).status, 502);
+    assert.equal((await AI.understandOllama(fakeFetch('not json'), OLL, { text: 'x' })).status, 502);
+    const f = fakeFetch(GOOD);
+    assert.equal((await AI.understandOllama(f, OLL, { text: '' })).status, 400);
+    assert.equal(f.calls.length, 0);
+  });
+  test('through the Worker: no key needed, Claude never called', async () => {
+    const f = fakeFetch(GOOD);
+    const claude = fakeClient(GOOD);
+    const res = await W.handle(new Request('https://api.example/ai/client', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Πάμε να βάλουμε τον Γιώργο' }) }),
+      { ALLOWED_ORIGINS: ORIGIN, RATE: kv(), CACHE: kv(), ...OLL, ANTHROPIC_API_KEY: 'k', _aiClient: claude, _fetch: f });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).name, 'Γιώργος Κολυμπήτρας');
+    assert.equal(f.calls.length, 1); assert.equal(claude.calls.length, 0);
+  });
+});

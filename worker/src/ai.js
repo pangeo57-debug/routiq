@@ -1,5 +1,11 @@
 /**
- * Understanding a sentence about a client, with Claude.
+ * Understanding a sentence about a client, with Claude or a local model.
+ *
+ * One setting chooses who reads it: AI_PROVIDER = "claude" (the default
+ * when ANTHROPIC_API_KEY is set) or "ollama" (a model on your own server,
+ * OLLAMA_URL and OLLAMA_MODEL, OLLAMA_TOKEN if it sits behind a proxy that
+ * wants one). Both get the same instructions and the same schema, and both
+ * answers go through the same clean().
  *
  * The app reads most sentences itself, by rules, on the phone. What its rules
  * cannot read comes here — only when the person has switched it on — and
@@ -55,12 +61,17 @@ const SYSTEM = `You read one sentence that a self-employed professional (a tutor
 
 Do not invent anything that was not said: leave it empty or 0.`;
 
-/** The request: the sentence, and only what is needed to read times and dates. */
-export function buildParams(text, ctx) {
+/** What the model is told about the sentence: it, the date, the working hours. */
+function userText(text, ctx) {
   const hours = Object.entries((ctx && ctx.dayHours) || {})
     .filter(([d, h]) => /^[1-7]$/.test(d) && h && /^\d{2}:\d{2}$/.test(h.start) && /^\d{2}:\d{2}$/.test(h.end))
     .map(([d, h]) => `${d}: ${h.start}–${h.end}`).join(', ');
   const today = ctx && /^\d{4}-\d{2}-\d{2}$/.test(ctx.today) ? ctx.today : '';
+  return `Working hours by weekday: ${hours || 'not set'}.\nToday: ${today || 'unknown'}.\nSentence: ${text}`;
+}
+
+/** The request to Claude: the sentence, and only what is needed to read times and dates. */
+export function buildParams(text, ctx) {
   return {
     model: MODEL,
     max_tokens: 2000,
@@ -68,11 +79,27 @@ export function buildParams(text, ctx) {
     fallbacks: 'default',
     output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
     system: SYSTEM,
-    messages: [{
-      role: 'user',
-      content: `Working hours by weekday: ${hours || 'not set'}.\nToday: ${today || 'unknown'}.\nSentence: ${text}`,
-    }],
+    messages: [{ role: 'user', content: userText(text, ctx) }],
   };
+}
+
+/** The same request for Ollama's /api/chat: the schema goes in `format`. */
+export function ollamaParams(text, ctx, model) {
+  return {
+    model,
+    stream: false,
+    format: SCHEMA,
+    options: { temperature: 0 },
+    messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: userText(text, ctx) }],
+  };
+}
+
+/** Which provider the Worker's settings choose, or null when none is set up. */
+export function provider(env) {
+  const p = String((env && env.AI_PROVIDER) || '').trim().toLowerCase();
+  if (p === 'ollama') return env.OLLAMA_URL && env.OLLAMA_MODEL ? 'ollama' : null;
+  if (p === '' || p === 'claude') return env && env.ANTHROPIC_API_KEY ? 'claude' : null;
+  return null;
 }
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -94,10 +121,16 @@ export function clean(x) {
   };
 }
 
-export async function understand(client, body) {
+function sentence(body) {
   const text = body && typeof body.text === 'string' ? body.text.trim() : '';
-  if (!text) return { status: 400, error: 'text required' };
-  if (text.length > MAX_TEXT) return { status: 413, error: 'text too long' };
+  if (!text) return { error: { status: 400, error: 'text required' } };
+  if (text.length > MAX_TEXT) return { error: { status: 413, error: 'text too long' } };
+  return { text };
+}
+
+export async function understand(client, body) {
+  const { text, error } = sentence(body);
+  if (error) return error;
   const response = await client.beta.messages.create(buildParams(text, body.context));
   if (response.stop_reason === 'refusal') return { status: 422, error: 'declined' };
   if (response.stop_reason === 'max_tokens') return { status: 502, error: 'incomplete' };
@@ -105,5 +138,28 @@ export async function understand(client, body) {
   if (!block) return { status: 502, error: 'no answer' };
   let parsed;
   try { parsed = JSON.parse(block.text); } catch { return { status: 502, error: 'unreadable answer' }; }
+  return { status: 200, body: clean(parsed) };
+}
+
+/**
+ * The same, from a model on your own server through Ollama. `fetchFn` is the
+ * Worker's fetch (a stand-in in the tests). A slow or absent server is an
+ * error, never a guess: the app then keeps what its rules understood.
+ */
+export async function understandOllama(fetchFn, env, body) {
+  const { text, error } = sentence(body);
+  if (error) return error;
+  const url = String(env.OLLAMA_URL).replace(/\/+$/, '') + '/api/chat';
+  const headers = { 'Content-Type': 'application/json' };
+  if (env.OLLAMA_TOKEN) headers.Authorization = 'Bearer ' + env.OLLAMA_TOKEN;
+  let res;
+  try {
+    res = await fetchFn(url, { method: 'POST', headers, body: JSON.stringify(ollamaParams(text, body.context, env.OLLAMA_MODEL)),
+      signal: AbortSignal.timeout(Number(env.OLLAMA_TIMEOUT_MS) || 30000) });
+  } catch { return { status: 504, error: 'local model did not answer' }; }
+  if (!res.ok) return { status: 502, error: 'local model error ' + res.status };
+  let parsed;
+  try { const data = await res.json(); parsed = JSON.parse(data && data.message && data.message.content); }
+  catch { return { status: 502, error: 'unreadable answer' }; }
   return { status: 200, body: clean(parsed) };
 }
