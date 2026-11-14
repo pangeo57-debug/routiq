@@ -7436,3 +7436,15 @@ describe('before and after: fuel and CO2 beside the kilometres', () => {
     assert.ok(!/εβδομάδες\)/.test(html), 'no yearly saving when there is none');
   });
 });
+
+describe('start-time grid', () => {
+  test('5 minutes unless set; 1 to 30 accepted, anything else falls back to 5', () => {
+    const { Scheduler } = loadApp();
+    assert.equal(Scheduler.timeGrid(settings({})), 5);
+    assert.equal(Scheduler.timeGrid(settings({ timeGrid: 1 })), 1);
+    assert.equal(Scheduler.timeGrid(settings({ timeGrid: 15 })), 15);
+    assert.equal(Scheduler.timeGrid(settings({ timeGrid: 0 })), 5);
+    assert.equal(Scheduler.timeGrid(settings({ timeGrid: 90 })), 5);
+    assert.equal(Scheduler.timeGrid(null), 5);
+  });
+});

@@ -2850,6 +2850,11 @@ const Scheduler = {
     return (fromId || fromAddr) + '>' + (toId || toAddr) + '|' + day + bucket;
   },
 
+  // Start times fall on this grid, in minutes: 5 by default (an appointment
+  // at 16:05, not 16:03). A school run, a delivery round or anything else of
+  // one-minute stops needs 1, or the grid alone fills the hour.
+  timeGrid(settings){ const g = Number(settings && settings.timeGrid); return g >= 1 && g <= 30 ? Math.round(g) : 5; },
+
   // Two stops at one place: the same client, the same address, or the same
   // position — a studio, a gym, a practice the clients come to. Between them
   // there is no drive and no margin: one session follows the other.
@@ -3714,7 +3719,7 @@ const Scheduler = {
       for(const e of sorted){
         const buf=e.studentId===student.id?0:this.legMin(margin, e.studentId,e.address,student.id,student.address);
         const t=this.toMin(e.end)+buf;
-        const r=Math.ceil(t/5)*5;
+        const r=Math.ceil(t/this.timeGrid(settings))*this.timeGrid(settings);
         if(r>=winStart&&r+dur<=winEndFlex) candidates.add(r);
       }
       // Blocked times: their end is a candidate start (so a block at the start
@@ -3724,7 +3729,7 @@ const Scheduler = {
       // lessons straight through a user's reserved break.
       for(const b of (settings.blockedSlots||[])){
         if(b.day!==day) continue;
-        const r=Math.ceil(this.toMin(b.end)/5)*5;
+        const r=Math.ceil(this.toMin(b.end)/this.timeGrid(settings))*this.timeGrid(settings);
         if(r>=winStart&&r+dur<=winEndFlex) candidates.add(r);
       }
       const slots=[];
@@ -4096,7 +4101,7 @@ const Scheduler = {
         const fit0=this.earliestFit(wins0, t, c.duration||0, 0);
         if(fit0===null) return null;
         t = fit0;
-        if(!first) t=Math.ceil(t/5)*5;
+        if(!first) t=Math.ceil(t/this.timeGrid(settings))*this.timeGrid(settings);
         first=false;
         const winEnd=Math.min(this.toMin(dayH.end), wins0[wins0.length-1][1]);
         // Skip past any blocked time this lesson would land on. This pass
