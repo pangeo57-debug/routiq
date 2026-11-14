@@ -7381,41 +7381,6 @@ describe('the example: made-up clients, a hand-made week, and a clean way out', 
   });
 });
 
-describe('the printed week: whole rows on every page', () => {
-  test('no row is split, a day heading never ends a page, and a day that goes on says so', () => {
-    const app = loadApp();
-    const day = (n) => ({ kind: 'day', h: 40, html: 'D' + n, contHtml: 'D' + n + '+' });
-    const row = (n) => ({ kind: 'row', h: 50, html: 'r' + n });
-    const items = [day(1), row(1), row(2), row(3), day(2), row(4), row(5), row(6), row(7)];
-    // 300 usable; first header 100, later ones 20
-    const pages = Array.from(app.App._pdfPack(items, 300, 100, 20), pg => Array.from(pg, x => x.html));
-    assert.deepStrictEqual(pages, [['D1', 'r1', 'r2', 'r3'], ['D2', 'r4', 'r5', 'r6', 'r7']],
-      'D2 does not fit with its first row on page 1, so it moves on whole');
-    const tight = Array.from(app.App._pdfPack([day(1), row(1), row(2), row(3), row(4), row(5), row(6)], 300, 100, 20), pg => Array.from(pg, x => x.html));
-    assert.deepStrictEqual(tight, [['D1', 'r1', 'r2', 'r3'], ['D1+', 'r4', 'r5', 'r6']], 'the day goes on with a "continued" heading');
-    for (const pg of app.App._pdfPack(items, 300, 100, 20)) {
-      const h = pg.reduce((a, x) => a + x.h, 0);
-      assert.ok(h <= 300, 'a page never overflows');
-      assert.notEqual(pg[pg.length - 1].kind, 'day');
-    }
-  });
-  test('each day says its appointments, kilometres and home time; each row its drive; a locked one is marked', () => {
-    const app = loadApp();
-    const S = app.Scheduler;
-    const sts = ['a', 'b'].map(id => student(id, { days: [1], window: { start: '15:00', end: '21:00' } }));
-    const cfg = settings({ workDays: [1, 2] });
-    app.setState({ students: sts, settings: cfg, coords: cityCoords(sts), jobs: [],
-      schedule: { 1: [{ ...S._lessonSlot(sts[0], 60), start: '15:00', end: '16:00', locked: true }, { ...S._lessonSlot(sts[1], 60), start: '17:00', end: '18:00' }] } });
-    const plan = app.App._pdfPlan('Δοκιμή', 'σήμερα', ['#000']);
-    const html = Array.from(plan.items, x => x.html).join('\n');
-    assert.match(html, /2 ραντεβού · [\d.]+ km · σπίτι \d\d:\d\d/);
-    assert.match(html, /\d+′ οδήγηση/);
-    assert.match(html, /pdf-lock/);
-    assert.match(html, /Τίποτα προγραμματισμένο/, 'an empty working day is shown as empty');
-    assert.match(plan.first, /km/);
-  });
-});
-
 describe('the printed week opens with a timetable on its side', () => {
   test('a column per working day, and every appointment a block as tall as it lasts', () => {
     const app = loadApp();
@@ -7432,11 +7397,42 @@ describe('the printed week opens with a timetable on its side', () => {
     assert.ok(heights[1][0] > heights[0][0] + heights[0][1], 'the later one sits lower, with the gap between them');
     assert.match(html, /15:00–16:00/); assert.match(html, /Πελάτης b/);
   });
-  test('the file is the timetable on its side, then the list upright', () => {
+  test('the file is one page, on its side', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
-    const body = src.slice(src.indexOf('  async printSchedule(){'), src.indexOf('  // The week as printable pieces'));
+    const body = src.slice(src.indexOf('  async printSchedule(){'), src.indexOf('  // The week as a timetable'));
     assert.match(body, /orientation:'landscape'/);
-    assert.match(body, /doc\.addPage\('a4', 'portrait'\)/);
-    assert.ok(body.indexOf('this._pdfGrid(') < body.indexOf("doc.addPage('a4', 'portrait')"));
+    assert.match(body, /this\._pdfGrid\(/);
+    assert.ok(!/addPage/.test(body));
+  });
+});
+
+describe('before and after: fuel and CO2 beside the kilometres', () => {
+  function card(fuelType) {
+    const app = loadApp();
+    app.setState({ settings: settings({ fuelConsumption: 8, fuelPrice: 1.5, fuelType }) });
+    const rec = { kind: 'own', before: { km: 150, drive: 300, idle: 40, stops: 30 }, after: { km: 100, drive: 200, idle: 0, stops: 30 } };
+    return { app, s: app.App.savingsOf(rec), html: app.App._savingsCardHtml(rec, 'week') };
+  }
+  test('litres, euros and CO2 follow the kilometres, the consumption and the fuel', () => {
+    const { s } = card('petrol');
+    assert.equal(s.km, 50); assert.ok(Math.abs(s.litres - 4) < 1e-9); assert.ok(Math.abs(s.eur - 6) < 1e-9);
+    assert.ok(Math.abs(s.co2 - 4 * 2.31) < 1e-9);
+    assert.ok(Math.abs(card('lpg').s.co2 - 4 * 1.61) < 1e-9, 'LPG burns cleaner per litre');
+    assert.ok(Math.abs(card(undefined).s.co2 - 4 * 2.31) < 1e-9, 'petrol when nothing is set');
+  });
+  test('the card is a table: before, after and the difference for km, driving, waiting, fuel, cost and CO2', () => {
+    const { html } = card('diesel');
+    for (const k of ['Χιλιόμετρα', 'Οδήγηση', 'Αναμονή', 'Καύσιμο', 'Κόστος καυσίμου', 'CO₂']) assert.ok(html.includes(k), k);
+    assert.match(html, /150\.0<\/td><td>100\.0<\/td><td class="ba-good">−50\.0 km/);
+    assert.match(html, /12\.0 L<\/td><td>8\.0 L<\/td><td class="ba-good">−4\.0 L/);
+    assert.match(html, /32\.2 kg<\/td><td>21\.4 kg<\/td><td class="ba-good">−10\.7 kg/);
+    assert.match(html, /48 εβδομάδες\): ≈ 2400 km, 112 ώρες, €288 και 515 kg CO₂/);
+  });
+  test('a plan that drives more says so with a plus, not in green', () => {
+    const app = loadApp();
+    app.setState({ settings: settings({}) });
+    const html = app.App._savingsCardHtml({ kind: 'plain', before: { km: 100, drive: 200, idle: 60, stops: 10 }, after: { km: 104, drive: 205, idle: 0, stops: 10 } }, 'week');
+    assert.match(html, /<td class="">\+4\.0 km/);
+    assert.ok(!/εβδομάδες\)/.test(html), 'no yearly saving when there is none');
   });
 });
