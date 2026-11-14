@@ -7297,3 +7297,41 @@ describe('understanding sentences with AI (opt-in, through the Worker)', () => {
     assert.equal(await app.App.clientCommandSmart('Να πάρω τηλέφωνο τον λογιστή για τις φορές'), false);
   });
 });
+
+describe('what is written under a client: the profession\'s word, their own words, or nothing', () => {
+  function app2(profession) {
+    const app = loadApp();
+    app.setState({ students: [], settings: settings({ profession }), coords: {}, schedule: {} });
+    return app;
+  }
+  test('a word from the current profession is shown in its language', () => {
+    assert.equal(app2('tutor').subjectText('Μαθηματικά'), 'Μαθηματικά');
+    assert.ok(app2('physiotherapy').subjectText('physio_back').length > 3);
+  });
+  test('another profession\'s word is not shown: a pupil is never labelled "Consultation"', () => {
+    assert.equal(app2('tutor').subjectText('gen_consult'), '');
+    assert.equal(app2('repair').subjectText('Μαθηματικά'), '');
+  });
+  test('nothing set shows nothing; typed words show as typed', () => {
+    const app = app2('music');
+    for (const v of ['', null, '—', 'Άλλο']) assert.equal(app.subjectText(v), '');
+    assert.equal(app.subjectText('Πιάνο αρχάριοι'), 'Πιάνο αρχάριοι');
+  });
+  test('a client card and a new client carry no guessed service', () => {
+    const app = app2('tutor');
+    const st = student('x', { subject: 'gen_consult' });
+    app.setState({ students: [st] });
+    assert.ok(!/Συμβουλευτική/.test(app.App.studentCard(st)));
+    app.App.importClients('Μαρία, Κορίνθου 12 Πάτρα');
+    assert.equal(app.state.students.find(s => s.name === 'Μαρία').subject, '');
+  });
+  test('the form offers "not set" and the person\'s own words, and keeps typed words when editing', () => {
+    const app = app2('music');
+    let html = app.App.buildStudentForm(null);
+    assert.match(html, /<option value="" selected>/);
+    assert.match(html, /id="st-subject-own"/);
+    html = app.App.buildStudentForm(student('y', { subject: 'Πιάνο αρχάριοι' }));
+    assert.match(html, /id="st-subject-own"[^>]*value="Πιάνο αρχάριοι"/);
+    assert.match(html, /<option value="Άλλο" selected>/);
+  });
+});

@@ -140,7 +140,7 @@ function loadApp(opts = {}) {
     'I18N','PROFESSION_VALUES','SUBJECTS','COLORS','DAYS','DAYS_FULL','esc','t','tf',
     'curLang','normalizeSearchText','getProfessions','getLabels','subjectLabel',
     'getHereKey','schedProgress','_schedFrame','Toast',
-    'API_BASE','lookupMode','hereAvailable','apiUrl','Sync','QuickNote','Usage','Remote','SchedWake','ClientCommand','CalendarImport','AiAssist'];
+    'API_BASE','lookupMode','hereAvailable','apiUrl','Sync','QuickNote','Usage','Remote','SchedWake','ClientCommand','CalendarImport','AiAssist','subjectText'];
   // opts.apiBase: run as if a proxy were configured (it is empty in the file).
   let code = extractScript();
   if (opts.apiBase) code = code.replace("const API_BASE = '';", `const API_BASE = ${JSON.stringify(opts.apiBase)};`);
