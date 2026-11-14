@@ -6821,7 +6821,8 @@ describe('the quick plan', () => {
   test('is the default; the thorough setting or "search deeper" runs the long one', () => {
     const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
     assert.match(body, /const deep = state\.settings\.scheduleQuality==='thorough' \|\| !!state\._deepOnce/);
-    assert.match(body, /deep \? \{\} : \{ timeScale: 0\.25, p1: \{ backtrackMs: 3000, repairMs: 1500 \} \}/);
+    assert.match(body, /deep \? \{\} : [^\n]*\{ timeScale: 0\.25, p1: \{ backtrackMs: 3000, repairMs: 1500 \} \}/);
+    assert.match(body, /state\.settings\.demo \? \{ timeScale: 0\.1/, 'the example plans faster still');
     assert.match(body, /state\._deepOnce = true; App\.runAndNotify\(\)/);
   });
   test('a short budget still places every lesson of a week that fits, with no rule broken', async () => {
@@ -7333,5 +7334,49 @@ describe('what is written under a client: the profession\'s word, their own word
     html = app.App.buildStudentForm(student('y', { subject: 'Πιάνο αρχάριοι' }));
     assert.match(html, /id="st-subject-own"[^>]*value="Πιάνο αρχάριοι"/);
     assert.match(html, /<option value="Άλλο" selected>/);
+  });
+});
+
+describe('the example: made-up clients, a hand-made week, and a clean way out', () => {
+  function fresh() {
+    const app = loadApp({ seed: 2 });
+    app.setState({ students: [], jobs: [], settings: settings({ homeAddress: '' }), coords: {}, schedule: {} });
+    app.App.nav = () => {}; app.Toast.show = () => {}; app.App.runAndNotify = () => {};
+    return app;
+  }
+  test('it fills an empty app with eight example clients and a legal week to plan against', () => {
+    const app = fresh();
+    app.App.startDemo();
+    const S = app.Scheduler, st = app.state;
+    assert.equal(st.students.length, 8);
+    assert.ok(st.students.every(x => /παράδειγμα/.test(x.name)), 'every name says it is an example');
+    assert.equal(S.countTotal(st.schedule), 12);
+    assert.equal(st.students.reduce((a, x) => a + x.lessonsPerWeek, 0), 12);
+    assertClean(S.verifySchedule(st.schedule, st.students, st.settings));
+    assert.equal(st._ownWeek, true, 'the hand-made week is the "before"');
+    assert.equal(st.settings.demo, true);
+  });
+  test('planning the example really saves driving', async () => {
+    const app = fresh();
+    app.App.startDemo();
+    const S = app.Scheduler, st = app.state;
+    const before = S.measureWeek(st.schedule, st.settings).km;
+    const out = await S.optimizeWeek({ students: st.students, settings: st.settings, coords: st.coords, attempts: 1, warm: null,
+      timeScale: 0.1, p1: { backtrackMs: 1500, repairMs: 700 } });
+    const after = S.measureWeek(out.schedule, st.settings).km;
+    assert.equal(S.countTotal(out.schedule), 12);
+    assert.ok(after < before * 0.85, `expected at least 15% less: ${before.toFixed(1)} -> ${after.toFixed(1)}`);
+  });
+  test('it does not open over real data, and leaving it removes everything it added', () => {
+    const real = fresh();
+    real.setState({ students: [student('mine')] });
+    real.App.startDemo();
+    assert.equal(real.state.students.length, 1);
+    const app = fresh();
+    app.App.startDemo(); app.App.endDemo();
+    assert.equal(app.state.students.length, 0);
+    assert.equal(app.Scheduler.countTotal(app.state.schedule), 0);
+    assert.equal(app.state.settings.demo, false);
+    assert.deepStrictEqual(Object.keys(app.state.coords), []);
   });
 });

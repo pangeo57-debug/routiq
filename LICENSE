@@ -1,0 +1,15 @@
+RoutePal
+Copyright (c) 2026 the owner of the RoutePal project
+(https://github.com/pangeo57-debug/routiq). All rights reserved.
+
+This repository is public so that the application can be served from it.
+That does not grant any licence. No permission is given to copy, modify,
+distribute, sublicense or sell this software or any part of it, or to use
+its name and logo, without the prior written consent of the copyright
+owner.
+
+Third-party components keep their own licences:
+- Leaflet (vendor/leaflet) - BSD 2-Clause, see vendor/leaflet/LICENSE
+- Benchmark instances under test/data - see the README files there
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
