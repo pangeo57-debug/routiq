@@ -11116,6 +11116,7 @@ const App = {
     if(boxId==='addr-suggest') this._addrPendingCoord = null;
     else if(boxId==='jb-addr-suggest') this._jobAddrPendingCoord = null;
     else if(boxId==='set-home-suggest') this._homeAddrPendingCoord = null;
+    else if(boxId==='ob-work-suggest') this._obWorkCoord = null;
     else this._obCoord = null;
     clearTimeout(this._addrTimer);
     const box = document.getElementById(boxId);
@@ -11540,7 +11541,7 @@ const App = {
     // code order (_formatAddressOrdered) — saved as-is, not truncated to the
     // first 3 comma-parts like before, which would have silently dropped the
     // postal code off the end.
-    const typedIn = { 'ob-addr-suggest':'ob-addr', 'set-home-suggest':'set-home', 'jb-addr-suggest':'jb-addr' }[boxId] || 'st-addr';
+    const typedIn = { 'ob-addr-suggest':'ob-addr', 'ob-work-suggest':'ob-work', 'set-home-suggest':'set-home', 'jb-addr-suggest':'jb-addr' }[boxId] || 'st-addr';
     const typed = document.getElementById(typedIn)?.value || '';
     let short = this._keepTypedNumber(name.trim(), typed);
     if(res && res._src === 'google'){
@@ -11557,6 +11558,10 @@ const App = {
       const inp = document.getElementById('ob-addr');
       if(inp) inp.value = short;
       this._obCoord = coord;
+    } else if(boxId==='ob-work-suggest'){
+      const inp = document.getElementById('ob-work');
+      if(inp) inp.value = short;
+      this._obWorkCoord = coord;
     } else if(boxId==='set-home-suggest'){
       const inp = document.getElementById('set-home');
       if(inp) inp.value = short;
@@ -11611,6 +11616,7 @@ const App = {
       if(inputId === 'set-home') this.commitHomeLocation(c, text);
       else if(inputId === 'jb-addr') this._jobAddrPendingCoord = c;
       else if(inputId === 'ob-addr') this._obCoord = c;
+      else if(inputId === 'ob-work') this._obWorkCoord = c;
       else { this._addrPendingCoord = c; this.updateStudentLocationMapMarker(c); }
     };
     if(typed) return fill(typed);
@@ -11754,6 +11760,7 @@ const App = {
     const input = document.getElementById(this._mapPickerTarget);
     if(input) input.value = short;
     if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
+    else if(this._mapPickerTarget === 'ob-work') this._obWorkCoord = coord;
     else if(this._mapPickerTarget === 'set-home') this.commitHomeLocation(coord, short);
     else if(this._mapPickerTarget === 'jb-addr') this._jobAddrPendingCoord = coord;
     else { this._addrPendingCoord = coord; this.updateStudentLocationMapMarker(coord); }
@@ -12012,7 +12019,7 @@ const App = {
     state.travelMatrix = state.travelMatrixPeak = state.travelMatrixOffPeak = null;
     Storage.saveStudents(state.students);
     let c = state.coords.workplace;
-    if(!c){ try{ c = await Router.geocode(addr); }catch(e){ c = null; } }
+    if(!c){ try{ c = hereAvailable() ? await Router.geocodeHere(addr, getHereKey()) : await Router.geocode(addr); }catch(e){ c = null; } }
     if(!c) return;
     state.coords.workplace = c;
     for(const x of state.students.filter(y => y.atWorkplace)) state.coords[x.id] = { ...c };
@@ -15854,8 +15861,20 @@ const App = {
           </div>
           <div id="ob-work-wrap" style="display:none;margin-top:12px">
             <label for="ob-work" style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('settings_workplace')}</label>
-            <input id="ob-work" type="text" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off"
-              style="width:100%;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)">
+            <div style="position:relative">
+              <div style="display:flex;gap:6px">
+                <input id="ob-work" type="text" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off"
+                  style="flex:1;min-width:0;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
+                  oninput="App.onAddrInput(this.value,'ob-work-suggest')" onkeydown="App.onAddrKey(event,'ob-work-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-work-suggest'),200)">
+                <button type="button" class="btn-icon" title="${esc(t('gps_here'))}" aria-label="${esc(t('gps_here'))}" onclick="App.hereNow('ob-work')">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+                </button>
+                <button type="button" class="btn-icon" title="${esc(t('form_pick_on_map'))}" aria-label="${esc(t('form_pick_on_map'))}" onclick="App.openMapPicker('ob-work')">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                </button>
+              </div>
+              <div id="ob-work-suggest" style="display:none;background:var(--bg2,#fff);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+            </div>
           </div>
         </div>
 
@@ -15890,6 +15909,7 @@ const App = {
     this._obMode = 'clients';
     this._obDur = 60;
     this._obCoord = null;
+    this._obWorkCoord = null;
   },
 
   _obSelectDur(d, btn){
@@ -15919,10 +15939,18 @@ const App = {
     const dh = state.settings.dayHours || (state.settings.dayHours = {});
     for(const d of (state.settings.workDays || [1,2,3,4,5])) if(!dh[d]) dh[d] = { start: '09:00', end: '21:00' };
     if(addr) state.settings.homeAddress = addr;
-    if(this._obCoord){ state.coords['home'] = this._obCoord; Storage.saveCoords(state.coords); }
+    // The position picked with the suggestions, "I'm here" or the pin is kept.
+    // With no home address of its own, home falls back to the workplace (above),
+    // so it takes the workplace's position too.
+    const workC = work ? this._obWorkCoord : null;
+    if(this._obCoord) state.coords['home'] = this._obCoord;
+    else if(workC && !document.getElementById('ob-addr')?.value?.trim()) state.coords['home'] = { ...workC };
+    if(workC) state.coords.workplace = workC;
+    Storage.saveCoords(state.coords);
     Storage.saveSettings(state.settings);
     document.getElementById('onboard-overlay')?.remove();
-    if(work) this.syncWorkplace(true);
+    // moved=true asks the map again; a position already chosen needs no lookup.
+    if(work) this.syncWorkplace(!workC);
     if(demo){ this.updateNavLabels(); this.registerSW(); this.startDemo(); return; }
     this.updateNavLabels();
     this.renderHome();
