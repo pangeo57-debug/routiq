@@ -8171,7 +8171,20 @@ const Router = {
     return address.replace(/^(\S+)\s+\d+[a-zA-Zα-ωΑ-Ω]?\b/, '$1').trim();
   },
 
+  // One door for every address lookup: HERE first whenever it is available
+  // (the person's own key, or the proxy's), the free Nominatim only for what
+  // HERE did not find or when HERE is not available at all.
   async geocode(address){
+    if(!address) return null;
+    if(hereAvailable()){
+      let c = null;
+      try{ c = await this.geocodeHere(address, getHereKey()); }catch(e){ c = null; }
+      if(c) return c;
+    }
+    return this.geocodeNominatim(address);
+  },
+
+  async geocodeNominatim(address){
     if(!address) return null;
     const tryQuery = async (q)=>{
       try{
@@ -9496,14 +9509,25 @@ const App = {
       const homeItem = toGeocode.find(x=>x.id==='home');
       const rest = toGeocode.filter(x=>x.id!=='home');
       if(homeItem){
-        const c = hereAvailable() ? await Router.geocodeHere(homeItem.addr, hereKey) : await Router.geocode(homeItem.addr);
+        const c = await Router.geocode(homeItem.addr);
         if(c){ state.coords['home']=c; updated=true; } else failed++;
       }
       if(hereAvailable()){
         // HERE's per-key rate limits are generous enough for a batch like
         // this — no artificial throttling needed.
         const results = await Promise.allSettled(rest.map(({id,addr})=>Router.geocodeHere(addr,hereKey).then(c=>({id,c}))));
-        for(const res of results){ if(res.status==='fulfilled' && res.value.c){ state.coords[res.value.id]=res.value.c; updated=true; } else failed++; }
+        const missed = [];
+        results.forEach((res, i) => {
+          if(res.status==='fulfilled' && res.value.c){ state.coords[res.value.id]=res.value.c; updated=true; }
+          else missed.push(rest[i]);
+        });
+        // What HERE did not find is asked of Nominatim, one at a time.
+        for(const {id,addr} of missed){
+          if(state._schedulingCancelled) break;
+          const c = await Router.geocodeNominatim(addr);
+          if(c){ state.coords[id]=c; updated=true; } else failed++;
+          await new Promise(r=>setTimeout(r,1100));
+        }
       } else {
         // Nominatim's free public server enforces ~1 request/second. Firing
         // every student's geocode request in parallel (the old behavior) got
@@ -11171,6 +11195,8 @@ const App = {
               results.unshift({ name: g.label, _src: 'google', _precise: true, placeId: g.placeId,
                                 _matchText: g.label + ' ' + val, lat: g.lat, lon: g.lon });
           }
+          // HERE came first; only if it had nothing, the free service tries.
+          if(!results.length) results = await this._searchNominatim(val).catch(()=>[]);
         } else {
           results = await this._searchNominatim(val);
         }
@@ -12019,7 +12045,7 @@ const App = {
     state.travelMatrix = state.travelMatrixPeak = state.travelMatrixOffPeak = null;
     Storage.saveStudents(state.students);
     let c = state.coords.workplace;
-    if(!c){ try{ c = hereAvailable() ? await Router.geocodeHere(addr, getHereKey()) : await Router.geocode(addr); }catch(e){ c = null; } }
+    if(!c){ try{ c = await Router.geocode(addr); }catch(e){ c = null; } }
     if(!c) return;
     state.coords.workplace = c;
     for(const x of state.students.filter(y => y.atWorkplace)) state.coords[x.id] = { ...c };
@@ -13101,7 +13127,7 @@ const App = {
    */
   _geocodeOne(addr){
     if(!addr) return Promise.resolve(null);
-    return hereAvailable() ? Router.geocodeHere(addr, getHereKey()) : Router.geocode(addr);
+    return Router.geocode(addr);
   },
 
   /**
@@ -14477,7 +14503,7 @@ const App = {
       // without traffic) than the ones the schedule was actually built from —
       // two different answers for the same journey.
       const hereKey = getHereKey();
-      const geo = (addr)=> hereAvailable() ? Router.geocodeHere(addr, hereKey) : Router.geocode(addr);
+      const geo = (addr)=> Router.geocode(addr);
       // Nominatim's public server requires ~1 req/sec. HERE has no such limit,
       // and neither does the proxy — it caches and paces on its own side.
       const geoPause = hereAvailable() ? 0 : 1100;
