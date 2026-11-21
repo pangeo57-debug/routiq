@@ -17,9 +17,9 @@
      cannot set response headers, so protection against being framed is simply
      not available here. Listing it anyway would only log a warning and suggest
      a defence that is not there. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://*.workers.dev https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://maps.googleapis.com https://maps.gstatic.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self'; img-src 'self' data: blob: https://*.google.com https://*.googleapis.com https://*.gstatic.com https://*.tile.openstreetmap.org https://cdn.jsdelivr.net; connect-src 'self' https://*.workers.dev https://places.googleapis.com https://maps.googleapis.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.hereapi.com https://static.cloudflareinsights.com https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#f7f6f3">
+<meta name="theme-color" content="#f8f5ec">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="RoutePal">
@@ -55,30 +55,26 @@
     src:url('fonts/dmsans-latin.woff2') format('woff2');
     unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215; }
 </style>
-<!-- Leaflet 1.9.4 (BSD-2, vendor/leaflet/LICENSE) is served from this site, so
-     opening the app does not send the visitor's IP address to a CDN. -->
-<link rel="stylesheet" href="vendor/leaflet/leaflet.css"/>
-<script src="vendor/leaflet/leaflet.js"></script>
+<script src="google-maps-config.js" onerror="window.ROUTEPAL_GOOGLE_MAPS_API_KEY=''"></script>
 <style>
 :root {
-  /* Light = palette 5 (emerald), dark = palette 4 (graphite + orange).
-     --green is the accent everywhere (the name predates the dark palette);
-     --on-accent is the text drawn on it. */
-  --green: #059669; --accent-rgb: 5,150,105; --on-accent: #ffffff;
-  --blue: #7c3aed; --accent2-rgb: 124,58,237;
-  --accent3: #f59e0b; --grad2: #0ea5e9;
-  --bg: #f7f6f3;
-  --bg2: #ffffff;
-  --bg3: #f0efea;
-  --bg4: #e8e7e3;
-  --border: #e2e0da;
-  --text: #1c1c2e;
-  --text2: #64748b;
-  --text3: #94a3b8;
-  --red: #dc2626;
-  --orange: #d97706;
-  --purple: #7c3aed;
-  --yellow: #ca8a04;
+  /* Dark green + warm white theme. */
+  --green: #166534; --accent-rgb: 22,101,52; --on-accent: #fffaf2;
+  --blue: #475569; --accent2-rgb: 71,85,105;
+  --accent3: #84a98c; --grad2: #2d6a4f;
+  --bg: #f8f5ec;
+  --bg2: #fffaf2;
+  --bg3: #f1ecdf;
+  --bg4: #e7dfcf;
+  --border: #ddd4c2;
+  --text: #1f2d24;
+  --text2: #657565;
+  --text3: #879488;
+  --warm-white: #fffaf2;
+  --red: #b91c1c;
+  --orange: #a16207;
+  --purple: #526b5a;
+  --yellow: #92700c;
   --radius: 12px;
   --radius-sm: 8px;
   --nav-h: 64px;
@@ -92,21 +88,23 @@
    over the OS preference since it's more specific / comes later). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --green: #ff7a1a; --accent-rgb: 255,122,26; --on-accent: #101010;
-    --blue: #3b82f6; --accent2-rgb: 59,130,246;
-    --accent3: #22c55e; --grad2: #e8590c;
-    --bg: #101010; --bg2: #1b1b1b; --bg3: #262626; --bg4: #303030;
-    --border: #2e2e2e; --text: #f5f5f5; --text2: #a3a3a3; --text3: #737373;
-    --red: #f87171; --orange: #fbbf24; --purple: #3b82f6; --yellow: #facc15;
+    --green: #4ade80; --accent-rgb: 74,222,128; --on-accent: #10281b;
+    --blue: #9bb7a4; --accent2-rgb: 155,183,164;
+    --accent3: #86efac; --grad2: #166534;
+    --bg: #10281b; --bg2: #173724; --bg3: #1e4430; --bg4: #28543a;
+    --border: #355e47; --text: #fffaf2; --text2: #d1dbc9; --text3: #aebdaa;
+    --warm-white: #fffaf2;
+    --red: #fca5a5; --orange: #fcd34d; --purple: #b7cbbd; --yellow: #fde68a;
   }
 }
 :root[data-theme="dark"] {
-  --green: #ff7a1a; --accent-rgb: 255,122,26; --on-accent: #101010;
-  --blue: #3b82f6; --accent2-rgb: 59,130,246;
-  --accent3: #22c55e; --grad2: #e8590c;
-  --bg: #101010; --bg2: #1b1b1b; --bg3: #262626; --bg4: #303030;
-  --border: #2e2e2e; --text: #f5f5f5; --text2: #a3a3a3; --text3: #737373;
-  --red: #f87171; --orange: #fbbf24; --purple: #3b82f6; --yellow: #facc15;
+  --green: #4ade80; --accent-rgb: 74,222,128; --on-accent: #10281b;
+  --blue: #9bb7a4; --accent2-rgb: 155,183,164;
+  --accent3: #86efac; --grad2: #166534;
+  --bg: #10281b; --bg2: #173724; --bg3: #1e4430; --bg4: #28543a;
+  --border: #355e47; --text: #fffaf2; --text2: #d1dbc9; --text3: #aebdaa;
+  --warm-white: #fffaf2;
+  --red: #fca5a5; --orange: #fcd34d; --purple: #b7cbbd; --yellow: #fde68a;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;font-size:16px;-webkit-tap-highlight-color:transparent}
@@ -255,7 +253,7 @@ h1,h2,h3,h4,.logo{font-family:'Syne',sans-serif}
 .agenda-note{font-size:11.5px;color:var(--blue);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* Clients as a wallet of cards */
-.student-card.wallet-card{--cc:#059669;background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 62%,#000));border:none;border-radius:20px;margin:0 14px -14px;
+.student-card.wallet-card{--cc:var(--green);background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 62%,#000));border:none;border-radius:20px;margin:0 14px -14px;
   box-shadow:0 -6px 16px rgba(0,0,0,.22);color:#fff;position:relative}
 .student-card.wallet-card:last-child{margin-bottom:12px}
 .student-card.wallet-card:has(.student-body.open){margin-bottom:16px;z-index:2}
@@ -386,9 +384,9 @@ nav{
 .hero-compact{padding-top:calc(env(safe-area-inset-top, 0px) + 20px);padding-bottom:12px}
 .hero-compact .hero-greeting{font-size:13px}
 .hero-date{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-top:2px}
-.next-card{margin:0 16px 12px;padding:16px;border-radius:18px;color:#fff;
+.next-card{margin:0 16px 12px;padding:16px;border-radius:18px;color:var(--warm-white);
   background:linear-gradient(135deg,var(--green),var(--grad2));box-shadow:0 8px 24px rgba(var(--accent-rgb),.25);animation:slideUp .3s ease}
-.next-card .btn-primary{background:#fff;color:#1c1c2e}
+.next-card .btn-primary{background:var(--warm-white);color:var(--text)}
 .next-label{font-size:12px;font-weight:700;letter-spacing:.4px;opacity:.9;text-transform:uppercase}
 .next-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-top:4px}
 .next-sub{font-size:13px;opacity:.9;margin-top:2px}
@@ -908,7 +906,7 @@ input[type=time]{color-scheme:light}
 </div>
 
 <!-- MAP PICKER -->
-<div id="map-picker-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg,#f7f6f3);flex-direction:column">
+<div id="map-picker-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg,#f8f5ec);flex-direction:column">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2)">
     <span style="font-weight:700;font-size:15px" id="map-picker-title"></span>
     <button class="btn-icon" onclick="App.closeMapPicker()">
@@ -8311,7 +8309,7 @@ const Router = {
       if(!r.ok) return null;
       const d = await r.json();
       if(d.code !== 'Ok' || !d.routes?.[0]) return null;
-      // GeoJSON is [lon,lat] — Leaflet wants [lat,lon]
+      // GeoJSON is [lon,lat] — normalize it to RoutePal's [lat,lon] shape.
       return d.routes[0].geometry.coordinates.map(([lon,lat])=>[lat,lon]);
     }catch(e){ return null }
   },
@@ -8587,6 +8585,150 @@ let state = {
 // APP
 // ============================================================
 const App = {
+  _googleMapsLoadPromise: null,
+  _googlePlacesSessionTokens: {},
+  _googleMapsApiKey(){
+    return String(window.ROUTEPAL_GOOGLE_MAPS_API_KEY ||
+      (document.querySelector('meta[name="google-maps-api-key"]')?.content) || '').trim();
+  },
+  async _ensureGoogleMapsReady(){
+    if(window.google && window.google.maps){
+      await window.google.maps.importLibrary('maps');
+      await window.google.maps.importLibrary('places');
+      return window.google.maps;
+    }
+    const key = this._googleMapsApiKey();
+    if(!key) throw new Error('Google Maps API key not configured');
+    if(!this._googleMapsLoadPromise){
+      this._googleMapsLoadPromise = new Promise((resolve,reject)=>{
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&loading=async&libraries=places`;
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = ()=>reject(new Error('Google Maps failed to load'));
+        document.head.appendChild(script);
+      });
+    }
+    await this._googleMapsLoadPromise;
+    await window.google.maps.importLibrary('maps');
+    await window.google.maps.importLibrary('places');
+    return window.google.maps;
+  },
+  _googleMapDarkStyle(){
+    const dark = document.documentElement.dataset.theme === 'dark' ||
+      (!document.documentElement.dataset.theme && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+    return dark ? [
+      { elementType:'geometry', stylers:[{color:'#10281b'}] },
+      { elementType:'labels.text.fill', stylers:[{color:'#d1dbc9'}] },
+      { elementType:'labels.text.stroke', stylers:[{color:'#10281b'}] },
+      { featureType:'road', elementType:'geometry', stylers:[{color:'#28543a'}] },
+      { featureType:'water', elementType:'geometry', stylers:[{color:'#173724'}] }
+    ] : null;
+  },
+  async _googleMapUpdate(el, options={}){
+    if(!el) return null;
+    let googleMaps;
+    try{ googleMaps = await this._ensureGoogleMapsReady(); }catch(e){ console.warn('Google Maps unavailable:',e); return null; }
+    if(!el.__google_map){
+      const center = options.center || {lat:38.2466, lon:21.7346};
+      el.__google_map = new googleMaps.Map(el,{
+        center:{lat:center.lat,lng:center.lon ?? center.lng},
+        zoom:options.zoom||13,
+        disableDefaultUI:options.disableDefaultUI||false,
+        zoomControl:options.zoomControl!==false,
+        mapTypeControl:false,
+        streetViewControl:false,
+        fullscreenControl:false,
+        styles:this._googleMapDarkStyle()
+      });
+      el.__google_markers=[];
+      el.__google_polyline=null;
+    }else{
+      el.__google_map.setOptions({styles:this._googleMapDarkStyle()});
+      if(options.center) el.__google_map.setCenter({lat:options.center.lat,lng:options.center.lon ?? options.center.lng});
+      if(options.zoom) el.__google_map.setZoom(options.zoom);
+    }
+    const map=el.__google_map;
+    (el.__google_markers||[]).forEach(marker=>marker.setMap(null));
+    el.__google_markers=[];
+    if(el.__google_polyline){ el.__google_polyline.setMap(null); el.__google_polyline=null; }
+    for(const item of (options.markers||[])){
+      const marker=new googleMaps.Marker({
+        position:{lat:item.lat,lng:item.lon},
+        map,
+        draggable:!!item.draggable,
+        label:item.label ? {text:String(item.label),color:item.labelColor||'#fffaf2',fontWeight:'700'} : undefined,
+        title:item.title||''
+      });
+      if(item.onDrag) marker.addListener('dragend',()=>item.onDrag(marker.getPosition()));
+      if(item.onClick) marker.addListener('click',()=>item.onClick(marker.getPosition()));
+      el.__google_markers.push(marker);
+    }
+    if(options.polyline?.length){
+      el.__google_polyline=new googleMaps.Polyline({
+        path:options.polyline.map(p=>({lat:p.lat,lng:p.lon ?? p.lng})),
+        geodesic:true,
+        strokeColor:options.polylineColor||this._accent(),
+        strokeOpacity:options.polylineOpacity??0.85,
+        strokeWeight:options.polylineWeight||4,
+        map
+      });
+    }
+    if(options.fitBounds && options.fitBounds.length){
+      const bounds=new googleMaps.LatLngBounds();
+      options.fitBounds.forEach(p=>bounds.extend({lat:p.lat,lng:p.lon ?? p.lng}));
+      map.fitBounds(bounds,{top:24,bottom:24,left:24,right:24});
+    }
+    googleMaps.event?.trigger(map,'resize');
+    return map;
+  },
+  _googlePlacesSession(boxId){
+    if(!window.google?.maps?.places?.AutocompleteSessionToken) return null;
+    if(!this._googlePlacesSessionTokens[boxId]){
+      this._googlePlacesSessionTokens[boxId]=new window.google.maps.places.AutocompleteSessionToken();
+    }
+    return this._googlePlacesSessionTokens[boxId];
+  },
+  async _googlePlacesAutocomplete(val, boxId){
+    const googleMaps=await this._ensureGoogleMapsReady();
+    const home=state.coords?.home||{lat:38.2466,lon:21.7346};
+    const sessionToken=this._googlePlacesSession(boxId);
+    const request={
+      input:String(val||'').trim(),
+      sessionToken,
+      includedRegionCodes:['gr'],
+      locationBias:{circle:{center:{latitude:home.lat,longitude:home.lon},radius:50000}}
+    };
+    const suggestions=await googleMaps.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions?.(request);
+    if(suggestions && Array.isArray(suggestions.suggestions)){
+      return suggestions.suggestions.map(s=>{
+        const p=s.placePrediction;
+        return p ? {
+          name:p.text?.text||p.mainText?.text||String(val||''),
+          poiName:p.mainText?.text||'',
+          _matchText:p.text?.text||'',
+          _googlePlaceId:p.placeId||p.place?.id||'',
+          _google:true,
+          _precise:true,
+          lat:null,lon:null
+        } : null;
+      }).filter(Boolean);
+    }
+    return [];
+  },
+  async _googlePlacesPlaceDetails(placeId, boxId){
+    if(!placeId) return null;
+    const googleMaps=await this._ensureGoogleMapsReady();
+    const place=new googleMaps.places.Place({id:placeId});
+    await place.fetchFields({fields:['location','formattedAddress']});
+    const location=place.location;
+    const lat=location?.lat?.() ?? location?.lat;
+    const lon=location?.lng?.() ?? location?.lng;
+    if(!Scheduler.validCoord({lat,lon:lon})) return null;
+    const result={lat,lon,formattedAddress:place.formattedAddress||'',placeId};
+    this._googlePlacesSessionTokens[boxId]=null;
+    return result;
+  },
   init(){
     try {
       state.settings = Storage.loadSettings();
@@ -8674,18 +8816,14 @@ const App = {
     document.head.appendChild(s);
   },
 
-  // Leaflet keeps DOM/event/timer references alive for as long as a map object
-  // exists. Every render* function rebuilds its screen with innerHTML, which
-  // orphans the container element but NOT the map that was attached to it — so
-  // each navigation away and back used to leak a whole map (visible on iOS as
-  // the app getting progressively slower, then being killed). Destroy them all
-  // before any screen is re-rendered; they are re-created on demand.
+  // Clear map overlays when a screen is torn down. The Google Maps API script
+  // and each container instance stay singleton; markers/polyline are replaced.
   destroyMaps(){
     document.querySelectorAll('.screen [id$="-map"]').forEach(el=>{
-      if(!el._leaflet_map) return;
-      try{ el._leaflet_map.remove(); }catch(e){}
-      el._leaflet_map = null;
-      el._leaflet_marker = null;
+      if(el.__google_markers) el.__google_markers.forEach(marker=>marker.setMap(null));
+      el.__google_markers=[];
+      if(el.__google_polyline) el.__google_polyline.setMap(null);
+      el.__google_polyline=null;
     });
   },
 
@@ -8710,7 +8848,7 @@ const App = {
     else root.dataset.theme = theme;
     const isDark = theme==='dark' || (theme==='system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if(meta) meta.setAttribute('content', isDark ? '#14141c' : '#f7f6f3');
+    if(meta) meta.setAttribute('content', isDark ? '#10281b' : '#f8f5ec');
   },
 
   setTheme(theme){
@@ -9129,7 +9267,7 @@ const App = {
       Toast.show(t('toast_pdf_lib_failed'),'error'); return;
     }
     const teacherName = state.settings.teacherName || 'RoutePal';
-    const avatarColors=['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
+    const avatarColors=['#166534','#475569','#84a98c','#52796f','#92700c','#2d6a4f','#7c6f64','#526b5a','#6b705c','#5c7a62'];
     const dateLocale = curLang()==='el'?'el-GR':curLang();
     const genDate = new Date().toLocaleDateString(dateLocale,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
@@ -9143,11 +9281,11 @@ const App = {
       // The week at a glance, on its side like a school timetable: one page.
       const doc = new jspdf.jsPDF({unit:'pt', format:'a4', orientation:'landscape', compress:true});
       const el = document.createElement('div');
-      el.style.cssText = `position:absolute;left:-9999px;top:0;width:${PAGE_H}px;height:${PAGE_W}px;box-sizing:border-box;background:#fff;padding:28px 32px;font-family:-apple-system,BlinkMacSystemFont,"DM Sans","Segoe UI",Arial,sans-serif;color:#1c1c2e;overflow:hidden`;
+      el.style.cssText = `position:absolute;left:-9999px;top:0;width:${PAGE_H}px;height:${PAGE_W}px;box-sizing:border-box;background:#fffaf2;padding:28px 32px;font-family:-apple-system,BlinkMacSystemFont,"DM Sans","Segoe UI",Arial,sans-serif;color:#1f2d24;overflow:hidden`;
       el.innerHTML = `<style>${css}</style>` + this._pdfGrid(teacherName, genDate, avatarColors, PAGE_W - 56) +
         `<div class="pdf-footer">RoutePal · ${esc(genDate)}</div>`;
       document.body.appendChild(el); made.push(el);
-      const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+      const canvas = await html2canvas(el, {scale:2, backgroundColor:'#fffaf2', useCORS:true});
       doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight());
       const safeTeacher = teacherName.replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'') || 'routepal';
       doc.save(`${safeTeacher}-${t('print_title').toLowerCase()}.pdf`);
@@ -9208,45 +9346,45 @@ const App = {
 
   _pdfCss(){
     return `
-        .pdf-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1c1c2e;padding-bottom:14px;margin-bottom:6px}
+        .pdf-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1f2d24;padding-bottom:14px;margin-bottom:6px}
         .pdf-header-slim{border-bottom-width:1px;padding-bottom:8px;margin-bottom:0}
         .pdf-header-slim .pdf-brand{font-size:16px}
         .pdf-brand{font-size:24px;font-weight:800;letter-spacing:-.02em}
-        .pdf-brand b{color:#059669}
-        .pdf-brand-sub{font-size:12px;color:#64748b;margin-top:2px;font-weight:500}
-        .pdf-meta{text-align:right;font-size:11px;color:#64748b;line-height:1.6}
-        .pdf-meta strong{color:#1c1c2e;font-size:13px;display:block;font-weight:700}
+        .pdf-brand b{color:#166534}
+        .pdf-brand-sub{font-size:12px;color:#657565;margin-top:2px;font-weight:500}
+        .pdf-meta{text-align:right;font-size:11px;color:#657565;line-height:1.6}
+        .pdf-meta strong{color:#1f2d24;font-size:13px;display:block;font-weight:700}
         .pdf-stats{display:flex;gap:10px;padding:18px 0 10px}
-        .pdf-stat{flex:1;background:#f7f6f3;border-radius:10px;padding:10px 14px;text-align:center}
-        .pdf-stat-val{font-size:20px;font-weight:800;color:#1c1c2e}
-        .pdf-stat-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;font-weight:600}
-        .pdf-dayhead{margin-top:14px;font-size:14px;background:#1c1c2e;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center}
+        .pdf-stat{flex:1;background:#f8f5ec;border-radius:10px;padding:10px 14px;text-align:center}
+        .pdf-stat-val{font-size:20px;font-weight:800;color:#1f2d24}
+        .pdf-stat-label{font-size:10px;color:#657565;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;font-weight:600}
+        .pdf-dayhead{margin-top:14px;font-size:14px;background:#1f2d24;color:#fffaf2;padding:7px 12px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center}
         .pdf-dayhead b{font-weight:700}
-        .pdf-dayhead span{color:#a7f3d0;font-weight:500;font-size:11px}
-        .pdf-empty{color:#64748b;font-size:12px;padding:5px 0;text-align:center;font-style:italic;flex:1}
-        .pdf-slot{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid #e2e0da;border-top:none}
+        .pdf-dayhead span{color:#d1dbc9;font-weight:500;font-size:11px}
+        .pdf-empty{color:#657565;font-size:12px;padding:5px 0;text-align:center;font-style:italic;flex:1}
+        .pdf-slot{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid #ddd4c2;border-top:none}
         .pdf-slot.pdf-last{border-radius:0 0 8px 8px}
         .pdf-slot-color{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;min-height:28px}
-        .pdf-slot-time{font-weight:700;font-size:12px;color:#1c1c2e;width:92px;flex-shrink:0}
+        .pdf-slot-time{font-weight:700;font-size:12px;color:#1f2d24;width:92px;flex-shrink:0}
         .pdf-slot-info{flex:1;min-width:0}
         .pdf-slot-name{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
-        .pdf-slot-meta{font-size:11px;color:#64748b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .pdf-slot-drive{font-size:11px;color:#64748b;white-space:nowrap;flex-shrink:0}
-        .pdf-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:#d1fae5;color:#047857;text-transform:uppercase;letter-spacing:.03em}
-        .pdf-badge.pdf-lock{background:#e2e8f0;color:#334155}
+        .pdf-slot-meta{font-size:11px;color:#657565;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .pdf-slot-drive{font-size:11px;color:#657565;white-space:nowrap;flex-shrink:0}
+        .pdf-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:#e7dfcf;color:#166534;text-transform:uppercase;letter-spacing:.03em}
+        .pdf-badge.pdf-lock{background:#ddd4c2;color:#526b5a}
         .pdf-g{display:flex;gap:6px;position:relative}
-        .pdf-g-sub{font-size:12px;color:#64748b;font-weight:500;letter-spacing:0;margin-left:8px}
+        .pdf-g-sub{font-size:12px;color:#657565;font-weight:500;letter-spacing:0;margin-left:8px}
         .pdf-g-axis{width:40px;flex-shrink:0;position:relative}
-        .pdf-g-hour{position:absolute;right:4px;font-size:10px;color:#64748b}
+        .pdf-g-hour{position:absolute;right:4px;font-size:10px;color:#657565}
         .pdf-g-col{flex:1 1 0;min-width:0}
-        .pdf-g-dayhead{box-sizing:border-box;background:#1c1c2e;color:#fff;border-radius:6px 6px 0 0;padding:0 8px;display:flex;justify-content:space-between;align-items:center;font-size:12px}
-        .pdf-g-dayhead span{color:#a7f3d0;font-size:10px;white-space:nowrap}
-        .pdf-g-body{position:relative;border:1px solid #e2e0da;border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
-        .pdf-g-line{position:absolute;left:0;right:0;border-top:1px solid #f0efe9}
-        .pdf-g-block{position:absolute;left:3px;right:3px;box-sizing:border-box;border-left:3px solid #059669;border-radius:4px;padding:2px 5px;overflow:hidden}
-        .pdf-g-time{font-size:9px;font-weight:700;color:#334155}
+        .pdf-g-dayhead{box-sizing:border-box;background:#1f2d24;color:#fffaf2;border-radius:6px 6px 0 0;padding:0 8px;display:flex;justify-content:space-between;align-items:center;font-size:12px}
+        .pdf-g-dayhead span{color:#d1dbc9;font-size:10px;white-space:nowrap}
+        .pdf-g-body{position:relative;border:1px solid #ddd4c2;border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
+        .pdf-g-line{position:absolute;left:0;right:0;border-top:1px solid #f1ecdf}
+        .pdf-g-block{position:absolute;left:3px;right:3px;box-sizing:border-box;border-left:3px solid #166534;border-radius:4px;padding:2px 5px;overflow:hidden}
+        .pdf-g-time{font-size:9px;font-weight:700;color:#526b5a}
         .pdf-g-name{font-size:10.5px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .pdf-footer{position:absolute;left:32px;right:32px;bottom:22px;padding-top:8px;border-top:1px solid #e2e0da;font-size:10px;color:#64748b;display:flex;justify-content:space-between}`;
+        .pdf-footer{position:absolute;left:32px;right:32px;bottom:22px;padding-top:8px;border-top:1px solid #ddd4c2;font-size:10px;color:#657565;display:flex;justify-content:space-between}`;
   },
 
   // Called by the ✕ button on the progress overlay. Just flips a flag — the
@@ -9509,7 +9647,11 @@ const App = {
       const homeItem = toGeocode.find(x=>x.id==='home');
       const rest = toGeocode.filter(x=>x.id!=='home');
       if(homeItem){
-        const c = await Router.geocode(homeItem.addr);
+        let c=null;
+        if(hereAvailable()){
+          try{ c=await Router.geocodeHere(homeItem.addr,hereKey); }catch(e){ c=null; }
+        }
+        if(!c) c=await Router.geocodeNominatim(homeItem.addr);
         if(c){ state.coords['home']=c; updated=true; } else failed++;
       }
       if(hereAvailable()){
@@ -10566,8 +10708,7 @@ const App = {
     if(chev) chev.style.transform = state._mapExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
     if(state._mapExpanded){
       // Container animates over 300ms (see max-height transition above) — initializing
-      // Leaflet before it reaches full size bakes in a wrong size and the map renders
-      // broken/unresponsive ("frozen"). Wait for the transition to actually finish.
+      // Wait for the container transition before measuring the Google map.
       if(wrap){
         const onDone = (e)=>{ if(e && e.propertyName!=='max-height') return; wrap.removeEventListener('transitionend', onDone); this.initStudentsMap(); };
         wrap.addEventListener('transitionend', onDone);
@@ -10580,35 +10721,25 @@ const App = {
 
   initStudentsMap(){
     const el = document.getElementById('students-overview-map');
-    if(!el || typeof L === 'undefined') return;
-    if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    if(!el) return;
     const geocodedStudents = state.students.filter(s => state.coords[s.id]);
     if(geocodedStudents.length === 0){ el.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">${t('students_map_no_geocoded')}</div>`; return; }
     const homeC = state.coords['home'];
     const pts = geocodedStudents.map(s=>state.coords[s.id]);
     const allPts = homeC ? [homeC,...pts] : pts;
-    const latlngs = allPts.map(c=>[c.lat,c.lon]);
-    const map = L.map(el, {
-      zoomControl:false, attributionControl:false,
-      dragging:false, touchZoom:false, scrollWheelZoom:false,
-      doubleClickZoom:false, boxZoom:false, keyboard:false
-    }).setView(latlngs[0], 12);
-    el._leaflet_map = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    const markers=[];
     if(homeC){
-      L.marker([homeC.lat,homeC.lon],{icon:L.divIcon({className:'',html:'<div style="width:18px;height:18px;background:var(--green);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[18,18],iconAnchor:[9,9]})}).bindTooltip(t('home_marker_tooltip'),{permanent:false}).addTo(map);
+      markers.push({lat:homeC.lat,lon:homeC.lon,label:'',title:t('home_marker_tooltip')});
     }
-    const avatarColors=['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
     geocodedStudents.forEach(s=>{
       const c=state.coords[s.id];
-      const col=avatarColors[(s.color||0)%avatarColors.length];
       const initials=esc(s.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
-      L.marker([c.lat,c.lon],{icon:L.divIcon({className:'',html:`<div style="width:26px;height:26px;background:${col};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700">${initials}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).bindTooltip(`${esc(s.name)}<br><span style='font-size:11px;color:#aaa'>${esc(s.address)}</span>`,{permanent:false}).addTo(map);
+      markers.push({lat:c.lat,lon:c.lon,label:initials,title:`${s.name} — ${s.address}`});
     });
-    try{ map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); }catch(e){}
-    // Defensive: if the container was resized/reflowed after this map was created
-    // (e.g. drawer opened/closed above it), make sure Leaflet re-measures it.
-    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 60);
+    this._googleMapUpdate(el,{
+      center:allPts[0],zoom:12,zoomControl:false,
+      markers,fitBounds:allPts.map(c=>({lat:c.lat,lon:c.lon}))
+    });
   },
 
   studentCard(st){
@@ -10622,7 +10753,7 @@ const App = {
         .map(([a,b])=>`${Scheduler.toTime(a)}–${Scheduler.toTime(b)}`).join(' & ')}`)
       .join(', ');
     const placed = Scheduler.countPlaced(st.id, state.schedule);
-    const avatarColors = ['#059669','#7c3aed','#d97706','#db2777','#ca8a04','#0891b2','#16a34a','#9333ea','#c2410c','#0284c7'];
+    const avatarColors = ['#166534','#475569','#84a98c','#52796f','#92700c','#2d6a4f','#7c6f64','#526b5a','#6b705c','#5c7a62'];
     const bg = avatarColors[(st.color||0) % avatarColors.length];
     const initials = esc(st.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
     // When this client is on the week, as chips on the card: "Δευ 14:30".
@@ -10771,7 +10902,7 @@ const App = {
           </select>
         </div>
       </div>
-      <details id="st-more" class="fold fold-plain" ${st ? 'open' : ''} style="margin:14px 0 0" ontoggle="if(this.open){const m=document.getElementById('st-loc-map');if(m&&m._leaflet_map)setTimeout(()=>m._leaflet_map.invalidateSize(),50);}">
+      <details id="st-more" class="fold fold-plain" ${st ? 'open' : ''} style="margin:14px 0 0" ontoggle="if(this.open){const m=document.getElementById('st-loc-map');if(m&&m.__google_map)setTimeout(()=>google.maps.event.trigger(m.__google_map,'resize'),50);}">
         <summary>${t('form_more')}</summary>
       <div class="form-group">
         <label>${t('form_phone_label')}</label>
@@ -10879,34 +11010,35 @@ const App = {
   // exact location without leaving the drawer or knowing the address.
   initStudentLocationMap(st){
     const el = document.getElementById('st-loc-map');
-    if(!el || typeof L === 'undefined') return;
-    if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    if(!el) return;
     const existing = st && state.coords[st.id];
     const home = state.coords['home'] || {lat:38.2466, lon:21.7346};
     const start = existing || home;
-    const map = L.map(el, {zoomControl:true, attributionControl:false}).setView([start.lat, start.lon], existing?16:13);
-    el._leaflet_map = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-    const marker = L.marker([start.lat, start.lon], {
-      draggable:true,
-      icon:L.divIcon({className:'',html:'<div style="width:22px;height:22px;background:var(--green);border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
-    }).addTo(map);
-    el._leaflet_marker = marker;
     const onPin = (lat, lon)=>{
       this._addrPendingCoord = {lat, lon};
       this.reverseGeocodeIntoField(lat, lon, 'st-addr');
     };
-    marker.on('dragend', ()=>{ const p=marker.getLatLng(); onPin(p.lat, p.lng); });
-    map.on('click', (e)=>{ marker.setLatLng(e.latlng); onPin(e.latlng.lat, e.latlng.lng); });
+    this._googleMapUpdate(el,{
+      center:start,zoom:existing?16:13,
+      markers:[{lat:start.lat,lon:start.lon,draggable:true,onDrag:p=>onPin(p.lat(),p.lng()),title:''}],
+      fitBounds:[start]
+    }).then(map=>{
+      if(!map) return;
+      map.addListener('click',e=>this._googleMapUpdate(el,{
+        center:{lat:e.latLng.lat(),lon:e.latLng.lng()},zoom:16,
+        markers:[{lat:e.latLng.lat(),lon:e.latLng.lng(),draggable:true,onDrag:p=>onPin(p.lat(),p.lng()),title:''}],
+        fitBounds:[{lat:e.latLng.lat(),lon:e.latLng.lng()}]
+      }).then(()=>onPin(e.latLng.lat(),e.latLng.lng())));
+    });
   },
 
   // Moves the inline location-map's marker (if currently open) to match a
   // coordinate picked another way (search suggestion, full-screen map picker).
   updateStudentLocationMapMarker(coord){
     const el = document.getElementById('st-loc-map');
-    if(!el || !el._leaflet_map || !el._leaflet_marker) return;
-    el._leaflet_marker.setLatLng([coord.lat, coord.lon]);
-    el._leaflet_map.setView([coord.lat, coord.lon], 16);
+    if(!el) return;
+    this._googleMapUpdate(el,{center:coord,zoom:16,
+      markers:[{lat:coord.lat,lon:coord.lon,draggable:true,title:''}],fitBounds:[coord]});
   },
 
   // Same inline draggable-pin map as the student form, for the tutor's own
@@ -10914,18 +11046,9 @@ const App = {
   // Patras) so the field never looks broken/empty.
   initHomeLocationMap(){
     const el = document.getElementById('set-home-map');
-    if(!el || typeof L === 'undefined') return;
-    if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    if(!el) return;
     const existing = state.coords['home'];
     const start = existing || {lat:38.2466, lon:21.7346};
-    const map = L.map(el, {zoomControl:true, attributionControl:false}).setView([start.lat, start.lon], existing?16:13);
-    el._leaflet_map = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-    const marker = L.marker([start.lat, start.lon], {
-      draggable:true,
-      icon:L.divIcon({className:'',html:'<div style="width:22px;height:22px;background:var(--green);border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
-    }).addTo(map);
-    el._leaflet_marker = marker;
     const onPin = async (lat, lon)=>{
       this.commitHomeLocation({lat, lon});
       await this.reverseGeocodeIntoField(lat, lon, 'set-home');
@@ -10934,15 +11057,25 @@ const App = {
       const inp = document.getElementById('set-home');
       if(inp) this.commitHomeLocation({lat, lon}, inp.value);
     };
-    marker.on('dragend', ()=>{ const p=marker.getLatLng(); onPin(p.lat, p.lng); });
-    map.on('click', (e)=>{ marker.setLatLng(e.latlng); onPin(e.latlng.lat, e.latlng.lng); });
+    this._googleMapUpdate(el,{
+      center:start,zoom:existing?16:13,
+      markers:[{lat:start.lat,lon:start.lon,draggable:true,onDrag:p=>onPin(p.lat(),p.lng()),title:''}],
+      fitBounds:[start]
+    }).then(map=>{
+      if(!map) return;
+      map.addListener('click',e=>this._googleMapUpdate(el,{
+        center:{lat:e.latLng.lat(),lon:e.latLng.lng()},zoom:16,
+        markers:[{lat:e.latLng.lat(),lon:e.latLng.lng(),draggable:true,onDrag:p=>onPin(p.lat(),p.lng()),title:''}],
+        fitBounds:[{lat:e.latLng.lat(),lon:e.latLng.lng()}]
+      }).then(()=>onPin(e.latLng.lat(),e.latLng.lng())));
+    });
   },
 
   updateHomeLocationMapMarker(coord){
     const el = document.getElementById('set-home-map');
-    if(!el || !el._leaflet_map || !el._leaflet_marker) return;
-    el._leaflet_marker.setLatLng([coord.lat, coord.lon]);
-    el._leaflet_map.setView([coord.lat, coord.lon], 16);
+    if(!el) return;
+    this._googleMapUpdate(el,{center:coord,zoom:16,
+      markers:[{lat:coord.lat,lon:coord.lon,draggable:true,title:''}],fitBounds:[coord]});
   },
 
   // Saves the home address/coord immediately, without waiting for the
@@ -11145,7 +11278,7 @@ const App = {
     clearTimeout(this._addrTimer);
     const box = document.getElementById(boxId);
     if(!box) return;
-    if(val.length < 2){ box.style.display='none'; return; }
+    if(val.length < 3){ box.style.display='none'; return; }
     box.style.display='block';
 
     // Show what we already know while the network is still being asked. On a
@@ -11164,7 +11297,18 @@ const App = {
     this._addrTimer = setTimeout(async ()=>{
       try{
         let results;
-        if(hereAvailable()){
+        if(this._googleMapsApiKey()){
+          results = await this._googlePlacesAutocomplete(val, boxId);
+          if(seq !== this._addrSeq) return;
+          const b = document.getElementById(boxId);
+          if(!b) return;
+          if(!results || results.length===0){
+            b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_no_results')}</div>`;
+            return;
+          }
+          this._renderSuggestions(boxId, results.slice(0,6), val);
+          return;
+        } else if(hereAvailable()){
           // Both at once: autosuggest is better at partial text, geocode is
           // the one that knows buildings. Asking them in series would double
           // the wait for the case this exists to fix.
@@ -11282,7 +11426,7 @@ const App = {
         const b = document.getElementById(boxId);
         if(b) b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--red)">${t('search_error')}</div>`;
       }
-    }, 220);
+    }, 400);
   },
 
   /**
@@ -11561,8 +11705,26 @@ const App = {
     return parts.join(',');
   },
 
-  selectAddr(name, lat, lon, boxId='addr-suggest', res=null){
+  async selectAddr(name, lat, lon, boxId='addr-suggest', res=null){
+    if(res && res._googlePlaceId){
+      const details = await this._googlePlacesPlaceDetails(res._googlePlaceId, boxId);
+      if(details){
+        name = details.formattedAddress || name;
+        lat = details.lat;
+        lon = details.lon;
+        res = {...res, _googleDetails:details};
+      }
+    }
     let coord = {lat:parseFloat(lat), lon:parseFloat(lon)};
+    if(res && res._googleDetails){
+      coord = {
+        ...coord,
+        src:'google',
+        placeId:res._googleDetails.placeId,
+        formattedAddress:res._googleDetails.formattedAddress,
+        at:Date.now()
+      };
+    }
     // The name is already built in the fixed street/number/area/city/postal-
     // code order (_formatAddressOrdered) — saved as-is, not truncated to the
     // first 3 comma-parts like before, which would have silently dropped the
@@ -11703,27 +11865,42 @@ const App = {
     const startC = state.coords['home'] || {lat:38.2466, lon:21.7346}; // Πάτρα fallback
     setTimeout(()=>{
       const el = document.getElementById('map-picker-map');
-      if(!el || typeof L === 'undefined') return;
-      if(el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
-      const map = L.map(el, {zoomControl:true, attributionControl:false}).setView([startC.lat, startC.lon], 15);
-      el._leaflet_map = map;
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-      const onMove = ()=>{
-        const c = map.getCenter();
-        this._mapPickerCoord = {lat:c.lat, lon:c.lng};
+      if(!el) return;
+      const onMove = (lat,lon)=>{
+        this._mapPickerCoord = {lat,lon};
         clearTimeout(this._mapPickerTimer);
         const addrBox = document.getElementById('map-picker-address');
         if(addrBox) addrBox.textContent = t('search_searching');
-        this._mapPickerTimer = setTimeout(()=>this.reverseGeocodePreview(c.lat, c.lng), 500);
+        this._mapPickerTimer = setTimeout(()=>this.reverseGeocodePreview(lat,lon), 500);
       };
-      map.on('moveend', onMove);
-      onMove();
+      this._googleMapUpdate(el,{
+        center:startC,zoom:15,
+        markers:[{lat:startC.lat,lon:startC.lon,draggable:true,
+          onDrag:p=>onMove(p.lat(),p.lng()),title:''}],
+        fitBounds:[startC]
+      }).then(map=>{
+        if(!map) return;
+        onMove(startC.lat,startC.lon);
+        map.addListener('click',e=>{
+          const lat=e.latLng.lat(),lon=e.latLng.lng();
+          this._googleMapUpdate(el,{center:{lat,lon},zoom:map.getZoom()||15,
+            markers:[{lat,lon,draggable:true,onDrag:p=>onMove(p.lat(),p.lng()),title:''}],
+            fitBounds:[{lat,lon}]}).then(()=>onMove(lat,lon));
+        });
+      });
     }, 30);
   },
 
-  // Shared reverse-geocode: HERE when a key is configured, else free Nominatim.
-  // Returns the full display string, or null on failure.
+  // Reverse-geocode with Google when configured; HERE/Nominatim remain only as
+  // offline fallbacks for deployments that have not supplied a Google key.
   async _reverseGeocode(lat, lon){
+    if(this._googleMapsApiKey()){
+      try{
+        const googleMaps = await this._ensureGoogleMapsReady();
+        const res = await new googleMaps.Geocoder().geocode({location:{lat,lng:lon}});
+        if(res.results?.length) return res.results[0].formatted_address || null;
+      }catch(e){}
+    }
     const hereKey = getHereKey();
     if(hereAvailable()){
       const url = hereKey
@@ -11774,7 +11951,8 @@ const App = {
     const overlay = document.getElementById('map-picker-overlay');
     if(overlay) overlay.style.display = 'none';
     const el = document.getElementById('map-picker-map');
-    if(el && el._leaflet_id){ try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
+    if(el && el.__google_markers) el.__google_markers.forEach(marker=>marker.setMap(null));
+    el && (el.__google_markers=[]);
     this._mapPickerTarget = null;
     this._mapPickerCoord = null;
   },
@@ -12587,6 +12765,11 @@ const App = {
     // just find the new object (making the comparison always false and
     // leaving the old partner with a dangling pairedWith link).
     const prevSt = state.editingStudentId ? state.students.find(s=>s.id===state.editingStudentId) : null;
+    if(prevSt && prevSt.address === st.address && Number.isFinite(Number(prevSt.lat)) && Number.isFinite(Number(prevSt.lng))){
+      st.lat = prevSt.lat;
+      st.lng = prevSt.lng;
+      if(prevSt.formattedAddress) st.formattedAddress = prevSt.formattedAddress;
+    }
     const oldPaired = prevSt ? prevSt.pairedWith : null;
     if(state.editingStudentId){
       const idx = state.students.findIndex(s=>s.id===state.editingStudentId);
@@ -12626,10 +12809,14 @@ const App = {
     // Save coord immediately if available from autocomplete, else geocode in background
     if(pendingCoord){
       state.coords[st.id] = pendingCoord;
+      st.lat = pendingCoord.lat;
+      st.lng = pendingCoord.lon;
+      if(pendingCoord.formattedAddress) st.formattedAddress = pendingCoord.formattedAddress;
+      Storage.saveStudents(state.students);
       Storage.saveCoords(state.coords);
       if(state.currentScreen==='route') this.renderRoute();
       else if(state.currentScreen==='students' && state._mapExpanded) this.initStudentsMap();
-    } else if(addr) {
+    } else if(addr && !(Number.isFinite(Number(st.lat)) && Number.isFinite(Number(st.lng)))) {
       Router.geocode(addr).then(c=>{
         if(c){
           state.coords[st.id]=c; Storage.saveCoords(state.coords);
@@ -12905,37 +13092,28 @@ const App = {
   // screen always has its map.
   // The theme's accent as a plain colour, for map layers that cannot read CSS.
   _accent(){
-    try{ const v = getComputedStyle(document.documentElement).getPropertyValue('--green').trim(); return v || '#059669'; }
-    catch(e){ return '#059669'; }
+    try{ const v = getComputedStyle(document.documentElement).getPropertyValue('--green').trim(); return v || '#166534'; }
+    catch(e){ return '#166534'; }
   },
   _drawStopsMap(elId, stops, opts){
     this._maps = this._maps || {};
-    try{ if(this._maps[elId]) this._maps[elId].remove(); }catch(e){}
-    this._maps[elId] = null;
     const el = document.getElementById(elId);
-    if(!el || typeof L === 'undefined') return null;
+    if(!el) return null;
     const home = state.coords && state.coords['home'];
     const hasHome = Scheduler.validCoord(home);
-    const pts = (hasHome ? [{ c: home, label: ico('home', 13), home: true }] : []).concat((stops || []).filter(p => Scheduler.validCoord(p.c)));
-    const map = L.map(el, { zoomControl: true, attributionControl: false });
-    this._maps[elId] = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-    const ll = pts.map(p => [p.c.lat, p.c.lon]);
-    if(opts && opts.line && pts.length > (hasHome ? 1 : 0))
-      L.polyline(ll.concat(hasHome ? [[home.lat, home.lon]] : []),
-        { color: this._accent(), weight: 3, opacity: .8, dashArray: '6 6' }).addTo(map);
-    pts.forEach(p => {
-      L.marker([p.c.lat, p.c.lon], { icon: L.divIcon({ className: '',
-        html: `<div style="background:${p.color || this._accent()};color:${p.color ? '#fff' : 'var(--on-accent)'};border-radius:50%;width:24px;height:24px;line-height:24px;text-align:center;font-size:12px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">${p.label}</div>`,
-        iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(map);
+    const pts = (hasHome ? [{ c: home, label: '', home: true }] : []).concat((stops || []).filter(p => Scheduler.validCoord(p.c)));
+    const ll = pts.map(p => ({lat:p.c.lat,lon:p.c.lon}));
+    const stopPts = pts.filter(p=>!p.home);
+    const center = stopPts.length ? stopPts[0].c : (hasHome ? home : {lat:38.2466,lon:21.7346});
+    const polyline = (opts && opts.line && ll.length>1) ? ll.concat(hasHome ? [{lat:home.lat,lon:home.lon}] : []) : null;
+    const promise = this._googleMapUpdate(el,{
+      center,zoom:stopPts.length?14:12,zoomControl:true,
+      markers:pts.map(p=>({lat:p.c.lat,lon:p.c.lon,label:p.label,title:''})),
+      polyline,polylineColor:this._accent(),polylineWeight:3,polylineOpacity:.8,
+      fitBounds:stopPts.length ? stopPts.map(p=>({lat:p.c.lat,lon:p.c.lon})) : (hasHome?[{lat:home.lat,lon:home.lon}]:[])
     });
-    // Zoom to the STOPS. Home is drawn, but a home far from them (or a wrong
-    // one) must not zoom the whole day out to a region where 1, 2 and 3 sit on
-    // top of each other.
-    const stopLL = pts.filter(p => !p.home).map(p => [p.c.lat, p.c.lon]);
-    if(stopLL.length) map.fitBounds(L.latLngBounds(stopLL), { padding: [24, 24], maxZoom: 16 });
-    else { const c = hasHome ? home : { lat: 38.2466, lon: 21.7346 }; map.setView([c.lat, c.lon], hasHome ? 14 : 12); }
-    return map;
+    this._maps[elId]=promise;
+    return promise;
   },
 
   // The day on a map: home, then the stops in order, joined by a line. The line
@@ -12946,7 +13124,7 @@ const App = {
     const pos = (id) => state.coords && state.coords[id];
     const stops = plan
       ? plan.stops.map((x, i) => ({ c: pos(x.job.id), label: String(i + 1) }))
-      : this.jobsFor(state.planDate || this.todayISO()).map(j => ({ c: pos(j.id), label: '•', color: '#64748b' }));
+      : this.jobsFor(state.planDate || this.todayISO()).map(j => ({ c: pos(j.id), label: '•', color: 'var(--text2)' }));
     this._dayMap = this._drawStopsMap('day-map', stops, { line: !!plan });
   },
 
@@ -13125,9 +13303,14 @@ const App = {
    * it is reachable (own key or the proxy), Nominatim otherwise. The day planner
    * used Nominatim alone, even with HERE available.
    */
-  _geocodeOne(addr){
+  async _geocodeOne(addr){
     if(!addr) return Promise.resolve(null);
-    return Router.geocode(addr);
+    if(hereAvailable()){
+      let c=null;
+      try{ c=await Router.geocodeHere(addr,getHereKey()); }catch(e){ c=null; }
+      if(c) return c;
+    }
+    return Router.geocodeNominatim(addr);
   },
 
   /**
@@ -14188,8 +14371,8 @@ const App = {
       </div>
       ${this.routeFor(state.routeDay)?`
         <div style="margin:0 16px 8px;background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.2);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          <span style="font-size:13px;color:#059669;font-weight:600">OpenStreetMap — ${t('route_real_distance')}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <span style="font-size:13px;color:var(--green);font-weight:600">OpenStreetMap — ${t('route_real_distance')}</span>
         </div>`:''}
       <div id="route-map" style="height:220px;border-radius:12px;margin:0 16px 8px;overflow:hidden;background:var(--bg2);position:relative;isolation:isolate"></div>
       <div id="route-content">
@@ -14202,40 +14385,32 @@ const App = {
   initRouteMap(slots){
     const el = document.getElementById('route-map');
     if(!el) return;
-    if(typeof L === 'undefined'){
-      el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">${t('route_map_unavailable')}</div>`;
-      return;
-    }
-    // Destroy previous instance
-    if(el._leaflet_id) { try{ el._leaflet_map && el._leaflet_map.remove(); }catch(e){} }
     const homeC = state.coords['home'] || Scheduler.coordsHash(state.settings.homeAddress||'Πλατεία Γεωργίου 1, Πάτρα');
     const stopCoords = slots.map(s => state.coords[s.studentId] || Scheduler.coordsHash(s.address));
     const allPts = [homeC, ...stopCoords];
     const latlngs = allPts.map(c => [c.lat, c.lon]);
     const center = latlngs.reduce((a,p) => [a[0]+p[0]/latlngs.length, a[1]+p[1]/latlngs.length], [0,0]);
-    const map = L.map(el, {zoomControl:false, attributionControl:false}).setView(center, 13);
-    el._leaflet_map = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
-    // Home marker
-    L.marker(latlngs[0], {icon:L.divIcon({className:'',html:'<div style="width:16px;height:16px;background:var(--green);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.4)"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map);
-    // Stop markers
-    slots.forEach((slot,i) => {
-      const pt = latlngs[i+1];
-      const color = this._accent();
-      L.marker(pt, {icon:L.divIcon({className:'',html:`<div style="width:22px;height:22px;background:${color};border:3px solid #fff;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700">${i+1}</div>`,iconSize:[22,22],iconAnchor:[11,11]})}).bindTooltip(slot.studentName, {permanent:false}).addTo(map);
+    const markers=[{lat:homeC.lat,lon:homeC.lon,label:'',title:t('home_marker_tooltip')}];
+    slots.forEach((slot,i)=>markers.push({lat:stopCoords[i].lat,lon:stopCoords[i].lon,label:String(i+1),title:slot.studentName}));
+    this._googleMapUpdate(el,{
+      center:{lat:center[0],lon:center[1]},zoom:13,zoomControl:false,
+      markers,
+      polyline:allPts.map(p=>({lat:p.lat,lon:p.lon})),
+      polylineColor:this._accent(),polylineWeight:3,polylineOpacity:.7,
+      fitBounds:allPts.map(p=>({lat:p.lat,lon:p.lon}))
     });
-    // Straight-line placeholder — replaced by real road geometry below if OSRM responds
-    let straightLine = null;
-    if(latlngs.length > 1) straightLine = L.polyline(latlngs, {color:this._accent(),weight:3,opacity:0.7,dashArray:'6,4'}).addTo(map);
-    // Fit bounds
-    try{ map.fitBounds(L.latLngBounds(latlngs).pad(0.15)); }catch(e){}
 
     // Fetch real road-following route from OSRM and swap in once ready
     if(allPts.length > 1){
       Router.getRouteGeometry(allPts).then(roadCoords=>{
-        if(!roadCoords || !el._leaflet_map) return; // map was destroyed/replaced meanwhile
-        if(straightLine) map.removeLayer(straightLine);
-        L.polyline(roadCoords, {color:this._accent(),weight:4,opacity:0.85}).addTo(map);
+        if(!roadCoords) return;
+        this._googleMapUpdate(el,{
+          center:{lat:center[0],lon:center[1]},zoom:13,zoomControl:false,
+          markers,
+          polyline:roadCoords.map(p=>({lat:p[0],lon:p[1]})),
+          polylineColor:this._accent(),polylineWeight:4,polylineOpacity:.85,
+          fitBounds:roadCoords.map(p=>({lat:p[0],lon:p[1]}))
+        });
       });
     }
   },
@@ -15866,15 +16041,15 @@ const App = {
   showOnboarding(){
     const ov = document.createElement('div');
     ov.id = 'onboard-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:var(--bg,#f7f6f3);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto';
+    ov.style.cssText = 'position:fixed;inset:0;background:var(--bg,#f8f5ec);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto';
     ov.innerHTML = `
       <div style="max-width:400px;width:100%">
         <div style="font-family:Syne,sans-serif;font-size:28px;font-weight:800;margin-bottom:6px">Route<span style="color:var(--green)">Pal</span></div>
-        <div style="font-size:15px;color:var(--text2,#64748b);margin-bottom:32px">${t('onboarding_welcome')}</div>
+        <div style="font-size:15px;color:var(--text2,#657565);margin-bottom:32px">${t('onboarding_welcome')}</div>
 
         <div style="margin-bottom:20px">
           <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('onboarding_profession_label')}</label>
-          <select id="ob-prof-select" onchange="App._obProf=this.value" style="width:100%;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)">
+          <select id="ob-prof-select" onchange="App._obProf=this.value" style="width:100%;padding:12px 14px;border:2px solid var(--border,#ddd4c2);border-radius:12px;font-size:14px;background:var(--bg2,#fffaf2);color:var(--text,#1f2d24)">
             ${getProfessions().map(p=>`<option value="${p.value}" ${p.value==='other'?'selected':''}>${p.label}</option>`).join('')}
           </select>
         </div>
@@ -15883,14 +16058,14 @@ const App = {
           <label style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('ob_where')}</label>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="ob-mode-grid">
             ${[['clients','ob_mode_clients'],['place','ob_mode_place'],['both','ob_mode_both']].map(([m,k],i)=>`
-              <button type="button" onclick="App._obSelectMode('${m}',this)" aria-pressed="${i===0}" style="min-height:48px;padding:10px 6px;border:2px solid ${i===0?'var(--green)':'var(--border,#e2e0da)'};border-radius:12px;background:var(--bg2,#fff);font-size:13px;font-weight:600;cursor:pointer;color:var(--text,#1c1c2e)">${t(k)}</button>`).join('')}
+              <button type="button" onclick="App._obSelectMode('${m}',this)" aria-pressed="${i===0}" style="min-height:48px;padding:10px 6px;border:2px solid ${i===0?'var(--green)':'var(--border,#ddd4c2)'};border-radius:12px;background:var(--bg2,#fffaf2);font-size:13px;font-weight:600;cursor:pointer;color:var(--text,#1f2d24)">${t(k)}</button>`).join('')}
           </div>
           <div id="ob-work-wrap" style="display:none;margin-top:12px">
             <label for="ob-work" style="font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.05em;display:block;margin-bottom:8px">${t('settings_workplace')}</label>
             <div style="position:relative">
               <div style="display:flex;gap:6px">
                 <input id="ob-work" type="text" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off"
-                  style="flex:1;min-width:0;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
+                  style="flex:1;min-width:0;padding:12px 14px;border:2px solid var(--border,#ddd4c2);border-radius:12px;font-size:14px;background:var(--bg2,#fffaf2);color:var(--text,#1f2d24)"
                   oninput="App.onAddrInput(this.value,'ob-work-suggest')" onkeydown="App.onAddrKey(event,'ob-work-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-work-suggest'),200)">
                 <button type="button" class="btn-icon" title="${esc(t('gps_here'))}" aria-label="${esc(t('gps_here'))}" onclick="App.hereNow('ob-work')">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
@@ -15909,7 +16084,7 @@ const App = {
           <div style="position:relative">
             <div style="display:flex;gap:6px">
               <input id="ob-addr" type="text" placeholder="${t('form_address_placeholder')}" autocomplete="off"
-                style="flex:1;padding:12px 14px;border:2px solid var(--border,#e2e0da);border-radius:12px;font-size:14px;background:var(--bg2,#fff);color:var(--text,#1c1c2e)"
+                style="flex:1;padding:12px 14px;border:2px solid var(--border,#ddd4c2);border-radius:12px;font-size:14px;background:var(--bg2,#fffaf2);color:var(--text,#1f2d24)"
                 oninput="App.onAddrInput(this.value,'ob-addr-suggest')" onkeydown="App.onAddrKey(event,'ob-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('ob-addr-suggest'),200)">
               <button type="button" class="btn-icon" title="${esc(t('gps_here'))}" onclick="App.hereNow('ob-addr')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
@@ -15925,7 +16100,7 @@ const App = {
         <button onclick="App._obFinish()" style="width:100%;padding:16px;background:var(--green);color:var(--on-accent);border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:Syne,sans-serif">
           ${t('onboarding_start_btn')}
         </button>
-        <button onclick="App._obFinish(true)" style="width:100%;min-height:48px;margin-top:10px;padding:12px;background:transparent;color:var(--text2);border:2px solid var(--border,#e2e0da);border-radius:14px;font-size:14px;font-weight:600;cursor:pointer">
+        <button onclick="App._obFinish(true)" style="width:100%;min-height:48px;margin-top:10px;padding:12px;background:transparent;color:var(--text2);border:2px solid var(--border,#ddd4c2);border-radius:14px;font-size:14px;font-weight:600;cursor:pointer">
           ${t('demo_try')}
         </button>
       </div>
@@ -15940,13 +16115,13 @@ const App = {
 
   _obSelectDur(d, btn){
     this._obDur = d;
-    document.querySelectorAll('#ob-dur-grid button').forEach(b=>{ b.style.borderColor='var(--border,#e2e0da)'; b.style.background='var(--bg2,#fff)'; b.style.color='var(--text,#1c1c2e)'; });
+    document.querySelectorAll('#ob-dur-grid button').forEach(b=>{ b.style.borderColor='var(--border,#ddd4c2)'; b.style.background='var(--bg2,#fffaf2)'; b.style.color='var(--text,#1f2d24)'; });
     btn.style.borderColor='#7c3aed'; btn.style.background='rgba(var(--accent2-rgb),.08)'; btn.style.color='#7c3aed';
   },
 
   _obSelectMode(mode, btn){
     this._obMode = mode;
-    document.querySelectorAll('#ob-mode-grid button').forEach(b => { b.style.borderColor = 'var(--border,#e2e0da)'; b.setAttribute('aria-pressed', 'false'); });
+    document.querySelectorAll('#ob-mode-grid button').forEach(b=>{ b.style.borderColor='var(--border,#ddd4c2)'; b.setAttribute('aria-pressed','false'); });
     btn.style.borderColor = 'var(--green)'; btn.setAttribute('aria-pressed', 'true');
     const w = document.getElementById('ob-work-wrap'); if(w) w.style.display = mode === 'clients' ? 'none' : '';
   },

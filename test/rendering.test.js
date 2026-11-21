@@ -11,9 +11,55 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
 const { loadApp, student, settings, slot, cityCoords, APP_FILE } = require('./harness');
 
 const PAYLOAD = '<img src=x onerror="alert(1)">';
+
+describe('dark green and warm white theme', () => {
+  test('palette variables cover light, dark and warm theme surfaces', () => {
+    const html = fs.readFileSync(APP_FILE, 'utf8');
+    assert.ok(html.includes('--green: #166534'), 'light accent');
+    assert.ok(html.includes('--bg: #f8f5ec'), 'warm light background');
+    assert.ok(html.includes('--bg: #10281b'), 'dark green background');
+    assert.ok(html.includes('--text: #fffaf2'), 'warm dark text');
+    assert.ok(html.includes('--warm-white: #fffaf2'), 'shared warm white');
+    assert.ok(html.includes('<meta name="theme-color" content="#f8f5ec">'), 'browser chrome');
+    assert.ok(!html.includes('--green: #059669'), 'old emerald accent');
+  });
+
+  describe('Google Maps and Places migration', () => {
+    test('the page loads Google Maps config without hardcoded keys', () => {
+      const html = fs.readFileSync(APP_FILE, 'utf8');
+      assert.ok(html.includes('google-maps-config.js'), 'generated runtime config script');
+      assert.ok(html.includes('window.ROUTEPAL_GOOGLE_MAPS_API_KEY'), 'Google key is read from runtime config');
+      assert.ok(!/<script[^>]+maps\.googleapis\.com[^>]+key=[^&"']+/i.test(html),
+        'no Google API key is embedded in routiq.html');
+    });
+
+    test('Places uses 400ms debounce, three-character minimum and Greece region bias', () => {
+      const html = fs.readFileSync(APP_FILE, 'utf8');
+      assert.ok(html.includes('val.length < 3'), 'minimum three characters');
+      assert.ok(html.includes('}, 400)'), '400ms debounce');
+      assert.ok(html.includes("includedRegionCodes:['gr']"), 'Greece region restriction');
+      assert.ok(html.includes('sessionToken'), 'AutocompleteSessionToken/session reuse');
+    });
+
+    test('Place Details fetches only location and formattedAddress', () => {
+      const html = fs.readFileSync(APP_FILE, 'utf8');
+      assert.ok(html.includes("fields:['location','formattedAddress']"),
+        'Place Details field mask is limited to Essentials fields');
+    });
+
+    test('map updates reuse existing containers and no Leaflet bootstrap remains', () => {
+      const html = fs.readFileSync(APP_FILE, 'utf8');
+      assert.ok(html.includes('_googleMapUpdate(el'), 'shared Google map updater');
+      assert.ok(html.includes('if(!el.__google_map)'), 'Google map container is mounted once');
+      assert.ok(!html.includes('vendor/leaflet/leaflet.js'), 'Leaflet bootstrap removed');
+      assert.ok(!/L\\.map\\s*\(/.test(html), 'no Leaflet map construction remains');
+    });
+  });
+});
 
 /** Fails if `html` contains the payload unescaped. */
 function assertEscaped(html, label) {
@@ -152,13 +198,13 @@ describe('geocoding resilience', () => {
 });
 
 describe('resource lifecycle', () => {
-  test('navigating away destroys Leaflet maps instead of leaking them', () => {
+  test('navigating away clears Google map overlays instead of leaking them', () => {
     const app = loadApp();
-    let removed = 0;
+    let cleared = 0;
     const mapEl = {
       id: 'route-map',
-      _leaflet_map: { remove() { removed++; } },
-      _leaflet_marker: {},
+      __google_markers: [{ setMap() { cleared++; } }],
+      __google_polyline: { setMap() { cleared++; } },
     };
     // Only the selector destroyMaps() uses should see the element, so a typo
     // in that selector fails this test rather than silently leaking.
@@ -166,13 +212,13 @@ describe('resource lifecycle', () => {
       sel === '.screen [id$="-map"]' ? [mapEl] : [];
 
     app.App.destroyMaps();
-    assert.equal(removed, 1, 'the map object should have been torn down');
-    assert.equal(mapEl._leaflet_map, null, 'the reference should be cleared');
-    assert.equal(mapEl._leaflet_marker, null);
+    assert.equal(cleared, 2, 'Google markers and polyline should be cleared');
+    assert.equal(mapEl.__google_markers.length, 0, 'the marker collection should be emptied');
+    assert.equal(mapEl.__google_polyline, null, 'the polyline should be cleared');
 
-    // Idempotent: a second navigation must not throw on an already-dead map.
+    // Idempotent: a second navigation must not throw after overlays were cleared.
     assert.doesNotThrow(() => app.App.destroyMaps());
-    assert.equal(removed, 1);
+    assert.equal(cleared, 2);
   });
 
   test('a non-destructive confirm is not a red Delete button', () => {
@@ -773,14 +819,13 @@ describe('address suggestions', () => {
       'the answer already on the device should be on screen immediately');
   });
 
-  test('two characters are enough to start', () => {
-    // Three was the old minimum; a search box that ignores "Γο" feels broken.
+  test('less than three characters do not start autocomplete', () => {
     const app = app3();
     const box = { style: { display: '' }, innerHTML: '', addEventListener() {}, querySelectorAll: () => [] };
     app.ctx.document.getElementById = () => box;
     app.App._renderSuggestions = () => { box.style.display = 'block'; };
     app.App.onAddrInput('Γο');
-    assert.notEqual(box.style.display, 'none');
+    assert.equal(box.style.display, 'none');
   });
 });
 

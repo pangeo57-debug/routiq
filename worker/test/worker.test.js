@@ -158,6 +158,8 @@ describe('the matrix endpoint checks its body', () => {
     'an empty origin list': { origins: [] },
     'a coordinate off the planet': { origins: [{ lat: 999, lng: 0 }] },
     'a missing coordinate': { origins: [{ lat: 38.2 }] },
+    'a coordinate off the planet in destinations': { origins: [{ lat: 38.2, lng: 21.7 }], destinations: [{ lat: 999, lng: 0 }] },
+    'a missing destination coordinate': { origins: [{ lat: 38.2, lng: 21.7 }], destinations: [{ lat: 38.3 }] },
     'too many points': { origins: Array.from({ length: 500 }, () => ({ lat: 38, lng: 21 })) },
   };
   for (const [name, body] of Object.entries(bad)) {

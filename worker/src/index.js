@@ -197,6 +197,11 @@ function validateMatrixBody(body) {
     if (!Array.isArray(body.destinations)) return 'destinations must be a list';
     if (body.destinations.length > LIMITS.matrixPointsMax)
       return `at most ${LIMITS.matrixPointsMax} destinations`;
+    for (const p of body.destinations) {
+      if (!p || typeof p !== 'object') return 'each destination must be an object';
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return 'each destination needs lat and lng';
+      if (p.lat < -90 || p.lat > 90 || p.lng < -180 || p.lng > 180) return 'destination out of range';
+    }
   }
   return null;
 }
