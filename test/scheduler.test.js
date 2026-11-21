@@ -4593,13 +4593,10 @@ describe('errands: the day for people who are not at work', () => {
     const app = world();
     const marks = [];
     const line = [];
-    app.ctx.L = {
-      map: () => ({ remove() {}, fitBounds() {} }),
-      tileLayer: () => ({ addTo() {} }),
-      polyline: (pts) => ({ addTo() { line.push(pts.length); } }),
-      divIcon: (o) => o,
-      marker: (ll, o) => ({ addTo() { marks.push(o.icon.html.replace(/<[^>]*>/g, '').trim()); } }),
-      latLngBounds: (x) => x,
+    app.App._googleMapUpdate = (_el, opts) => {
+      marks.push(...(opts.markers || []).map(m => m.label || ''));
+      if(opts.polyline) line.push(opts.polyline.length);
+      return Promise.resolve({});
     };
     app.ctx.document.getElementById = (id) => id === 'day-map' ? {} : null;
     delete app.state.coords.e2;
@@ -4773,26 +4770,20 @@ describe('opening a leg in the Maps app itself', () => {
   });
 });
 
-describe('the map library comes from this site, and the day map zooms to the stops', () => {
+describe('Google Maps is singleton and the day map zooms to the stops', () => {
   const fs = require('fs'), path = require('path');
   const root = path.join(__dirname, '..');
   const html = fs.readFileSync(process.env.ROUTIQ_APP_FILE || path.join(root, 'routiq.html'), 'utf8');
 
-  test('Leaflet is loaded from a local file, not from a CDN', () => {
-    assert.match(html, /<script src="vendor\/leaflet\/leaflet\.js"><\/script>/);
-    assert.match(html, /<link rel="stylesheet" href="vendor\/leaflet\/leaflet\.css"\/>/);
-    assert.ok(!/cdn\.jsdelivr\.net\/npm\/leaflet/.test(html), 'no request for Leaflet leaves the site');
+  test('Google Maps loads through runtime config, not a hardcoded key', () => {
+    assert.match(html, /google-maps-config\.js/);
+    assert.match(html, /ROUTEPAL_GOOGLE_MAPS_API_KEY/);
+    assert.ok(!/ROUTEPAL_GOOGLE_MAPS_API_KEY\s*=\s*['"][^'"]+['"]/i.test(html), 'no literal key in HTML');
   });
 
-  test('the vendored files are there, with the licence and the marker images', () => {
-    for (const f of ['leaflet.js', 'leaflet.css', 'LICENSE', 'images/marker-icon.png', 'images/layers.png'])
-      assert.ok(fs.existsSync(path.join(root, 'vendor', 'leaflet', f)), f);
-    assert.match(fs.readFileSync(path.join(root, 'vendor/leaflet/leaflet.js'), 'utf8').slice(0, 200), /Leaflet 1\.9\.4/);
-  });
-
-  test('the service worker cache was renewed so old pages do not keep the CDN version', () => {
+  test('the service worker cache was renewed for the Google Maps migration', () => {
     const v = fs.readFileSync(path.join(root, 'sw.js'), 'utf8').match(/const CACHE = 'routepal-v(\d+)'/);
-    assert.ok(v && Number(v[1]) >= 4, 'the cache must be v4 (the vendored Leaflet) or later');
+    assert.ok(v && Number(v[1]) >= 4, 'the cache must be renewed beyond the old Leaflet assets');
   });
 
   test('the map is fitted to the stops even when home is far away', () => {
@@ -4800,14 +4791,10 @@ describe('the map library comes from this site, and the day map zooms to the sto
     app.setState({ settings: settings(), jobs: [], students: [], schedule: {},
       coords: { home: { lat: 37.98, lon: 23.72 }, a: { lat: 38.25, lon: 21.74 }, b: { lat: 38.26, lon: 21.75 } } });
     let fitted = null;
-    app.ctx.L = {
-      map: () => ({ remove() {}, fitBounds() {} }), tileLayer: () => ({ addTo() {} }),
-      polyline: () => ({ addTo() {} }), divIcon: (o) => o, marker: () => ({ addTo() {} }),
-      latLngBounds: (x) => { fitted = x; return x; },
-    };
+    app.App._googleMapUpdate = (_el, opts) => { fitted = opts.fitBounds; return Promise.resolve({}); };
     app.ctx.document.getElementById = (id) => id === 'day-map' ? {} : null;
     app.App._drawDayMap({ stops: [{ job: { id: 'a', name: 'A' } }, { job: { id: 'b', name: 'B' } }] });
-    assert.equal(JSON.stringify(fitted), JSON.stringify([[38.25, 21.74], [38.26, 21.75]]),
+    assert.equal(JSON.stringify(fitted), JSON.stringify([{lat:38.25,lon:21.74},{lat:38.26,lon:21.75}]),
       'Athens as home must not stretch the view');
   });
 
@@ -4815,15 +4802,15 @@ describe('the map library comes from this site, and the day map zooms to the sto
     const app = loadApp();
     app.setState({ settings: settings(), jobs: [], students: [], schedule: {}, coords: { home: { lat: 38.24, lon: 21.73 } } });
     let view = null, fitted = null;
-    app.ctx.L = {
-      map: () => ({ remove() {}, fitBounds(x) { fitted = x; }, setView(c, z) { view = [c, z]; } }), tileLayer: () => ({ addTo() {} }),
-      polyline: () => ({ addTo() {} }), divIcon: (o) => o, marker: () => ({ addTo() {} }),
-      latLngBounds: (x) => x,
+    app.App._googleMapUpdate = (_el, opts) => {
+      view = [opts.center, opts.zoom];
+      fitted = opts.fitBounds;
+      return Promise.resolve({});
     };
     app.ctx.document.getElementById = (id) => id === 'day-map' ? {} : null;
     app.App._drawDayMap({ stops: [{ job: { id: 'nowhere', name: 'X' } }] });
-    assert.equal(fitted, null);
-    assert.equal(JSON.stringify(view), JSON.stringify([[38.24, 21.73], 14]));
+    assert.equal(JSON.stringify(fitted), JSON.stringify([{lat:38.24,lon:21.73}]));
+    assert.equal(JSON.stringify(view), JSON.stringify([{lat:38.24,lon:21.73},12]));
   });
 
 });
@@ -5156,11 +5143,12 @@ describe('a map on every schedule view, a neutral start, and fewer settings', ()
     const app = loadApp();
     app.setState({ settings: settings(), jobs: [], students: [], schedule: {}, coords });
     const calls = { view: null, fitted: null, markers: [], lines: 0 };
-    app.ctx.L = {
-      map: () => ({ remove() {}, fitBounds(x) { calls.fitted = x; }, setView(c, z) { calls.view = [c, z]; } }),
-      tileLayer: () => ({ addTo() {} }), polyline: () => ({ addTo() { calls.lines++; } }), divIcon: (o) => o,
-      marker: (ll, o) => ({ addTo() { calls.markers.push(o.icon.html.replace(/<[^>]*>/g, '').trim()); } }),
-      latLngBounds: (x) => x,
+    app.App._googleMapUpdate = (_el, opts) => {
+      calls.view = [opts.center, opts.zoom];
+      calls.fitted = opts.fitBounds;
+      calls.markers = (opts.markers || []).map(m => m.label || '');
+      calls.lines = opts.polyline ? 1 : 0;
+      return Promise.resolve({});
     };
     app.ctx.document.getElementById = (id) => ['day-map', 'week-map'].includes(id) ? {} : null;
     return { app, calls };
@@ -5169,7 +5157,7 @@ describe('a map on every schedule view, a neutral start, and fewer settings', ()
   test('with no home and nothing planned the map opens on the town, not blank', () => {
     const { app, calls } = mapWorld({});
     app.App._drawStopsMap('day-map', [], { line: true });
-    assert.equal(JSON.stringify(calls.view), JSON.stringify([[38.2466, 21.7346], 12]));
+    assert.equal(JSON.stringify(calls.view), JSON.stringify([{lat:38.2466,lon:21.7346},12]));
     assert.equal(calls.lines, 0, 'no line with nowhere to go');
   });
 
@@ -6189,7 +6177,7 @@ describe('clients as a wallet of cards', () => {
     const a = student('a', { name: 'Κοραλίνα', phone: '694 123 4567', color: 2 });
     app.setState({ settings: settings({ workDays: [1, 3] }), students: [a], coords: {}, jobs: [], schedule: { 1: [slot('a', '14:30', '15:30')], 3: [slot('a', '15:00', '16:00')] } });
     const html = app.App.studentCard(a);
-    assert.match(html, /class="student-card wallet-card"[^>]*style="--cc:#d97706"/);
+    assert.match(html, /class="student-card wallet-card"[^>]*style="--cc:#84a98c"/);
     assert.match(html, /<span>Δευ 14:30<\/span><span>Τετ 15:00<\/span>/);
     assert.match(html, /href="tel:6941234567"/);
   });
