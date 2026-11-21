@@ -6154,13 +6154,13 @@ describe('home: the map on top, cards that slide, the drive before each stop', (
   const MON = '2026-11-02';
   test('the next stop leads the cards; each stop shows the drive into it; the day ends at home', () => {
     const app = loadApp();
-    const sts = [student('a', { address: 'Ψαρών, Ρίο', phone: '6941234567' }), student('b', { address: 'Θεοφράστου, Πάτρα' })];
+    const sts = [student('a', { address: 'Ψαρών, Ρίο', phone: '6941234567' }), student('b', { address: 'Θεοφράστου, Πάτρα', phone: '6941234568' })];
     app.setState({ settings: settings(), students: sts, coords: cityCoords(sts), jobs: [], schedule: { 1: [slot('a', '23:40', '23:45'), slot('b', '23:50', '23:55')] } });
     app.App.todayISO = () => MON; app.state.homeDay = 0;
     const L = { client: 'Πελάτης', clients: 'Πελάτες', session: 'Ραντεβού', sessions: 'Ραντεβού' };
     const html = app.App._homeTodayHtml(L, 0, 0, { km: 0 }, []);
     assert.match(html, /class="home-card next-card main"/);
-    assert.match(html, /href="tel:6941234567"/, 'a call button when there is a number');
+    assert.match(html, /href="tel:6941234568"/, 'a call button when the next stop has a number');
     assert.equal((html.match(/class="agenda-leg"/g) || []).length, 3, 'two drives in, one home');
     assert.match(html, /2 στάσεις/);
   });
