@@ -158,3 +158,44 @@ describe('the panel and the settings', () => {
     assert.equal(app.defaultSettings().avoidConsecutiveDays, true);
   });
 });
+
+describe('in the weekly plan (enforceSpacing)', () => {
+  test('two days in a row are moved apart, and nothing else breaks', () => {
+    const app = loadApp();
+    const sts = [student('G', { lessonsPerWeek: 2 }), student('B', {})];
+    const sched = { 1: [], 2: [slot('G', '16:00', '17:00')], 3: [slot('G', '16:00', '17:00')], 4: [slot('B', '16:00', '17:00')], 5: [] };
+    const { cfg, S } = week(app, { sts, sched });
+    const r = S.enforceSpacing(sched, sts, cfg);
+    assert.equal(r.moved, 1);
+    assert.deepStrictEqual(Array.from(S.spacingViolations(sched, sts, cfg)), []);
+    assert.deepStrictEqual(Array.from(S.verifySchedule(sched, sts, cfg)), []);
+    assert.equal(Object.values(sched).flat().length, 3, 'nobody dropped');
+  });
+
+  test('a locked lesson is left where it is', () => {
+    const app = loadApp();
+    const sts = [student('G', { lessonsPerWeek: 2 })];
+    const a = slot('G', '16:00', '17:00'), b = slot('G', '16:00', '17:00');
+    a.locked = true; b.locked = true;
+    const sched = { 1: [], 2: [a], 3: [b], 4: [], 5: [] };
+    const { cfg, S } = week(app, { sts, sched });
+    const r = S.enforceSpacing(sched, sts, cfg);
+    assert.equal(r.moved, 0);
+    assert.equal(r.left.length, 1, 'reported, not forced');
+  });
+
+  test('off does nothing; strict pays more driving than prefer', () => {
+    const app = loadApp();
+    const sts = [student('G', { lessonsPerWeek: 2 })];
+    const sched = { 1: [], 2: [slot('G', '16:00', '17:00')], 3: [slot('G', '16:00', '17:00')], 4: [], 5: [] };
+    const { cfg, S } = week(app, { sts, sched, extra: { avoidConsecutiveDays: false } });
+    assert.equal(S.enforceSpacing(sched, sts, cfg).moved, 0);
+    assert.equal(S.spacingMode(settings({ avoidConsecutiveDays: 'strict' })), 'strict');
+    assert.equal(S.spacingMode(settings({ avoidConsecutiveDays: true })), 'prefer');
+    // 'prefer' refuses a fix that costs more than its limit
+    const sched2 = { 1: [], 2: [slot('G', '16:00', '17:00')], 3: [slot('G', '16:00', '17:00')], 4: [], 5: [] };
+    const cfg2 = settings({ workDays: [1, 2, 3, 4, 5], avoidConsecutiveDays: true });
+    assert.equal(S.enforceSpacing(sched2, sts, cfg2, { preferMaxMin: -999 }).moved, 0);
+    assert.equal(S.enforceSpacing(sched2, sts, settings({ workDays: [1, 2, 3, 4, 5], avoidConsecutiveDays: 'strict' })).moved, 1);
+  });
+});

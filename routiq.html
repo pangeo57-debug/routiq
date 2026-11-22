@@ -1921,8 +1921,10 @@ const I18N = {
     rs_undo_blocked:"Δεν ακυρώθηκε — το πρόγραμμα έχει αλλάξει από τότε.",
     settings_spacing_label:"Όχι διαδοχικές μέρες για το ίδιο άτομο",
     settings_more:"Περισσότερες ρυθμίσεις",
-    settings_spacing_hint:"Όταν μετακινείς ένα ραντεβού, οι προτάσεις αποφεύγουν να βάλουν το ίδιο άτομο δύο μέρες στη σειρά, όταν γίνεται. Ο αυτόματος προγραμματισμός δεν επηρεάζεται.",
-    spacing_yes:"Ναι, απόφευγέ το",
+    settings_spacing_hint:"Ο αυτόματος υπολογισμός και οι προτάσεις μετακίνησης αποφεύγουν να βάλουν το ίδιο άτομο δύο μέρες στη σειρά. «Υποχρεωτικά»: όσα χιλιόμετρα κι αν κοστίσει.",
+    spacing_yes:"Ναι, όσο γίνεται (μέχρι +20′ οδήγηση)",
+    spacing_strict:"Ναι, υποχρεωτικά",
+    toast_spacing_left:"{n} ζευγάρια διαδοχικών ημερών δεν γινόταν να χωριστούν",
     spacing_no:"Όχι",
     form_spacing_label:"Διαδοχικές μέρες",
     form_spacing_auto:"Όπως στις ρυθμίσεις",
@@ -2169,8 +2171,10 @@ const I18N = {
     rs_undo_blocked:"Not undone — the schedule has changed since.",
     settings_spacing_label:"No consecutive days for the same person",
     settings_more:"More settings",
-    settings_spacing_hint:"When you move an appointment, the suggestions avoid putting the same person on two days in a row, when possible. Automatic planning is not affected.",
-    spacing_yes:"Yes, avoid it",
+    settings_spacing_hint:"Automatic planning and move suggestions avoid putting the same person on two days in a row. \"Always\": whatever it costs in driving.",
+    spacing_yes:"Yes, when it's cheap (up to +20′ driving)",
+    spacing_strict:"Yes, always",
+    toast_spacing_left:"{n} pairs of consecutive days could not be split",
     spacing_no:"No",
     form_spacing_label:"Consecutive days",
     form_spacing_auto:"As in settings",
@@ -2417,8 +2421,10 @@ const I18N = {
     rs_undo_blocked:"Non annulé — le planning a changé depuis.",
     settings_spacing_label:"Pas de jours consécutifs pour une même personne",
     settings_more:"Plus de réglages",
-    settings_spacing_hint:"Quand vous déplacez un rendez-vous, les propositions évitent de mettre la même personne deux jours de suite, si possible. La planification automatique n'est pas modifiée.",
-    spacing_yes:"Oui, l'éviter",
+    settings_spacing_hint:"La planification automatique et les propositions évitent de mettre la même personne deux jours de suite. « Obligatoirement » : quel que soit le coût en route.",
+    spacing_yes:"Oui, si peu coûteux (jusqu'à +20′ de route)",
+    spacing_strict:"Oui, obligatoirement",
+    toast_spacing_left:"{n} paires de jours consécutifs n'ont pas pu être séparées",
     spacing_no:"Non",
     form_spacing_label:"Jours consécutifs",
     form_spacing_auto:"Comme dans les réglages",
@@ -2665,8 +2671,10 @@ const I18N = {
     rs_undo_blocked:"Nicht rückgängig gemacht — der Plan hat sich seitdem geändert.",
     settings_spacing_label:"Keine aufeinanderfolgenden Tage für dieselbe Person",
     settings_more:"Weitere Einstellungen",
-    settings_spacing_hint:"Beim Verschieben eines Termins vermeiden die Vorschläge, dieselbe Person an zwei Tagen hintereinander einzuplanen, wenn möglich. Die automatische Planung bleibt unverändert.",
-    spacing_yes:"Ja, vermeiden",
+    settings_spacing_hint:"Automatische Planung und Vorschläge vermeiden, dieselbe Person an zwei Tagen hintereinander einzuplanen. „Immer“: egal, was es an Fahrt kostet.",
+    spacing_yes:"Ja, wenn es wenig kostet (bis +20′ Fahrt)",
+    spacing_strict:"Ja, immer",
+    toast_spacing_left:"{n} Paare aufeinanderfolgender Tage ließen sich nicht trennen",
     spacing_no:"Nein",
     form_spacing_label:"Aufeinanderfolgende Tage",
     form_spacing_auto:"Wie in den Einstellungen",
@@ -7356,6 +7364,67 @@ const Scheduler = {
     return out;
   },
 
+  // ---- SPACING IN THE WEEKLY PLAN ----------------------------------------
+  //
+  // After the optimizer has built the week, lessons that sit on two days in a
+  // row for the same person are moved apart with the same moves the repair
+  // panel offers (a gap, a swap, a nudge, re-planning that day) — never a
+  // locked lesson, never a move that breaks anything verifySchedule checks.
+  //   'prefer' (the default when the rule is on): only if it costs at most
+  //            `preferMaxMin` extra minutes of driving.
+  //   'strict': whatever it costs in driving; what still cannot be split is
+  //            reported, not dropped.
+  spacingMode(settings){
+    const v = settings && settings.avoidConsecutiveDays;
+    if(v === false || v === 'off') return 'off';
+    return v === 'strict' ? 'strict' : 'prefer';
+  },
+
+  enforceSpacing(schedule, students, settings, opts = {}){
+    const mode = opts.mode || this.spacingMode(settings);
+    const res = { moved: 0, left: [] };
+    const anyOn = students.some(s => s.spacing === 'on');
+    if(mode === 'off' && !anyOn) return res;
+    const maxCost = mode === 'strict' ? Infinity : (opts.preferMaxMin ?? 20);
+    const deadline = Date.now() + (opts.budgetMs || 8000);
+    const tried = new Set();
+    for(let round = 0; round < 40 && Date.now() < deadline; round++){
+      const vs = this.spacingViolations(schedule, students, settings);
+      const v = vs.find(x => !tried.has(x.key));
+      if(!v) break;
+      const total = vs.length;
+      let best = null;
+      for(const d of v.days){
+        const sl = (schedule[d] || []).find(x => x.studentId === v.studentId);
+        if(!sl || sl.locked) continue;
+        const ref = { studentId: sl.studentId, day: d, start: sl.start };
+        for(const td of (settings.workDays || []).map(Number)){
+          if(td === Number(d) || Date.now() > deadline) continue;
+          let opts2 = [];
+          try{
+            const f = this.findRescheduleOptions(schedule, students, settings, ref, td, null, { budgetMs: 250, max: 3 });
+            opts2 = f.options;
+            if(!opts2.length && mode === 'strict')
+              opts2 = this.replanDayOptions(schedule, students, settings, ref, td, null, { budgetMs: 250 });
+          }catch(e){ opts2 = []; }
+          for(const o of opts2){
+            if(o.deltaTravelMin > maxCost) continue;
+            const trial = this._applyMoves(schedule, settings, o.moves);
+            if(!trial) continue;
+            const after = this.spacingViolations(trial, students, settings);
+            if(after.length >= total || after.some(x => x.key === v.key)) continue;
+            const score = after.length * 1000 + o.deltaTravelMin + o.level;
+            if(!best || score < best.score) best = { o, score };
+          }
+        }
+      }
+      if(best && this.applyRescheduleOption(schedule, students, settings, best.o).ok) res.moved++;
+      else tried.add(v.key);
+    }
+    res.left = this.spacingViolations(schedule, students, settings);
+    return res;
+  },
+
   /**
    * One line per working day for moving a lesson: can it go there, and how.
    *   free    — fits in a gap (level 1)
@@ -10815,6 +10884,12 @@ const App = {
         }
         state._ownWeek = false;
       }catch(e){ console.warn('before/after failed', e); }
+      // The same person not on two days in a row: moved apart after the plan
+      // is built, as far as the setting allows.
+      try{
+        const sp = Scheduler.enforceSpacing(state.schedule, state.students, state.settings);
+        state._spacingLeft = sp.left.length;
+      }catch(e){ console.warn('spacing pass failed', e); state._spacingLeft = 0; }
       Scheduler.flexSync(state.schedule, state.students);
       if(flexBackup.length) Storage.saveStudents(state.students);
 
@@ -10866,7 +10941,9 @@ const App = {
     const attLabel = att > 1 ? tf('toast_attempts_suffix',{n:att}) : '';
     // Say which of the two happened. Silently keeping the old schedule would
     // look like the button did nothing.
-    if(state._keptPreviousSchedule){
+    if(state._spacingLeft && Scheduler.spacingMode(state.settings) === 'strict'){
+      Toast.show(tf('toast_spacing_left',{n:state._spacingLeft}),'info',8000);
+    } else if(state._keptPreviousSchedule){
       Toast.show(t('toast_kept_previous'),'info');
     } else {
       Toast.show(tf('toast_placed_summary',{placed,total,attempts:attLabel}),'success');
@@ -15037,6 +15114,15 @@ const App = {
     const r = Scheduler.applyRescheduleOption(state.schedule, state.students, state.settings, o);
     this.closeRescheduleOptions();
     if(!r.ok){ Toast.show(t('rs_stale'), 'error', 6000); return; }
+    // What the person chose by hand stays put: the next full calculation
+    // fills the gap around it instead of putting the old week back. The lock
+    // shows on the lesson and can be undone there.
+    for(const m of o.moves){
+      if(m.role !== 'primary' && m.role !== 'evicted') continue;
+      const sl = (state.schedule[m.toDay] || []).find(x => x.studentId === m.studentId && x.start === m.toStart);
+      const st = state.students.find(x => x.id === m.studentId);
+      if(sl && Scheduler.lockable(sl, st)) sl.locked = true;
+    }
     const after = JSON.stringify(r.days.map(d => state.schedule[d]));
     Storage.saveSchedule(state.schedule);
     if(r.availability) Storage.saveStudents(state.students);
@@ -16033,7 +16119,8 @@ const App = {
         <div class="form-group" style="margin:0">
           <label>${t('settings_spacing_label')}</label>
           <select id="set-spacing">
-            <option value="1" ${st.avoidConsecutiveDays!==false?'selected':''}>${t('spacing_yes')}</option>
+            <option value="strict" ${st.avoidConsecutiveDays==='strict'?'selected':''}>${t('spacing_strict')}</option>
+            <option value="1" ${st.avoidConsecutiveDays!==false&&st.avoidConsecutiveDays!=='strict'?'selected':''}>${t('spacing_yes')}</option>
             <option value="0" ${st.avoidConsecutiveDays===false?'selected':''}>${t('spacing_no')}</option>
           </select>
           <div class="settings-sub">${t('settings_spacing_hint')}</div>
@@ -16379,7 +16466,7 @@ const App = {
     s.hereApiKey = s.hereApiKey || '';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
     s.maxPerDay = Number(document.getElementById('set-maxday')?.value)||0;
-    { const sp = document.getElementById('set-spacing'); if(sp) s.avoidConsecutiveDays = sp.value !== '0'; }
+    { const sp = document.getElementById('set-spacing'); if(sp) s.avoidConsecutiveDays = sp.value === 'strict' ? 'strict' : sp.value !== '0'; }
 
     // If home address changed, use the coord already resolved by autocomplete/
     // map-picker selection if we have one — avoids an extra geocode round-trip
