@@ -6177,7 +6177,7 @@ describe('clients as a wallet of cards', () => {
     const a = student('a', { name: 'Κοραλίνα', phone: '694 123 4567', color: 2 });
     app.setState({ settings: settings({ workDays: [1, 3] }), students: [a], coords: {}, jobs: [], schedule: { 1: [slot('a', '14:30', '15:30')], 3: [slot('a', '15:00', '16:00')] } });
     const html = app.App.studentCard(a);
-    assert.match(html, /class="student-card wallet-card"[^>]*style="--cc:#84a98c"/);
+    assert.match(html, /class="student-card wallet-card"[^>]*style="--cc:#d97706"/);
     assert.match(html, /<span>Δευ 14:30<\/span><span>Τετ 15:00<\/span>/);
     assert.match(html, /href="tel:6941234567"/);
   });
