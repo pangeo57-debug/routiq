@@ -10969,6 +10969,25 @@ const App = {
         const sp = Scheduler.enforceSpacing(state.schedule, state.students, state.settings);
         state._spacingLeft = sp.left.length;
       }catch(e){ console.warn('spacing pass failed', e); state._spacingLeft = 0; }
+      // Last word on every day: its best order, solved day by day (the exact
+      // day solver), after everything above may have moved lessons between
+      // days. Locked lessons run pinned to their time, as in the main run.
+      // A day changes only if it keeps every lesson, breaks nothing and
+      // costs less.
+      try{
+        schedProgress(98, t('phase_refine_title'), t('phase_refine_sub'));
+        const lk = Scheduler.lockSplit(state.students, state.schedule, state.settings);
+        const al = Object.keys(lk.alias);
+        for(const [v, real] of Object.entries(lk.alias)) if(state.coords[real]) state.coords[v] = state.coords[real];
+        if(al.length) state.idAlias = lk.alias;
+        try{
+          await Scheduler.polishDays(lk.schedule, lk.students, state.settings, 400);
+          state.schedule = al.length ? Scheduler.lockJoin(lk.schedule, lk.alias) : lk.schedule;
+        }finally{
+          for(const v of al) delete state.coords[v];
+          if(al.length) state.idAlias = null;
+        }
+      }catch(e){ console.warn('final day polish failed', e); }
       Scheduler.flexSync(state.schedule, state.students);
       if(flexBackup.length) Storage.saveStudents(state.students);
 

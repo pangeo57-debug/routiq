@@ -202,3 +202,25 @@ describe('bumpDayOptions: the last resort', () => {
     assert.equal(sched[3].length, 3, 'one stepped out, G in');
   });
 });
+
+describe('final per-day polish keeps locks', () => {
+  test('polishDays through lockSplit never moves a locked lesson and never costs more', async () => {
+    const app = loadApp();
+    const sts = ['A', 'B', 'C', 'D'].map(id => student(id, {}));
+    const sched = { 1: [slot('A', '15:00', '16:00'), slot('B', '16:30', '17:30'), slot('C', '18:00', '19:00'), slot('D', '19:30', '20:30')], 2: [], 3: [], 4: [], 5: [] };
+    sched[1][2].locked = true;
+    const { cfg, S } = week(app, { sts, sched });
+    app.state.coords = { home: { lat: 38.24, lon: 21.73 }, A: { lat: 38.20, lon: 21.70 }, B: { lat: 38.30, lon: 21.80 }, C: { lat: 38.21, lon: 21.71 }, D: { lat: 38.29, lon: 21.79 } };
+    const before = S.dayCost(sched[1], 1, cfg);
+    const lk = S.lockSplit(sts, sched, cfg);
+    for (const [v, real] of Object.entries(lk.alias)) app.state.coords[v] = app.state.coords[real];
+    app.state.idAlias = lk.alias;
+    await S.polishDays(lk.schedule, lk.students, cfg, 300);
+    const out = S.lockJoin(lk.schedule, lk.alias);
+    app.state.idAlias = null;
+    const c = out[1].find(x => x.studentId === 'C');
+    assert.equal(c.start, '18:00'); assert.equal(c.locked, true);
+    assert.ok(S.dayCost(out[1], 1, cfg) <= before + 1e-6);
+    assert.equal(out[1].length, 4);
+  });
+});
