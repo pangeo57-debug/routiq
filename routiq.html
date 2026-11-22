@@ -9784,7 +9784,9 @@ const App = {
       input:String(val||'').trim(),
       sessionToken,
       includedRegionCodes:['gr'],
-      locationBias:{circle:{center:{latitude:home.lat,longitude:home.lon},radius:50000}}
+      // The JavaScript API wants {center:{lat,lng}, radius}; the REST shape
+      // ({circle:{center:{latitude,…}}}) is rejected and no suggestion came back.
+      locationBias:{center:{lat:home.lat,lng:home.lon},radius:50000}
     };
     const suggestions=await googleMaps.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions?.(request);
     if(suggestions && Array.isArray(suggestions.suggestions)){
@@ -12445,18 +12447,21 @@ const App = {
     this._addrTimer = setTimeout(async ()=>{
       try{
         let results;
+        // Google first; if it fails or finds nothing, the other sources
+        // still answer rather than leaving the box empty.
+        let googleResults = null;
         if(this._googleMapsApiKey()){
-          results = await this._googlePlacesAutocomplete(val, boxId);
+          try{ googleResults = await this._googlePlacesAutocomplete(val, boxId); }
+          catch(e){ console.warn('Google Places failed, using the other sources:', e && e.message); }
           if(seq !== this._addrSeq) return;
-          const b = document.getElementById(boxId);
-          if(!b) return;
-          if(!results || results.length===0){
-            b.innerHTML=`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">${t('search_no_results')}</div>`;
+          if(googleResults && googleResults.length){
+            const b = document.getElementById(boxId);
+            if(!b) return;
+            this._renderSuggestions(boxId, googleResults.slice(0,6), val);
             return;
           }
-          this._renderSuggestions(boxId, results.slice(0,6), val);
-          return;
-        } else if(hereAvailable()){
+        }
+        if(hereAvailable()){
           // Both at once: autosuggest is better at partial text, geocode is
           // the one that knows buildings. Asking them in series would double
           // the wait for the case this exists to fix.
