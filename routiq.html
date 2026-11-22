@@ -1937,6 +1937,10 @@ const I18N = {
     rs_day_free:"Χωράει ελεύθερα", rs_day_shift:"Χωράει με μικρή αλλαγή", rs_day_replan:"Χωράει αν ξαναστηθεί η μέρα",
     rs_day_none:"Δεν χωράει", rs_day_off:"Δεν είναι διαθέσιμη", rs_day_already:"Έχει ήδη ραντεβού εκείνη τη μέρα", rs_day_current:"Είναι ήδη εδώ",
     rs_day_spacing:"δύο μέρες στη σειρά", rs_back:"Πίσω",
+    rs_kind_force:"Γίνεται, αλλά μετακινούνται και {n} άλλοι", rs_kind_force_alone:"Γίνεται, με συνεννόηση", rs_force_days:"Αλλάζει και άλλη μέρα: {n}",
+    rs_force_outside:"{name}: εκτός των ωρών που έχει δηλώσει ({from}–{to}) — ρώτα αν μπορεί",
+    rs_force_unlock:"Ξεκλειδώνει: {list}",
+    rs_day_force:"Γίνεται μόνο με αλλαγές",
     mode_week:'Εβδομάδα', mode_day:'Ημέρα', day_title:'Ημερήσιο πρόγραμμα', day_plan_btn:'Σχεδίασε τη μέρα', day_today:'Σήμερα', day_tomorrow:'Αύριο', day_stops:'στάσεις', day_driving:'οδήγηση', day_add_job:'Νέα δουλειά', day_edit_job:'Επεξεργασία δουλειάς', day_jobs_count:'{n} δουλειές — {date}', day_no_jobs:'Καμία δουλειά για αυτή τη μέρα. Πρόσθεσε ό,τι έχεις κλείσει και πάτα «Σχεδίασε τη μέρα».', day_not_planned:'εκτός προγράμματος', day_unplanned:'{n} δεν χώρεσαν', day_planned_ok:'{n} στάσεις, {km} km', day_nothing_to_plan:'Δεν υπάρχει δουλειά να προγραμματιστεί', day_planning:'Υπολογίζω…', day_job_name:'Τι είναι η δουλειά', day_job_name_ph:'π.χ. Διαρροή — Παπαδόπουλος', day_dur_min:'Διάρκεια (λεπτά)', day_dur_max:'Το πολύ', day_dur_max_ph:'προαιρετικό', day_window:'Χρονικό παράθυρο πελάτη', day_window_hint:'Άφησέ το κενό αν μπορεί οποιαδήποτε ώρα μέσα στο ωράριό σου.', day_window_invalid:'Το «ως» πρέπει να είναι μετά το «από»', day_delete_title:'Διαγραφή «{name}»;', day_delete_text:'Η δουλειά θα αφαιρεθεί από αυτή τη μέρα.',
     usage_ask_title:'Βοήθησε να γίνει καλύτερο;', usage_ask_text:'Αν θες, η εφαρμογή στέλνει μια φορά τη μέρα ανώνυμα: ότι χρησιμοποιήθηκε και πόσα km γλίτωσες. Κανένα όνομα, διεύθυνση ή πρόγραμμα. Το αλλάζεις όποτε θες στις Ρυθμίσεις.', usage_ask_ok:'Ναι, στείλε', settings_usage:'Ανώνυμα στατιστικά χρήσης', settings_usage_hint:'Μια φορά τη μέρα: ότι άνοιξε η εφαρμογή και πόσα km γλίτωσες. Χωρίς ονόματα, διευθύνσεις ή πρόγραμμα.',
     settings_workplace:'Χώρος εργασίας (προαιρετικό)', settings_workplace_ph:'π.χ. Γυμναστήριο, Ερμού 20, Πάτρα', settings_workplace_hint:'Αν οι πελάτες έρχονται σε σένα (γυμναστήριο, ιατρείο, φροντιστήριο), γράψε τη διεύθυνση μία φορά. Στον πελάτη τικάρεις «Στον χώρο μου» αντί για διεύθυνση, και τα ραντεβού εκεί μπαίνουν το ένα μετά το άλλο, χωρίς διαδρομή.', form_at_workplace:'Έρχεται στον χώρο μου', form_workplace_missing:'Γράψε πρώτα τη διεύθυνση του χώρου σου στις Ρυθμίσεις.',
@@ -2180,6 +2184,10 @@ const I18N = {
     rs_day_free:"Fits freely", rs_day_shift:"Fits with a small change", rs_day_replan:"Fits if the day is re-planned",
     rs_day_none:"Doesn't fit", rs_day_off:"Not available", rs_day_already:"Already has an appointment that day", rs_day_current:"Already here",
     rs_day_spacing:"two days in a row", rs_back:"Back",
+    rs_kind_force:"Possible, but {n} others move too", rs_kind_force_alone:"Possible, if agreed", rs_force_days:"Other days change too: {n}",
+    rs_force_outside:"{name}: outside the hours they gave ({from}–{to}) — ask if they can",
+    rs_force_unlock:"Unlocks: {list}",
+    rs_day_force:"Only with changes",
     mode_week:'Week', mode_day:'Day', day_title:'Day plan', day_plan_btn:'Plan the day', day_today:'Today', day_tomorrow:'Tomorrow', day_stops:'stops', day_driving:'driving', day_add_job:'New job', day_edit_job:'Edit job', day_jobs_count:'{n} jobs — {date}', day_no_jobs:'Nothing booked for this day. Add what you have and press Plan the day.', day_not_planned:'not scheduled', day_unplanned:'{n} did not fit', day_planned_ok:'{n} stops, {km}km', day_nothing_to_plan:'There is no work to plan', day_planning:'Working it out…', day_job_name:'What the job is', day_job_name_ph:'e.g. Leak — Papadopoulos', day_dur_min:'Takes (minutes)', day_dur_max:'At most', day_dur_max_ph:'optional', day_window:'Customer time window', day_window_hint:'Leave empty if any time within your working hours will do.', day_window_invalid:'The end must be after the start', day_delete_title:'Delete \u201c{name}\u201d?', day_delete_text:'The job will be removed from this day.',
     usage_ask_title:'Help make it better?', usage_ask_text:'If you like, the app sends once a day, anonymously: that it was used and how many km you saved. No names, addresses or schedule. You can change this any time in Settings.', usage_ask_ok:'Yes, send', settings_usage:'Anonymous usage statistics', settings_usage_hint:'Once a day: that the app was opened and how many km you saved. No names, addresses or schedule.',
     settings_workplace:'Workplace (optional)', settings_workplace_ph:'e.g. Gym, 20 Ermou St', settings_workplace_hint:'If clients come to you (gym, practice, studio), enter the address once. On a client, tick “At my place” instead of an address, and sessions there follow one another with no travel.', form_at_workplace:'Comes to my place', form_workplace_missing:'First enter your workplace address in Settings.',
@@ -2423,6 +2431,10 @@ const I18N = {
     rs_day_free:"Rentre librement", rs_day_shift:"Rentre avec un petit changement", rs_day_replan:"Rentre si la journée est réorganisée",
     rs_day_none:"Ne rentre pas", rs_day_off:"Pas disponible", rs_day_already:"A déjà un rendez-vous ce jour-là", rs_day_current:"Déjà ici",
     rs_day_spacing:"deux jours de suite", rs_back:"Retour",
+    rs_kind_force:"Possible, mais {n} autres se déplacent aussi", rs_kind_force_alone:"Possible, après accord", rs_force_days:"D'autres jours changent aussi : {n}",
+    rs_force_outside:"{name} : hors des heures indiquées ({from}–{to}) — demandez si c'est possible",
+    rs_force_unlock:"Déverrouille : {list}",
+    rs_day_force:"Seulement avec des changements",
     mode_week:'Semaine', mode_day:'Jour', day_title:'Planning du jour', day_plan_btn:'Planifier la journée', day_today:'Aujourd\u2019hui', day_tomorrow:'Demain', day_stops:'arrêts', day_driving:'trajet', day_add_job:'Nouvelle intervention', day_edit_job:'Modifier l\u2019intervention', day_jobs_count:'{n} interventions — {date}', day_no_jobs:'Rien de prévu ce jour. Ajoutez vos interventions puis appuyez sur Planifier la journée.', day_not_planned:'non planifiée', day_unplanned:'{n} n\u2019ont pas tenu', day_planned_ok:'{n} arrêts, {km}km', day_nothing_to_plan:'Aucune intervention à planifier', day_planning:'Calcul en cours…', day_job_name:'Nature de l\u2019intervention', day_job_name_ph:'ex. Fuite — Papadopoulos', day_dur_min:'Durée (minutes)', day_dur_max:'Au plus', day_dur_max_ph:'facultatif', day_window:'Créneau du client', day_window_hint:'Laissez vide si n\u2019importe quelle heure de vos horaires convient.', day_window_invalid:'La fin doit suivre le début', day_delete_title:'Supprimer « {name} » ?', day_delete_text:'L\u2019intervention sera retirée de cette journée.',
     usage_ask_title:'Aider à l\'améliorer ?', usage_ask_text:'Si vous voulez, l\'application envoie une fois par jour, anonymement : qu\'elle a été utilisée et combien de km vous avez économisés. Aucun nom, adresse ni planning. Modifiable à tout moment dans les Réglages.', usage_ask_ok:'Oui, envoyer', settings_usage:'Statistiques d\'utilisation anonymes', settings_usage_hint:'Une fois par jour : que l\'application a été ouverte et combien de km vous avez économisés. Sans noms, adresses ni planning.',
     settings_workplace:'Lieu de travail (facultatif)', settings_workplace_ph:'p. ex. Salle de sport, 20 rue…', settings_workplace_hint:'Si les clients viennent chez vous (salle, cabinet, studio), saisissez l\'adresse une fois. Sur un client, cochez « Chez moi » au lieu d\'une adresse : les séances s\'y enchaînent sans trajet.', form_at_workplace:'Vient chez moi', form_workplace_missing:'Saisissez d\'abord l\'adresse de votre lieu de travail dans les Réglages.',
@@ -2666,6 +2678,10 @@ const I18N = {
     rs_day_free:"Passt frei", rs_day_shift:"Passt mit kleiner Änderung", rs_day_replan:"Passt, wenn der Tag neu geplant wird",
     rs_day_none:"Passt nicht", rs_day_off:"Nicht verfügbar", rs_day_already:"Hat an dem Tag schon einen Termin", rs_day_current:"Schon hier",
     rs_day_spacing:"zwei Tage hintereinander", rs_back:"Zurück",
+    rs_kind_force:"Möglich, aber {n} andere verschieben sich auch", rs_kind_force_alone:"Möglich, nach Absprache", rs_force_days:"Weitere Tage ändern sich: {n}",
+    rs_force_outside:"{name}: außerhalb der angegebenen Zeiten ({from}–{to}) — nachfragen, ob es geht",
+    rs_force_unlock:"Entsperrt: {list}",
+    rs_day_force:"Nur mit Änderungen",
     mode_week:'Woche', mode_day:'Tag', day_title:'Tagesplan', day_plan_btn:'Tag planen', day_today:'Heute', day_tomorrow:'Morgen', day_stops:'Stopps', day_driving:'Fahrt', day_add_job:'Neuer Auftrag', day_edit_job:'Auftrag bearbeiten', day_jobs_count:'{n} Aufträge — {date}', day_no_jobs:'Für diesen Tag ist nichts eingetragen. Aufträge hinzufügen und Tag planen drücken.', day_not_planned:'nicht eingeplant', day_unplanned:'{n} passten nicht', day_planned_ok:'{n} Stopps, {km}km', day_nothing_to_plan:'Es gibt nichts zu planen', day_planning:'Wird berechnet…', day_job_name:'Worum es geht', day_job_name_ph:'z.B. Leck — Papadopoulos', day_dur_min:'Dauer (Minuten)', day_dur_max:'Höchstens', day_dur_max_ph:'optional', day_window:'Zeitfenster des Kunden', day_window_hint:'Leer lassen, wenn jede Zeit innerhalb Ihrer Arbeitszeit passt.', day_window_invalid:'Das Ende muss nach dem Beginn liegen', day_delete_title:'\u201e{name}\u201c löschen?', day_delete_text:'Der Auftrag wird von diesem Tag entfernt.',
     usage_ask_title:'Hilfst du mit, es besser zu machen?', usage_ask_text:'Wenn du willst, sendet die App einmal am Tag anonym: dass sie benutzt wurde und wie viele km du gespart hast. Keine Namen, Adressen oder Pläne. Jederzeit in den Einstellungen änderbar.', usage_ask_ok:'Ja, senden', settings_usage:'Anonyme Nutzungsstatistik', settings_usage_hint:'Einmal am Tag: dass die App geöffnet wurde und wie viele km du gespart hast. Ohne Namen, Adressen oder Pläne.',
     settings_workplace:'Arbeitsort (optional)', settings_workplace_ph:'z. B. Studio, Hauptstr. 20', settings_workplace_hint:'Wenn Kunden zu dir kommen (Studio, Praxis, Schule), gib die Adresse einmal ein. Beim Kunden hakst du „Kommt zu mir“ statt einer Adresse an, und Termine dort folgen ohne Fahrt aufeinander.', form_at_workplace:'Kommt zu mir', form_workplace_missing:'Gib zuerst die Adresse deines Arbeitsorts in den Einstellungen ein.',
@@ -6744,7 +6760,7 @@ const Scheduler = {
     }
     for(const [m, sl] of picked) trial[m.fromDay] = trial[m.fromDay].filter(x => x !== sl);
     for(const [m, sl] of picked)
-      trial[m.toDay] = trial[m.toDay].concat([{ ...sl, start: m.toStart, end: m.toEnd }]);
+      trial[m.toDay] = trial[m.toDay].concat([Object.assign({ ...sl, start: m.toStart, end: m.toEnd }, m.unlock ? { locked: false } : {})]);
     for(const d of Object.keys(trial))
       trial[d].sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
     return trial;
@@ -6967,19 +6983,39 @@ const Scheduler = {
   applyRescheduleOption(schedule, students, settings, option){
     const trial = this._applyMoves(schedule, settings, option.moves || []);
     if(!trial) return { ok: false, reason: 'stale' };
+    const rs = this._relaxedStudents(students, option);
     const before = new Set(this.verifySchedule(schedule, students, settings));
-    if(this.verifySchedule(trial, students, settings).some(x => !before.has(x)))
+    if(this.verifySchedule(trial, rs, settings).some(x => !before.has(x)))
       return { ok: false, reason: 'illegal' };
     const days = [...new Set((option.moves || []).flatMap(m => [m.fromDay, m.toDay]))];
     const snapshot = {};
     for(const d of days) snapshot[d] = (schedule[d] || []).slice();
     for(const d of days) schedule[d] = trial[d];
-    return { ok: true, before: snapshot, days };
+    // A level-5 option goes outside the person's hours on that day: stretch
+    // them for real, so the week stays valid; Undo puts them back.
+    let availability = null;
+    if(option.relax){
+      const st = students.find(s => s.id === option.relax.studentId);
+      if(st){
+        availability = { studentId: st.id, day: option.relax.day,
+          av: st.availability && st.availability[option.relax.day] ? { ...st.availability[option.relax.day] } : null };
+        st.availability = Object.assign({}, st.availability, { [option.relax.day]: { ...option.relax.av } });
+      }
+    }
+    return { ok: true, before: snapshot, days, availability };
   },
 
   // Undo of applyRescheduleOption: put the touched days back as they were.
-  restoreDays(schedule, snapshot){
+  restoreDays(schedule, snapshot, students, availability){
     for(const d of Object.keys(snapshot)) schedule[d] = snapshot[d].slice();
+    if(availability && students){
+      const st = students.find(s => s.id === availability.studentId);
+      if(st){
+        const a = Object.assign({}, st.availability);
+        if(availability.av) a[availability.day] = availability.av; else delete a[availability.day];
+        st.availability = a;
+      }
+    }
   },
 
   // ---- LEVEL 4: fit the lesson in and re-plan that one day ----------------
@@ -7106,6 +7142,211 @@ const Scheduler = {
     return out;
   },
 
+  // ---- LEVEL 5: "it can be done, but…" -----------------------------------
+  //
+  // For a day where nothing fits — the person is not free that day, a locked
+  // lesson is in the way, or the day is simply full — the honest answer is
+  // still an answer: what it WOULD take. The lesson goes on that day anyway
+  // (inside the working hours, outside the person's own hours if need be),
+  // the day is re-planned, locked lessons may move (and are unlocked), and
+  // whoever no longer fits is sent to another day — preferring days the
+  // change already touches, so as few days as possible change.
+  //
+  // Each option says what it costs: who moves, which days change, whose own
+  // hours it goes outside of, which locked lessons it unlocks. It is checked
+  // like every other option, except that the person's hours on the wanted day
+  // count as stretched (applying it stretches them for real; Undo puts them
+  // back).
+  _relaxedStudents(students, option){
+    const st = option && option.relax;
+    if(!st) return students;
+    return students.map(s => s.id !== st.studentId ? s
+      : Object.assign({}, s, { availability: Object.assign({}, s.availability, { [st.day]: st.av }) }));
+  },
+
+  forceDayOptions(schedule, students, settings, ref, targetDay, opts = {}){
+    const max = opts.max || 3;
+    const deadline = Date.now() + (opts.budgetMs || 1500);
+    const maxShift = opts.maxShift || 120;
+    const maxEvict = opts.maxEvict || 3;
+    const r = this._slotRef(ref);
+    const srcDay = Number(r.day);
+    targetDay = Number(targetDay);
+    const out = [];
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const src = (schedule[srcDay] || []).find(x => x.studentId === r.studentId && this.toMin(x.start) === this.toMin(r.start));
+    if(!src || !this._movableAlone(src, byId) || srcDay === targetDay) return out;
+    const st = byId[src.studentId];
+    if(!(settings.workDays || []).includes(targetDay)) return out;
+    if((schedule[targetDay] || []).some(x => this.occupantIds(x).includes(st.id))) return out;
+    const dh = settings.dayHours && settings.dayHours[targetDay];
+    if(!dh) return out;
+    const lo = this.toMin(dh.start), hi = this.toMin(dh.end) + this.endFlex();
+    const grid = this.timeGrid(settings);
+    const margin = settings.travelMargin ?? 3;
+    const days = (settings.workDays || []).map(Number);
+    const dur = this.toMin(src.end) - this.toMin(src.start);
+
+    const av0 = st.availability && st.availability[targetDay];
+    const aWins0 = (av0 && av0.on) ? this.commonWindows([st], targetDay, settings) : [];
+    const fitsW = (wins, t, d) => wins.some((w, i) => t >= w[0] && t + d <= w[1] + this.windowFlex(wins, i));
+    const clear = (a, b, day) => {
+      if(a.e <= b.s) return b.s - a.e >= this.legMin(margin, a.id, a.addr, b.id, b.addr, day, a.e);
+      if(b.e <= a.s) return a.s - b.e >= this.legMin(margin, b.id, b.addr, a.id, a.addr, day, b.e);
+      return false;
+    };
+    const iv = (sl, s) => { const d = this.toMin(sl.end) - this.toMin(sl.start);
+      return { id: sl.studentId, addr: sl.address || '', s, e: s + d, d, sl }; };
+    const before = new Set(this.verifySchedule(schedule, students, settings));
+    const spBefore = new Set(this.spacingViolations(schedule, students, settings).map(v => v.key));
+    const nameOf = (sl) => sl.studentName || (byId[sl.studentId] || {}).name || '';
+
+    const dayList = (schedule[targetDay] || []).slice();
+    const multi = (sl) => dayList.filter(x => x.studentId === sl.studentId).length > 1;
+    const fixed = dayList.filter(x => !this._movableAlone(x, byId) || multi(x));
+    const movable = dayList.filter(x => !fixed.includes(x));
+    const fixedIv = fixed.map(x => iv(x, this.toMin(x.start)));
+    const winsOn = (s, d) => this.commonWindows([s], d, settings);
+
+    // A free place for one lesson on another day, as that day stands in `trial`.
+    const placeElsewhere = (sl, trial, prefer) => {
+      const s = byId[sl.studentId];
+      if(!s) return null;
+      const d0 = this.toMin(sl.end) - this.toMin(sl.start);
+      let best = null;
+      for(const d of days){
+        if(d === targetDay) continue;
+        const a = s.availability && s.availability[d];
+        if(!a || !a.on) continue;
+        if((trial[d] || []).some(x => this.occupantIds(x).includes(s.id))) continue;
+        const h = settings.dayHours && settings.dayHours[d];
+        if(!h) continue;
+        const w = winsOn(s, d);
+        const there = (trial[d] || []).map(x => iv(x, this.toMin(x.start)));
+        for(let t = Math.ceil(this.toMin(h.start) / grid) * grid; t + d0 <= this.toMin(h.end) + this.endFlex(); t += grid){
+          if(!fitsW(w, t, d0)) continue;
+          const c = { id: sl.studentId, addr: sl.address || '', s: t, e: t + d0 };
+          if(!there.every(p => clear(c, p, d))) continue;
+          const score = (prefer.has(d) ? 0 : 1000) + Math.abs(t - this.toMin(sl.start));
+          if(!best || score < best.score) best = { d, t, score };
+          break;
+        }
+      }
+      return best;
+    };
+
+    const cands = [];
+    const seen = new Set();
+    for(let t = Math.ceil(lo / grid) * grid; t + dur <= hi; t += grid){
+      if(Date.now() > deadline) break;
+      const A = { id: src.studentId, addr: src.address || '', s: t, e: t + dur, d: dur, sl: src };
+      if(!fixedIv.every(f => clear(A, f, targetDay))) continue;
+      const outside = !fitsW(aWins0, t, dur);
+      const orders = [
+        movable.slice().sort((a, b) => this.toMin(a.start) - this.toMin(b.start)),
+        movable.slice().sort((a, b) => Math.abs(this.toMin(a.start) - t) - Math.abs(this.toMin(b.start) - t)),
+      ];
+      for(const order of orders){
+        const placed = [A, ...fixedIv];
+        const moves = [], evicted = [], unlocked = [];
+        let displaced = 0, ok = true;
+        for(const sl of order){
+          const s0 = this.toMin(sl.start);
+          const w = winsOn(byId[sl.studentId], targetDay);
+          let got = null;
+          if(!sl.locked || placed.every(p => clear(iv(sl, s0), p, targetDay))){
+            for(let k = 0; k <= (sl.locked ? 0 : maxShift) && !got; k += grid){
+              for(const s of (k ? [s0 - k, s0 + k] : [s0])){
+                const c = iv(sl, s);
+                if(s >= lo && c.e <= hi && fitsW(w, s, c.d) && placed.every(p => clear(c, p, targetDay))){ got = c; break; }
+              }
+            }
+          }
+          if(!got && sl.locked){
+            // A locked lesson may only move if it must; then it is unlocked.
+            for(let k = grid; k <= maxShift && !got; k += grid){
+              for(const s of [s0 - k, s0 + k]){
+                const c = iv(sl, s);
+                if(s >= lo && c.e <= hi && fitsW(w, s, c.d) && placed.every(p => clear(c, p, targetDay))){ got = c; break; }
+              }
+            }
+            if(got) unlocked.push(nameOf(sl));
+          }
+          if(!got){
+            if(evicted.length >= maxEvict){ ok = false; break; }
+            evicted.push(sl);
+            if(sl.locked) unlocked.push(nameOf(sl));
+            continue;
+          }
+          placed.push(got);
+          if(got.s !== s0){
+            displaced += Math.abs(got.s - s0);
+            moves.push({ studentId: sl.studentId, name: nameOf(sl), fromDay: targetDay, fromStart: sl.start, toDay: targetDay,
+              toStart: this.toTime(got.s), toEnd: this.toTime(got.e), role: 'shifted', shiftMin: got.s - s0, unlock: !!sl.locked });
+          }
+        }
+        if(!ok) continue;
+        const prim = { studentId: src.studentId, name: nameOf(src), fromDay: srcDay, fromStart: src.start,
+          toDay: targetDay, toStart: this.toTime(t), toEnd: this.toTime(t + dur), role: 'primary' };
+        let all = [prim, ...moves];
+        // Those who no longer fit go to another day, one at a time, each
+        // seeing where the ones before it went.
+        const touched = new Set([srcDay, targetDay]);
+        for(const E of evicted){
+          const base = this._applyMoves(schedule, settings, all);
+          if(!base){ ok = false; break; }
+          base[targetDay] = base[targetDay].filter(x => !(x.studentId === E.studentId && this.toMin(x.start) === this.toMin(E.start)));
+          const p = placeElsewhere(E, base, touched);
+          if(!p){ ok = false; break; }
+          touched.add(p.d);
+          const d0 = this.toMin(E.end) - this.toMin(E.start);
+          all.push({ studentId: E.studentId, name: nameOf(E), fromDay: targetDay, fromStart: E.start, toDay: p.d,
+            toStart: this.toTime(p.t), toEnd: this.toTime(p.t + d0), role: 'evicted', unlock: !!E.locked });
+        }
+        if(!ok) continue;
+        const sig = all.map(m => `${m.studentId}@${m.toDay}@${m.toStart}`).sort().join('|');
+        if(seen.has(sig)) continue;
+        seen.add(sig);
+        // Nothing to say beyond what levels 1-4 already offer.
+        if(!outside && !unlocked.length && !evicted.length) continue;
+        const relax = outside ? { studentId: st.id, day: targetDay,
+          av: { on: true, start: this.toTime(Math.min(t, aWins0.length ? aWins0[0][0] : t)),
+                end: this.toTime(Math.max(t + dur, aWins0.length ? aWins0[aWins0.length - 1][1] : t + dur)) } } : null;
+        const opt = { moves: all, relax };
+        const trial = this._applyMoves(schedule, settings, all);
+        if(!trial) continue;
+        const rs = this._relaxedStudents(students, opt);
+        if(this.verifySchedule(trial, rs, settings).some(x => !before.has(x))) continue;
+        const tDays = [...touched];
+        const delta = this._travelMin(trial, tDays, settings) - this._travelMin(schedule, tDays, settings);
+        const spacing = this.spacingViolations(trial, rs, settings).filter(v => !spBefore.has(v.key));
+        cands.push({ all, relax, delta, displaced, spacing, unlocked, evicted: evicted.map(nameOf), tDays,
+          cost: tDays.length * 1000 + unlocked.length * 300 + (outside ? 200 : 0) + evicted.length * 100 +
+                spacing.length * 150 + displaced / 2 + delta });
+      }
+    }
+    cands.sort((a, b) => a.cost - b.cost);
+    // One option per shape: the same people moved the same way with the
+    // lesson in the same place in the day is one choice, not three.
+    const shapes = new Set();
+    const picked = [];
+    for(const c of cands){
+      const tMin = this.toMin(c.all[0].toStart);
+      const pos = dayList.filter(x => this.toMin(x.start) < tMin).length;
+      const k = pos + '#' + c.all.slice(1).map(m => m.studentId + '>' + m.toDay).sort().join(',') + '#' + c.unlocked.join(',');
+      if(shapes.has(k)) continue;
+      shapes.add(k); picked.push(c);
+      if(picked.length >= max) break;
+    }
+    for(const c of picked){
+      out.push({ id: 'force:' + c.all.map(m => `${m.studentId}@${m.toDay}@${m.toStart}`).join('|'), level: 5, kind: 'force',
+        deltaTravelMin: c.delta, displacedMin: c.displaced, moves: c.all, touchedDays: c.tDays, partner: null, shiftMin: null,
+        relax: c.relax, unlocked: c.unlocked, evicted: c.evicted,
+        spacing: c.spacing.map(v => ({ studentId: v.studentId, name: v.name, days: v.days })) });
+    }
+    return out;
+  },
+
   /**
    * One line per working day for moving a lesson: can it go there, and how.
    *   free    — fits in a gap (level 1)
@@ -7127,7 +7368,13 @@ const Scheduler = {
         options = f.options; notes = f.notes;
       }catch(e){ notes = ['error']; }
       const offNote = notes.find(n => ['day_off','unavailable','already','not_movable','multi_block','no_lesson'].includes(n));
-      if(offNote){ res.push({ day: d, status: 'off', reason: offNote, options: [] }); continue; }
+      if(offNote && offNote !== 'unavailable'){ res.push({ day: d, status: 'off', reason: offNote, options: [] }); continue; }
+      if(offNote === 'unavailable'){
+        let f5 = [];
+        try{ f5 = this.forceDayOptions(schedule, students, settings, r, d, { budgetMs: opts.budgetMs || 600 }); }catch(e){ f5 = []; }
+        res.push({ day: d, status: f5.length ? 'force' : 'off', reason: offNote, spacing: false, options: f5 });
+        continue;
+      }
       let l4 = [];
       if(!options.some(o => o.level === 1 && !o.spacing.length)){
         try{ l4 = this.replanDayOptions(schedule, students, settings, r, d, null, { budgetMs: opts.budgetMs || 600 }); }catch(e){ l4 = []; }
@@ -7136,7 +7383,12 @@ const Scheduler = {
       const clean = all.filter(o => !o.spacing.length);
       const pick = clean.length ? clean : all;
       const best = pick.length ? Math.min(...pick.map(o => o.level)) : null;
-      const status = best == null ? 'none' : best === 1 ? 'free' : best <= 3 ? 'shift' : 'replan';
+      let status = best == null ? 'none' : best === 1 ? 'free' : best <= 3 ? 'shift' : 'replan';
+      if(status === 'none'){
+        let f5 = [];
+        try{ f5 = this.forceDayOptions(schedule, students, settings, r, d, { budgetMs: opts.budgetMs || 600 }); }catch(e){ f5 = []; }
+        if(f5.length){ status = 'force'; all.push(...f5); }
+      }
       res.push({ day: d, status, spacing: !!all.length && !clean.length, options: all });
     }
     return res;
@@ -14639,6 +14891,8 @@ const App = {
       // Nothing simple: try re-planning that one day (level 4).
       if(res && !res.options.length && !res.notes.some(n => ['day_off','unavailable','already','not_movable','multi_block','no_lesson'].includes(n)))
         res.options = Scheduler.replanDayOptions(state.schedule, state.students, state.settings, ref, targetDay, targetTime);
+      if(res && !res.options.length && !res.notes.some(n => ['day_off','already','not_movable','multi_block','no_lesson'].includes(n)))
+        res.options = Scheduler.forceDayOptions(state.schedule, state.students, state.settings, ref, targetDay);
     }catch(e){ console.warn('reschedule options failed', e); return false; }
     if(!res || !res.options.length) return false;
     state._reschedule = { res };
@@ -14660,6 +14914,7 @@ const App = {
       if(o.kind === 'shift') return tf(o.shiftMin < 0 ? 'rs_kind_shift_earlier' : 'rs_kind_shift_later',
         { name: o.partner.name, min: Math.abs(o.shiftMin) });
       if(o.kind === 'replan') return tf('rs_kind_replan', { n: o.moves.length - 1 });
+      if(o.kind === 'force') return o.moves.length > 1 ? tf('rs_kind_force', { n: o.moves.length - 1 }) : t('rs_kind_force_alone');
       return t('rs_kind_relocate');
     };
     const deltaText = (n) => n > 0 ? tf('rs_delta_plus', { n }) : n < 0 ? tf('rs_delta_minus', { n: -n }) : t('rs_delta_zero');
@@ -14671,6 +14926,9 @@ const App = {
         ${o.moves.map(m => `<div style="font-size:13px;margin-top:3px">${esc(tf('rs_line',
           { name: m.name, day: DAYS_FULL[m.toDay] || '', from: m.toStart, to: m.toEnd }) + shiftText(m))}</div>`).join('')}
         ${o.displacedMin ? `<div style="font-size:12px;margin-top:4px;color:var(--text3)">${esc(tf('rs_moved_total', { n: o.displacedMin }))}</div>` : ''}
+        ${o.relax ? `<div style="font-size:12px;margin-top:4px;color:var(--red)">⚠ ${esc(tf('rs_force_outside', { name: o.moves[0].name, from: o.moves[0].toStart, to: o.moves[0].toEnd }))}</div>` : ''}
+        ${o.kind === 'force' && (o.touchedDays || []).length > 2 ? `<div style="font-size:12px;margin-top:4px;color:var(--red)">${esc(tf('rs_force_days', { n: o.touchedDays.length - 2 }))}</div>` : ''}
+        ${(o.unlocked || []).length ? `<div style="font-size:12px;margin-top:4px;color:var(--red)">🔓 ${esc(tf('rs_force_unlock', { list: o.unlocked.join(', ') }))}</div>` : ''}
         ${(o.spacing || []).map(v => `<div style="font-size:12px;margin-top:4px;color:var(--orange,#c2410c)">⚠ ${esc(tf('rs_spacing_warn',
           { name: v.name, days: v.days.map(d => DAYS_FULL[d] || '').join('–') }))}</div>`).join('')}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">
@@ -14687,7 +14945,7 @@ const App = {
     const dh = state.settings.dayHours && state.settings.dayHours[day];
     if(!dh) return '';
     const lo = Scheduler.toMin(dh.start), hi = Math.max(lo + 60, Scheduler.toMin(dh.end));
-    const col = { 1: 'var(--green)', 2: 'var(--yellow,#ca8a04)', 3: 'var(--yellow,#ca8a04)', 4: 'var(--orange,#d97706)' };
+    const col = { 1: 'var(--green)', 2: 'var(--yellow,#ca8a04)', 3: 'var(--yellow,#ca8a04)', 4: 'var(--orange,#d97706)', 5: 'var(--red)' };
     const moved = new Set(((option && option.moves) || []).map(m => m.studentId + '|' + m.fromDay + '|' + Scheduler.toMin(m.fromStart)));
     const blocks = [];
     for(const sl of (state.schedule[day] || [])){
@@ -14719,9 +14977,9 @@ const App = {
     document.getElementById('rs-title').textContent = t('rs_days_title');
     document.getElementById('rs-hint').textContent = tf('rs_days_hint', { name: (st && st.name) || '' });
     document.getElementById('rs-cancel-btn').textContent = t('btn_cancel');
-    const dot = { free: 'var(--green)', shift: 'var(--yellow,#ca8a04)', replan: 'var(--orange,#d97706)',
+    const dot = { free: 'var(--green)', shift: 'var(--yellow,#ca8a04)', replan: 'var(--orange,#d97706)', force: 'var(--red)',
       none: 'var(--text3)', off: 'var(--bg4)', current: 'var(--blue)' };
-    const label = { free: 'rs_day_free', shift: 'rs_day_shift', replan: 'rs_day_replan',
+    const label = { free: 'rs_day_free', shift: 'rs_day_shift', replan: 'rs_day_replan', force: 'rs_day_force',
       none: 'rs_day_none', off: 'rs_day_off', current: 'rs_day_current' };
     document.getElementById('rs-list').innerHTML = rows.map(row => {
       const can = row.options && row.options.length;
@@ -14731,7 +14989,7 @@ const App = {
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:10px;height:10px;border-radius:50%;background:${dot[row.status]};flex:none"></span>
           <span style="font-weight:600">${esc(DAYS_FULL[row.day] || '')}</span>
-          <span style="font-size:12px;color:var(--text2)">${esc(t(row.reason === 'already' ? 'rs_day_already' : label[row.status]))}</span>
+          <span style="font-size:12px;color:var(--text2)">${esc(t(row.reason === 'already' ? 'rs_day_already' : row.status === 'force' && row.reason === 'unavailable' ? 'rs_day_force' : label[row.status]))}</span>
           ${row.spacing ? `<span style="font-size:12px;color:var(--orange,#c2410c);margin-left:auto">⚠ ${esc(t('rs_day_spacing'))}</span>` : ''}
         </div>
         ${row.status !== 'off' ? this._rsTimelineHtml(row.day, best) : ''}
@@ -14772,6 +15030,7 @@ const App = {
     if(!r.ok){ Toast.show(t('rs_stale'), 'error', 6000); return; }
     const after = JSON.stringify(r.days.map(d => state.schedule[d]));
     Storage.saveSchedule(state.schedule);
+    if(r.availability) Storage.saveStudents(state.students);
     this.renderSchedule();
     this.renderHome();
     const first = o.moves[0];
@@ -14786,7 +15045,8 @@ const App = {
       Toast.show(t('rs_undo_blocked'), 'error', 5000);
       return;
     }
-    Scheduler.restoreDays(state.schedule, applied.before);
+    Scheduler.restoreDays(state.schedule, applied.before, state.students, applied.availability);
+    if(applied.availability) Storage.saveStudents(state.students);
     Storage.saveSchedule(state.schedule);
     this.renderSchedule();
     this.renderHome();

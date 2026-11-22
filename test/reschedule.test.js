@@ -214,11 +214,20 @@ describe('the panel', () => {
     assert.equal(toasts.length, 0, 'no error toast');
   });
 
-  test('with nothing to offer it returns false so the caller keeps its own message', () => {
+  test('a locked lesson in the way: still offered, saying it unlocks it', () => {
     const app = loadApp();
     fixture(app);
     app.state.schedule[1][0].locked = true;
-    assert.equal(app.App.openRescheduleOptions(ref('A', 2, '15:00'), 1, '15:00'), false);
+    assert.equal(app.App.openRescheduleOptions(ref('A', 2, '15:00'), 1, '15:00'), true);
+    const o = app.state._reschedule.res.options[0];
+    assert.equal(o.level, 5);
+    assert.ok(o.unlocked.length >= 1);
+  });
+
+  test('with nothing to offer it returns false so the caller keeps its own message', () => {
+    const app = loadApp();
+    fixture(app);
+    assert.equal(app.App.openRescheduleOptions(ref('A', 2, '15:00'), 6, null), false, 'Saturday is not a working day');
   });
 
   test('Apply changes the week and the Undo on the toast puts it back', () => {

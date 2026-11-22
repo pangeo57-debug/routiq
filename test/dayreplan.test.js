@@ -91,7 +91,8 @@ describe('dayChoices', () => {
     assert.equal(rows[2].status, 'free');
     assert.equal(rows[3].status, 'replan');
     assert.equal(rows[4].status, 'free');
-    assert.equal(rows[5].status, 'off', 'G is not free on Friday');
+    assert.equal(rows[5].status, 'force', 'G is not free on Friday: possible only by asking G');
+    assert.ok(rows[5].options[0].relax, 'it says it goes outside G\'s hours');
   });
 
   test('a day that only works by making two days in a row is marked', () => {
@@ -128,5 +129,48 @@ describe('the day chooser panel', () => {
     const st = app.state;
     assert.equal(st.schedule[1].length, 0);
     assert.ok(st.schedule[3].some(x => x.studentId === 'G'));
+  });
+});
+
+describe('forceDayOptions (level 5): what it would take', () => {
+  // Wednesday 15:00-18:00 is full: B 15-16, C 16-17, D 17-18, each free only then.
+  function full(app, cDays) {
+    const sts = [
+      student('G', { days: [1, 3] }),
+      student('B', { days: [3] }), student('C', { days: cDays }), student('D', { days: [3] }),
+    ];
+    sts[1].availability[3] = { on: true, start: '15:00', end: '16:00' };
+    sts[3].availability[3] = { on: true, start: '17:00', end: '18:00' };
+    sts[2].availability[3] = { on: true, start: '16:00', end: '17:00' };
+    const sched = { 1: [slot('G', '15:00', '16:00')], 2: [], 3: [slot('B', '15:00', '16:00'), slot('C', '16:00', '17:00'), slot('D', '17:00', '18:00')], 4: [], 5: [] };
+    return Object.assign({ sts, sched }, week(app, { sts, sched, extra: { dayHours: hours('18:00'), travelMargin: 0 } }));
+  }
+
+  test('someone is sent to another day, preferring a day that already changes', () => {
+    const app = loadApp();
+    const { sts, sched, cfg, S } = full(app, [1, 3, 4]);
+    assert.equal(S.replanDayOptions(sched, sts, cfg, { studentId: 'G', day: 1, start: '15:00' }, 3).length, 0, 'no level 4');
+    const o = S.forceDayOptions(sched, sts, cfg, { studentId: 'G', day: 1, start: '15:00' }, 3)[0];
+    assert.ok(o, 'level 5 finds a way');
+    const ev = o.moves.find(m => m.role === 'evicted');
+    assert.ok(ev, 'someone leaves Wednesday');
+    assert.equal(ev.toDay, 1, 'to Monday, which the move already frees: only two days change');
+    assert.equal(o.touchedDays.length, 2);
+  });
+
+  test('outside the person\'s own hours: offered, flagged, hours stretched on apply, back on undo', () => {
+    const app = loadApp();
+    const sts = [student('G', { days: [1, 2] })];
+    const sched = { 1: [slot('G', '15:00', '16:00')], 2: [], 3: [], 4: [], 5: [] };
+    const { cfg, S } = week(app, { sts, sched });
+    const o = S.forceDayOptions(sched, sts, cfg, { studentId: 'G', day: 1, start: '15:00' }, 3)[0];
+    assert.ok(o && o.relax, 'Wednesday is not one of G\'s days, but it can be asked');
+    const r = S.applyRescheduleOption(sched, sts, cfg, o);
+    assert.equal(r.ok, true);
+    assert.equal(sts[0].availability[3].on, true, 'G\'s Wednesday is now open');
+    assert.deepStrictEqual(Array.from(S.verifySchedule(sched, sts, cfg)), []);
+    S.restoreDays(sched, r.before, sts, r.availability);
+    assert.equal(sched[1].length, 1);
+    assert.equal(!!(sts[0].availability[3] && sts[0].availability[3].on), false, 'and closed again');
   });
 });
