@@ -641,7 +641,7 @@ input[type=time]{color-scheme:light}
 /* TOAST */
 .toast-container{
   position:fixed;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom, 0px));left:50%;transform:translateX(-50%);
-  z-index:500;display:flex;flex-direction:column-reverse;gap:8px;
+  z-index:10001;display:flex;flex-direction:column-reverse;gap:8px;
   pointer-events:none;max-width:calc(var(--max-w) - 32px);width:100%;
 }
 .toast{
@@ -1906,7 +1906,7 @@ const I18N = {
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
     rs_title:"Δεν χωράει όπως ζητήθηκε",
     rs_hint:"{name} → {target}. Διάλεξε πώς να γίνει:",
-    rs_kind_relocate:"Εναλλακτική ώρα",
+    rs_kind_relocate:"Μπαίνει σε κενό",
     rs_kind_swap:"Ανταλλαγή με {name}",
     rs_kind_shift_earlier:"Μετατόπιση {name} κατά {min}′ νωρίτερα",
     rs_kind_shift_later:"Μετατόπιση {name} κατά {min}′ αργότερα",
@@ -1937,7 +1937,7 @@ const I18N = {
     rs_days_hint:"{name}: πού χωράει μέσα στην εβδομάδα. Πάτα μια μέρα για να δεις τις επιλογές.",
     rs_day_free:"Χωράει ελεύθερα", rs_day_shift:"Χωράει με μικρή αλλαγή", rs_day_replan:"Χωράει αν ξαναστηθεί η μέρα",
     rs_day_none:"Δεν χωράει", rs_day_off:"Δεν είναι διαθέσιμη", rs_day_already:"Έχει ήδη ραντεβού εκείνη τη μέρα", rs_day_current:"Είναι ήδη εδώ",
-    rs_day_spacing:"δύο μέρες στη σειρά", rs_back:"Πίσω",
+    rs_day_spacing:"δύο μέρες στη σειρά", rs_back:"Πίσω", rs_day_best:"Προτείνεται", rs_day_hint:"{name} → {day}: διάλεξε τρόπο.",
     rs_kind_force:"Γίνεται, αλλά μετακινούνται και {n} άλλοι", rs_kind_force_alone:"Γίνεται, με συνεννόηση", rs_kind_force_swap:"Ανταλλαγή με {name}, και μετακινούνται άλλοι {n}", rs_force_days:"Αλλάζει και άλλη μέρα: {n}",
     rs_force_outside:"{name}: εκτός των ωρών που έχει δηλώσει ({from}–{to}) — ρώτα αν μπορεί",
     rs_force_unlock:"Ξεκλειδώνει: {list}",
@@ -2154,7 +2154,7 @@ const I18N = {
     toast_swap_blocked:"Can't swap these — {reason}",
     rs_title:"Doesn't fit as asked",
     rs_hint:"{name} → {target}. Pick how to make it work:",
-    rs_kind_relocate:"Another time",
+    rs_kind_relocate:"Goes into a gap",
     rs_kind_swap:"Swap with {name}",
     rs_kind_shift_earlier:"Move {name} {min}′ earlier",
     rs_kind_shift_later:"Move {name} {min}′ later",
@@ -2185,7 +2185,7 @@ const I18N = {
     rs_days_hint:"{name}: where it fits this week. Tap a day to see the options.",
     rs_day_free:"Fits freely", rs_day_shift:"Fits with a small change", rs_day_replan:"Fits if the day is re-planned",
     rs_day_none:"Doesn't fit", rs_day_off:"Not available", rs_day_already:"Already has an appointment that day", rs_day_current:"Already here",
-    rs_day_spacing:"two days in a row", rs_back:"Back",
+    rs_day_spacing:"two days in a row", rs_back:"Back", rs_day_best:"Suggested", rs_day_hint:"{name} → {day}: pick a way.",
     rs_kind_force:"Possible, but {n} others move too", rs_kind_force_alone:"Possible, if agreed", rs_kind_force_swap:"Swap with {name}; {n} others move too", rs_force_days:"Other days change too: {n}",
     rs_force_outside:"{name}: outside the hours they gave ({from}–{to}) — ask if they can",
     rs_force_unlock:"Unlocks: {list}",
@@ -2402,7 +2402,7 @@ const I18N = {
     toast_swap_blocked:'Échange impossible — {reason}',
     rs_title:"Ne rentre pas tel quel",
     rs_hint:"{name} → {target}. Choisissez comment faire :",
-    rs_kind_relocate:"Autre horaire",
+    rs_kind_relocate:"Dans un créneau libre",
     rs_kind_swap:"Échange avec {name}",
     rs_kind_shift_earlier:"Décaler {name} de {min}′ plus tôt",
     rs_kind_shift_later:"Décaler {name} de {min}′ plus tard",
@@ -2433,7 +2433,7 @@ const I18N = {
     rs_days_hint:"{name} : où cela rentre cette semaine. Touchez un jour pour voir les options.",
     rs_day_free:"Rentre librement", rs_day_shift:"Rentre avec un petit changement", rs_day_replan:"Rentre si la journée est réorganisée",
     rs_day_none:"Ne rentre pas", rs_day_off:"Pas disponible", rs_day_already:"A déjà un rendez-vous ce jour-là", rs_day_current:"Déjà ici",
-    rs_day_spacing:"deux jours de suite", rs_back:"Retour",
+    rs_day_spacing:"deux jours de suite", rs_back:"Retour", rs_day_best:"Conseillé", rs_day_hint:"{name} → {day} : choisissez une option.",
     rs_kind_force:"Possible, mais {n} autres se déplacent aussi", rs_kind_force_alone:"Possible, après accord", rs_kind_force_swap:"Échange avec {name} ; {n} autres se déplacent aussi", rs_force_days:"D'autres jours changent aussi : {n}",
     rs_force_outside:"{name} : hors des heures indiquées ({from}–{to}) — demandez si c'est possible",
     rs_force_unlock:"Déverrouille : {list}",
@@ -2650,7 +2650,7 @@ const I18N = {
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
     rs_title:"Passt so nicht",
     rs_hint:"{name} → {target}. Wählen Sie, wie es gehen soll:",
-    rs_kind_relocate:"Andere Zeit",
+    rs_kind_relocate:"In eine Lücke",
     rs_kind_swap:"Tausch mit {name}",
     rs_kind_shift_earlier:"{name} {min}′ früher",
     rs_kind_shift_later:"{name} {min}′ später",
@@ -2681,7 +2681,7 @@ const I18N = {
     rs_days_hint:"{name}: wo es diese Woche passt. Tippe auf einen Tag für die Optionen.",
     rs_day_free:"Passt frei", rs_day_shift:"Passt mit kleiner Änderung", rs_day_replan:"Passt, wenn der Tag neu geplant wird",
     rs_day_none:"Passt nicht", rs_day_off:"Nicht verfügbar", rs_day_already:"Hat an dem Tag schon einen Termin", rs_day_current:"Schon hier",
-    rs_day_spacing:"zwei Tage hintereinander", rs_back:"Zurück",
+    rs_day_spacing:"zwei Tage hintereinander", rs_back:"Zurück", rs_day_best:"Empfohlen", rs_day_hint:"{name} → {day}: wähle eine Möglichkeit.",
     rs_kind_force:"Möglich, aber {n} andere verschieben sich auch", rs_kind_force_alone:"Möglich, nach Absprache", rs_kind_force_swap:"Tausch mit {name}; {n} andere verschieben sich auch", rs_force_days:"Weitere Tage ändern sich: {n}",
     rs_force_outside:"{name}: außerhalb der angegebenen Zeiten ({from}–{to}) — nachfragen, ob es geht",
     rs_force_unlock:"Entsperrt: {list}",
@@ -14947,14 +14947,14 @@ const App = {
     const blocks = [];
     for(const sl of (state.schedule[day] || [])){
       if(moved.has(sl.studentId + '|' + day + '|' + Scheduler.toMin(sl.start))) continue;
-      blocks.push({ s: Scheduler.toMin(sl.start), e: Scheduler.toMin(sl.end), c: 'var(--bg4)', n: sl.studentName || '' });
+      blocks.push({ s: Scheduler.toMin(sl.start), e: Scheduler.toMin(sl.end), c: 'var(--text3)', n: sl.studentName || '', dim: true });
     }
     for(const m of ((option && option.moves) || []).filter(m => Number(m.toDay) === Number(day)))
       blocks.push({ s: Scheduler.toMin(m.toStart), e: Scheduler.toMin(m.toEnd),
         c: m.role === 'primary' ? (col[option.level] || 'var(--green)') : 'var(--blue)', n: m.name, strong: m.role === 'primary' });
     const pct = (x) => Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100));
     return `<div style="position:relative;height:18px;border-radius:6px;background:var(--bg3);margin:6px 0 2px;overflow:hidden" aria-hidden="true">
-      ${blocks.map(b => `<div title="${esc(b.n)} ${Scheduler.toTime(b.s)}–${Scheduler.toTime(b.e)}" style="position:absolute;top:${b.strong ? 0 : 3}px;bottom:${b.strong ? 0 : 3}px;left:${pct(b.s)}%;width:${Math.max(1.5, pct(b.e) - pct(b.s))}%;background:${b.c};border-radius:4px;opacity:${b.strong ? 1 : .85}"></div>`).join('')}
+      ${blocks.map(b => `<div title="${esc(b.n)} ${Scheduler.toTime(b.s)}–${Scheduler.toTime(b.e)}" style="position:absolute;top:${b.strong ? 0 : 3}px;bottom:${b.strong ? 0 : 3}px;left:${pct(b.s)}%;width:${Math.max(1.5, pct(b.e) - pct(b.s))}%;background:${b.c};border-radius:4px;opacity:${b.strong ? 1 : b.dim ? .35 : .85}"></div>`).join('')}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>${esc(dh.start)}</span><span>${esc(dh.end)}</span></div>`;
   },
@@ -14978,6 +14978,13 @@ const App = {
       none: 'var(--text3)', off: 'var(--bg4)', current: 'var(--blue)' };
     const label = { free: 'rs_day_free', shift: 'rs_day_shift', replan: 'rs_day_replan', force: 'rs_day_force',
       none: 'rs_day_none', off: 'rs_day_off', current: 'rs_day_current' };
+    // The one to suggest: the easiest kind of change, then no two-days-in-a-row,
+    // then the least extra driving.
+    const rank = { free: 0, shift: 1, replan: 2, force: 3 };
+    const bestOf = (row) => row.options.slice().sort((a, b) => (a.spacing.length - b.spacing.length) || (a.level - b.level) || (a.deltaTravelMin - b.deltaTravelMin))[0];
+    const rec = rows.filter(r => r.options && r.options.length && rank[r.status] != null)
+      .sort((a, b) => (rank[a.status] - rank[b.status]) || ((a.spacing ? 1 : 0) - (b.spacing ? 1 : 0)) ||
+        (bestOf(a).deltaTravelMin - bestOf(b).deltaTravelMin))[0];
     document.getElementById('rs-list').innerHTML = rows.map(row => {
       const can = row.options && row.options.length;
       const best = can ? row.options.slice().sort((a, b) => (a.spacing.length - b.spacing.length) || (a.level - b.level))[0] : null;
@@ -14986,6 +14993,7 @@ const App = {
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:10px;height:10px;border-radius:50%;background:${dot[row.status]};flex:none"></span>
           <span style="font-weight:600">${esc(DAYS_FULL[row.day] || '')}</span>
+          ${rec === row ? `<span class="chip" style="font-size:11px;padding:2px 8px;background:rgba(var(--accent-rgb),.12);color:var(--green);font-weight:700">${esc(t('rs_day_best'))}</span>` : ''}
           <span style="font-size:12px;color:var(--text2)">${esc(t(row.reason === 'already' ? 'rs_day_already' : row.status === 'force' && row.reason === 'unavailable' ? 'rs_day_force' : label[row.status]))}</span>
           ${row.spacing ? `<span style="font-size:12px;color:var(--orange,#c2410c);margin-left:auto">⚠ ${esc(t('rs_day_spacing'))}</span>` : ''}
         </div>
@@ -15005,6 +15013,8 @@ const App = {
       .slice(0, 4);
     state._reschedule = { res: { ref: dc.ref, targetDay: row.day, options } };
     document.getElementById('rs-title').textContent = DAYS_FULL[row.day] || '';
+    { const st = state.students.find(x => x.id === dc.ref.studentId);
+      document.getElementById('rs-hint').textContent = tf('rs_day_hint', { name: (st && st.name) || '', day: DAYS_FULL[row.day] || '' }); }
     document.getElementById('rs-list').innerHTML =
       `<button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="App.openDayChooser(state._dayChooser.ref)">← ${esc(t('rs_back'))}</button>` +
       this._rsOptionsHtml(options);
