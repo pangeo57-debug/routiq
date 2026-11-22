@@ -16,16 +16,15 @@ const { loadApp, student, settings, slot, cityCoords, APP_FILE } = require('./ha
 
 const PAYLOAD = '<img src=x onerror="alert(1)">';
 
-describe('dark green and warm white theme', () => {
-  test('palette variables cover light, dark and warm theme surfaces', () => {
+describe('the original theme', () => {
+  test('light emerald and dark graphite + orange, not the green/warm-white trial', () => {
     const html = fs.readFileSync(APP_FILE, 'utf8');
-    assert.ok(html.includes('--green: #166534'), 'light accent');
-    assert.ok(html.includes('--bg: #f8f5ec'), 'warm light background');
-    assert.ok(html.includes('--bg: #10281b'), 'dark green background');
-    assert.ok(html.includes('--text: #fffaf2'), 'warm dark text');
-    assert.ok(html.includes('--warm-white: #fffaf2'), 'shared warm white');
-    assert.ok(html.includes('<meta name="theme-color" content="#f8f5ec">'), 'browser chrome');
-    assert.ok(!html.includes('--green: #059669'), 'old emerald accent');
+    assert.ok(html.includes('--green: #059669'), 'light accent');
+    assert.ok(html.includes('--bg: #f7f6f3'), 'light background');
+    assert.ok(html.includes('--bg: #101010'), 'dark background');
+    assert.ok(html.includes('<meta name="theme-color" content="#f7f6f3">'), 'browser chrome');
+    assert.ok(!html.includes('--warm-white'), 'trial theme gone');
+    assert.ok(!html.includes('#10281b'), 'no dark green left');
   });
 
   describe('Google Maps and Places migration', () => {
