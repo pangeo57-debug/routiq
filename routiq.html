@@ -1920,6 +1920,7 @@ const I18N = {
     rs_undone:"Η αλλαγή ακυρώθηκε",
     rs_undo_blocked:"Δεν ακυρώθηκε — το πρόγραμμα έχει αλλάξει από τότε.",
     settings_spacing_label:"Όχι διαδοχικές μέρες για το ίδιο άτομο",
+    settings_more:"Περισσότερες ρυθμίσεις",
     settings_spacing_hint:"Όταν μετακινείς ένα ραντεβού, οι προτάσεις αποφεύγουν να βάλουν το ίδιο άτομο δύο μέρες στη σειρά, όταν γίνεται. Ο αυτόματος προγραμματισμός δεν επηρεάζεται.",
     spacing_yes:"Ναι, απόφευγέ το",
     spacing_no:"Όχι",
@@ -2167,6 +2168,7 @@ const I18N = {
     rs_undone:"Change undone",
     rs_undo_blocked:"Not undone — the schedule has changed since.",
     settings_spacing_label:"No consecutive days for the same person",
+    settings_more:"More settings",
     settings_spacing_hint:"When you move an appointment, the suggestions avoid putting the same person on two days in a row, when possible. Automatic planning is not affected.",
     spacing_yes:"Yes, avoid it",
     spacing_no:"No",
@@ -2414,6 +2416,7 @@ const I18N = {
     rs_undone:"Modification annulée",
     rs_undo_blocked:"Non annulé — le planning a changé depuis.",
     settings_spacing_label:"Pas de jours consécutifs pour une même personne",
+    settings_more:"Plus de réglages",
     settings_spacing_hint:"Quand vous déplacez un rendez-vous, les propositions évitent de mettre la même personne deux jours de suite, si possible. La planification automatique n'est pas modifiée.",
     spacing_yes:"Oui, l'éviter",
     spacing_no:"Non",
@@ -2661,6 +2664,7 @@ const I18N = {
     rs_undone:"Änderung rückgängig gemacht",
     rs_undo_blocked:"Nicht rückgängig gemacht — der Plan hat sich seitdem geändert.",
     settings_spacing_label:"Keine aufeinanderfolgenden Tage für dieselbe Person",
+    settings_more:"Weitere Einstellungen",
     settings_spacing_hint:"Beim Verschieben eines Termins vermeiden die Vorschläge, dieselbe Person an zwei Tagen hintereinander einzuplanen, wenn möglich. Die automatische Planung bleibt unverändert.",
     spacing_yes:"Ja, vermeiden",
     spacing_no:"Nein",
@@ -14568,20 +14572,6 @@ const App = {
         onclick="state.weekMapOpen=!state.weekMapOpen;App.renderSchedule()">${ico('map', 14)} ${esc(t('week_map_toggle'))}</button>
         <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px;margin-left:6px" onclick="state.routeDay=state.scheduleDay;App.nav('route')">${ico('nav', 14)} ${esc(t('nav_route'))} ›</button></div>
       ${state.weekMapOpen ? `<div id="week-map" style="margin:0 16px 12px;height:clamp(150px,22vh,240px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg3)"></div>` : ''}
-      ${state.scheduleAttempts.length > 0 ? `
-<div style="padding:0 16px 8px">
-  <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;letter-spacing:.5px">${t('schedule_random_placement_label')}</div>
-  <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px">
-    ${state.scheduleAttempts.map((r,i)=>{
-      const cnt = Scheduler.countTotal(r.schedule);
-      const active = i===state.scheduleAttemptIdx;
-      return `<button onclick="App.switchAttempt(${i})" style="flex-shrink:0;padding:5px 10px;border-radius:20px;border:1.5px solid ${active?'var(--blue)':'var(--border)'};background:${active?'rgba(var(--accent2-rgb),.1)':'var(--bg2)'};color:${active?'var(--blue)':'var(--text2)'};font-size:12px;font-weight:${active?'700':'500'};cursor:pointer">
-        ${t('schedule_attempt_label')} ${i+1} <span style="opacity:.7">${cnt}</span>
-      </button>`;
-    }).join('')}
-  </div>
-</div>
-` : ''}
       <div style="padding:0 16px 12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <span style="font-size:14px;color:var(--text2)">${t('schedule_placed')}</span>
@@ -15972,25 +15962,11 @@ const App = {
         </div>
       </div>
 
-      <div class="section-title">${t('settings_profession')}</div>
-      <div class="card">
-        <div class="form-group" style="margin:0">
-          <select id="set-profession" onchange="App.setProfession(this.value)">
-            ${getProfessions().map(p=>`<option value="${p.value}" ${(st.profession||'other')===p.value?'selected':''}>${p.label}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-
       <div class="section-title">${t('settings_personal')}</div>
       <div class="card">
         <div class="form-group" style="margin-bottom:10px">
           <label>${t('settings_name')}</label>
           <input type="text" id="set-name" value="${esc(st.teacherName||'')}" placeholder="${t('settings_name_placeholder')}">
-        </div>
-        <div class="form-group" style="margin-bottom:10px">
-          <label>${t('settings_country_code')}</label>
-          <input type="text" id="set-country-code" inputmode="numeric" value="${esc(st.countryCode||'30')}" placeholder="30">
-          <div class="settings-sub" style="margin-top:4px">${t('settings_country_code_hint')}</div>
         </div>
         <div class="form-group" style="margin:0;position:relative">
           <label>${t('settings_home_address')}
@@ -16007,12 +15983,11 @@ const App = {
             </button>
           </div>
           <div id="set-home-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+          <button type="button" class="chip chip-gray" id="set-map-btn" aria-pressed="false" style="border:none;cursor:pointer;margin-top:8px;min-height:32px"
+            onclick="App.toggleHomeMap()">${ico('map', 14)} ${esc(t('form_map_show'))}</button>
+          <div id="set-home-wrap" style="display:none">
           <div id="set-home-map" style="height:170px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate;margin-top:8px"></div>
-        </div>
-        <div class="form-group" style="margin:10px 0 0">
-          <label>${t('settings_workplace')}</label>
-          <input type="text" id="set-workplace" value="${esc(st.workplaceAddress||'')}" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off">
-          <div class="settings-sub" style="margin-top:4px">${t('settings_workplace_hint')}</div>
+          </div>
         </div>
       </div>
 
@@ -16040,7 +16015,55 @@ const App = {
             onclick="App.addDayInterval(${d})">＋ ${esc(t('settings_add_interval'))}</button>
           ${!st.dayHours?.[d] ? `<p style="font-size:12px;color:var(--orange);padding:2px 0 6px">${tf('settings_day_hours_missing',{day:DAYS_FULL[d]})}</p>` : ''}`).join('')}
         <p id="no-workdays" style="font-size:13px;color:var(--text3);padding:8px 0;display:${st.workDays.length===0?'block':'none'}">${t('settings_workday_hint')}</p>
-        <div class="form-group" style="margin:10px 0 0">
+      </div>
+
+      <div class="card">
+        <div class="form-group" style="margin:0">
+          <label>${t('settings_spacing_label')}</label>
+          <select id="set-spacing">
+            <option value="1" ${st.avoidConsecutiveDays!==false?'selected':''}>${t('spacing_yes')}</option>
+            <option value="0" ${st.avoidConsecutiveDays===false?'selected':''}>${t('spacing_no')}</option>
+          </select>
+          <div class="settings-sub">${t('settings_spacing_hint')}</div>
+        </div>
+      </div>
+
+      <div style="padding:16px 16px 4px">
+        <button class="btn btn-primary btn-full" onclick="App.saveSettings()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          ${t('settings_save')}
+        </button>
+      </div>
+
+      <details id="set-more" class="fold fold-plain" style="margin:8px 16px 0" ontoggle="state.settingsMoreOpen=this.open" ${state.settingsMoreOpen ? 'open' : ''}>
+        <summary>${t('settings_more')}</summary>
+      <div style="margin:0 -16px">
+      <div class="section-title">${t('settings_profession')}</div>
+      <div class="card">
+        <div class="form-group" style="margin:0">
+          <select id="set-profession" onchange="App.setProfession(this.value)">
+            ${getProfessions().map(p=>`<option value="${p.value}" ${(st.profession||'other')===p.value?'selected':''}>${p.label}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="section-title">${t('settings_personal')}</div>
+      <div class="card">
+        <div class="form-group" style="margin-bottom:10px">
+          <label>${t('settings_country_code')}</label>
+          <input type="text" id="set-country-code" inputmode="numeric" value="${esc(st.countryCode||'30')}" placeholder="30">
+          <div class="settings-sub" style="margin-top:4px">${t('settings_country_code_hint')}</div>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>${t('settings_workplace')}</label>
+          <input type="text" id="set-workplace" value="${esc(st.workplaceAddress||'')}" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off">
+          <div class="settings-sub" style="margin-top:4px">${t('settings_workplace_hint')}</div>
+        </div>
+      </div>
+
+      <div class="section-title">${t('settings_hours_per_day')}</div>
+      <div class="card">
+        <div class="form-group" style="margin:0">
           <label>${t('settings_end_flex')}</label>
           <input type="number" id="set-end-flex" value="${Number(st.endFlexMin)||0}" min="0" max="60" step="5">
           <div class="settings-sub" style="margin-top:4px">${t('settings_end_flex_hint')}</div>
@@ -16095,14 +16118,6 @@ const App = {
           </select>
           <div class="settings-sub">${t('settings_maxday_hint')}</div>
         </div>
-        <div class="form-group" style="margin:12px 0 0">
-          <label>${t('settings_spacing_label')}</label>
-          <select id="set-spacing">
-            <option value="1" ${st.avoidConsecutiveDays!==false?'selected':''}>${t('spacing_yes')}</option>
-            <option value="0" ${st.avoidConsecutiveDays===false?'selected':''}>${t('spacing_no')}</option>
-          </select>
-          <div class="settings-sub">${t('settings_spacing_hint')}</div>
-        </div>
       </div>
 
       <div class="section-title">${t('settings_blocked')}</div>
@@ -16113,13 +16128,6 @@ const App = {
         <button class="btn btn-secondary btn-full" onclick="App.openBlockDrawer()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           ${t('settings_add_block')}
-        </button>
-      </div>
-
-      <div style="padding:16px 16px 4px">
-        <button class="btn btn-primary btn-full" onclick="App.saveSettings()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          ${t('settings_save')}
         </button>
       </div>
 
@@ -16224,10 +16232,24 @@ const App = {
         <div class="settings-sub" style="line-height:1.6;margin-top:8px">${t('privacy_minors')}</div>
         <div class="settings-sub" style="line-height:1.6;margin-top:8px">${t('privacy_delete')}</div>
       </div>
+      </div>
+      </details>
       <p style="text-align:center;font-size:12px;color:var(--text3);margin:14px 16px 0">${esc(tf('copyright_line', { year: new Date().getFullYear() }))}</p>
       <div style="height:16px"></div>
     `;
-    this.initHomeLocationMap();
+  },
+
+  // The home map is built only when asked for, like the one in the client form.
+  toggleHomeMap(){
+    const wrap = document.getElementById('set-home-wrap');
+    if(!wrap) return;
+    const open = wrap.style.display === 'none';
+    wrap.style.display = open ? '' : 'none';
+    document.getElementById('set-map-btn')?.setAttribute('aria-pressed', String(open));
+    if(!open) return;
+    const el = document.getElementById('set-home-map');
+    if(el && el.__google_map) setTimeout(() => google.maps.event.trigger(el.__google_map, 'resize'), 50);
+    else this.initHomeLocationMap();
   },
 
   openInSafari(){
