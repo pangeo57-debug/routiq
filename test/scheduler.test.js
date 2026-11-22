@@ -6777,9 +6777,13 @@ describe('the first minutes: less to fill in', () => {
     assert.ok(more > 0);
     for (const id of ['st-name', 'st-addr', 'st-dur', 'st-freq', 'merge-field', 'avex-day', 'avex-start', 'avex-end'])
       assert.ok(html.indexOf(`id="${id}"`) < more, id + ' must be in plain view');
-    for (const id of ['st-phone', 'st-loc-map', 'st-subject', 'st-flex-hours', 'st-durations', 'st-type', 'st-group', 'st-paired', 'st-notes'])
+    for (const id of ['st-phone', 'st-subject', 'st-flex-hours', 'st-durations', 'st-type', 'st-group', 'st-paired', 'st-notes'])
       assert.ok(html.indexOf(`id="${id}"`) > more, id + ' belongs under "more"');
     assert.ok(!/<details id="st-more"[^>]* open/.test(html), 'closed for a new client');
+    // the map belongs to the address: under it, shut, and only built when asked for
+    assert.ok(html.indexOf('id="st-loc-map"') > html.indexOf('id="st-addr"') && html.indexOf('id="st-loc-map"') < html.indexOf('id="st-dur"'));
+    assert.match(html, /id="st-loc-wrap" style="display:none/);
+    assert.match(html, /onclick="App\.toggleStudentMap\(\)"/);
     const st = student('x'); app.setState({ students: [st] });
     assert.match(app.App.buildStudentForm(st), /<details id="st-more"[^>]* open/);
     // length is picked with buttons, and an unusual one keeps its value
