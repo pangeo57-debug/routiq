@@ -9671,7 +9671,14 @@ const App = {
       (document.querySelector('meta[name="google-maps-api-key"]')?.content) || '').trim();
   },
   async _ensureGoogleMapsReady(){
+    // With loading=async the script defines google.maps before importLibrary
+    // is ready; wait for it rather than calling it too early.
+    const ready = async () => {
+      for(let i = 0; i < 100 && !(window.google && window.google.maps && typeof window.google.maps.importLibrary === 'function'); i++)
+        await new Promise(r => setTimeout(r, 50));
+    };
     if(window.google && window.google.maps){
+      await ready();
       await window.google.maps.importLibrary('maps');
       await window.google.maps.importLibrary('places');
       return window.google.maps;
@@ -9689,6 +9696,7 @@ const App = {
       });
     }
     await this._googleMapsLoadPromise;
+    await ready();
     await window.google.maps.importLibrary('maps');
     await window.google.maps.importLibrary('places');
     return window.google.maps;
