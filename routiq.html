@@ -14275,8 +14275,10 @@ const App = {
       let c=null;
       try{ c=await Router.geocodeHere(addr,getHereKey()); }catch(e){ c=null; }
       if(c) return c;
+      return Router.geocodeNominatim(addr);
     }
-    return Router.geocodeNominatim(addr);
+    // Without HERE, the one shared door (which is Nominatim then).
+    return Router.geocode(addr);
   },
 
   /**
