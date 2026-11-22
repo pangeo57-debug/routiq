@@ -95,7 +95,7 @@ describe('computed on the server, returned as people', () => {
 });
 
 describe('reminders with the app closed', () => {
-  const sub = { endpoint: 'https://push.example/abc', keys: { p256dh: 'x', auth: 'y' } };
+  const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: 'x', auth: 'y' } };
   test('only times and opaque keys are accepted; a text field is ignored, a bad key refused', () => {
     const now = Date.now();
     assert.equal(server.setReminders({ push: sub, items: [{ t: now + 100, k: 'a1b2c3d4e5f6' }] }, now), null);
@@ -117,5 +117,33 @@ describe('reminders with the app closed', () => {
     assert.match(body, /items\.push\(\{ t: at, k \}\)/);
     assert.match(body, /JSON\.stringify\(\{ push, items, fallback/);
     assert.match(body, /RemindStore\.replace\(texts\)/);
+  });
+});
+
+describe('abuse guards', () => {
+  const S = require('../server.js');
+  test('push only to the browsers\' own push services', () => {
+    assert.equal(S.pushOk({ endpoint: 'https://fcm.googleapis.com/fcm/send/x' }), true);
+    assert.equal(S.pushOk({ endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/x' }), true);
+    assert.equal(S.pushOk({ endpoint: 'https://web.push.apple.com/x' }), true);
+    assert.equal(S.pushOk({ endpoint: 'https://evil.example/x' }), false);
+    assert.equal(S.pushOk({ endpoint: 'https://fcm.googleapis.com.evil.example/x' }), false);
+    assert.equal(S.pushOk({ endpoint: 'http://fcm.googleapis.com/x' }), false);
+    assert.equal(S.setReminders({ push: { endpoint: 'https://evil.example/x' }, items: [] }, Date.now()), 'push subscription required');
+  });
+  test('a header the caller writes is not their address unless a proxy is trusted', () => {
+    const req = { headers: { 'x-forwarded-for': '9.9.9.9', 'cf-connecting-ip': '8.8.8.8' }, socket: { remoteAddress: '1.2.3.4' } };
+    const keep = S.CONF.ipHeader;
+    S.CONF.ipHeader = '';
+    assert.equal(S.clientIp(req), '1.2.3.4');
+    S.CONF.ipHeader = 'cf-connecting-ip';
+    assert.equal(S.clientIp(req), '8.8.8.8');
+    S.CONF.ipHeader = keep;
+  });
+  test('reminders have their own hourly limit per address', () => {
+    const now = Date.now();
+    let ok = 0;
+    for (let i = 0; i < S.CONF.remindersPerIpHour + 5; i++) if (S.allowIp('5.5.5.5', now, 'reminders')) ok++;
+    assert.equal(ok, S.CONF.remindersPerIpHour);
   });
 });

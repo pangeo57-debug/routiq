@@ -30,6 +30,13 @@ threads at once and in two rounds, exactly as the phone does.
       -e VAPID_PUBLIC=... -e VAPID_PRIVATE=... -e VAPID_SUBJECT=mailto:you@example.com \
       routepal-compute
 
+Behind Cloudflare (or another proxy that writes the caller's address), add
+`-e TRUST_IP_HEADER=cf-connecting-ip`; without it the socket's address is used,
+since a header the caller can write is not an address. Other limits:
+`JOBS_PER_IP_HOUR` (12), `REMINDERS_PER_IP_HOUR` (60), `REMINDERS_MAX` (5000
+phones), `QUEUE_MAX` (30). Push messages go only to the browsers' own push
+services (Google, Mozilla, Apple, Microsoft).
+
 Any small server works (2 vCPU, 2 GB is plenty for one person at a time;
 about €5/month at Hetzner, or Fly.io). Put it behind HTTPS.
 

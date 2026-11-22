@@ -168,8 +168,23 @@ acceptable for what this defends against (one person or script draining a
 shared quota) and is written down rather than pretended away. If it ever needs
 to be exact, the answer is a Durable Object, not a cleverer version of this.
 
-With no KV binding the limiter is skipped rather than failing closed: a
-misconfigured limiter must not take the whole proxy down with it.
+**Paid services have a daily ceiling for everyone together**, because the
+Origin check only stops browsers — a script can send any Origin it likes, from
+as many addresses as it has. Past a ceiling the app falls back (Nominatim, its
+own drive estimates) and nothing is billed. Each is a Worker variable:
+
+| Variable | Default | What |
+|---|---|---|
+| `AI_PER_DAY` | 30 | AI sentences per address per day |
+| `AI_DAILY_CAP` | 300 | AI sentences per day, everyone |
+| `HERE_DAILY_CAP` | 900 | HERE lookups per day, everyone (cached answers do not count; free tier is ~30,000/month) |
+| `HERE_MATRIX_PER_DAY` | 40 | drive-time tables per address per day |
+| `HERE_MATRIX_DAILY_CAP` | 80 | drive-time tables per day, everyone (free tier ~2,500/month) |
+| `GOOGLE_MONTHLY_CAP` | 9500 | Google lookups per month, everyone |
+
+With no KV binding the general limiter is skipped (a misconfigured limiter
+must not take the free services down with it), but **the paid ones refuse**
+(503): nothing that costs money runs uncounted.
 
 ## Retention
 

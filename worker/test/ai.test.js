@@ -78,6 +78,15 @@ describe('through the Worker', () => {
     assert.equal(on.status, 200);
     assert.equal((await on.json()).name, 'Γιώργος Κολυμπήτρας');
   });
+  test('the paid model stops at the daily allowance, per person and for everyone', async () => {
+    const req = (ip) => new Request('https://api.example/ai/client', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+      body: JSON.stringify({ text: 'Πάμε να βάλουμε τον Γιώργο', context: { today: '2026-11-13' } }) });
+    const env = { ALLOWED_ORIGINS: ORIGIN, RATE: kv(), CACHE: kv(), ANTHROPIC_API_KEY: 'k', _aiClient: fakeClient(GOOD), AI_PER_DAY: '1', AI_DAILY_CAP: '2' };
+    assert.equal((await W.handle(req('1.1.1.1'), env)).status, 200);
+    assert.equal((await W.handle(req('1.1.1.1'), env)).status, 429, 'one each');
+    assert.equal((await W.handle(req('2.2.2.2'), env)).status, 200);
+    assert.equal((await W.handle(req('3.3.3.3'), env)).status, 429, 'two for everyone');
+  });
 });
 
 describe('a local model through Ollama, chosen by one setting', () => {

@@ -205,12 +205,34 @@ describe('limits', () => {
     assert.equal(other.status, 200);
   });
 
-  test('without a KV binding it serves rather than refuses', async () => {
-    // A misconfigured limiter must not take the whole proxy down with it.
+  test('without a KV binding the free services still serve, the paid ones refuse', async () => {
+    // A misconfigured limiter must not take the whole proxy down with it, but
+    // nothing that costs money may then run uncounted.
+    stubFetch({ body: '[]' });
+    const free = await W.handle(req('https://api.test/osm/search?q=a'), makeEnv({ RATE: undefined }), {});
+    assert.equal(free.status, 200);
+    const paid = await W.handle(req('https://api.test/here/geocode?q=a'), makeEnv({ RATE: undefined }), {});
+    assert.equal(paid.status, 503);
+  });
+
+  test('HERE lookups stop at the daily ceiling for everyone together; cached answers do not count', async () => {
     stubFetch();
-    const res = await W.handle(req('https://api.test/here/geocode?q=a'),
-      makeEnv({ RATE: undefined }), {});
-    assert.equal(res.status, 200);
+    const env = makeEnv({ HERE_DAILY_CAP: '2' });
+    assert.equal((await W.handle(req('https://api.test/here/geocode?q=a'), env, {})).status, 200);
+    assert.equal((await W.handle(req('https://api.test/here/geocode?q=a'), env, {})).status, 200, 'cached');
+    assert.equal((await W.handle(req('https://api.test/here/geocode?q=b'), env, {})).status, 200);
+    assert.equal((await W.handle(req('https://api.test/here/geocode?q=c'), env, {})).status, 429);
+  });
+
+  test('dailyAllowance: per person and for everyone', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    assert.equal((await W.dailyAllowance(env, 'x', now, 'ai', 2, 3)).ok, true);
+    assert.equal((await W.dailyAllowance(env, 'x', now, 'ai', 2, 3)).ok, true);
+    assert.equal((await W.dailyAllowance(env, 'x', now, 'ai', 2, 3)).scope, 'person');
+    assert.equal((await W.dailyAllowance(env, 'y', now, 'ai', 2, 3)).ok, true);
+    assert.equal((await W.dailyAllowance(env, 'z', now, 'ai', 2, 3)).scope, 'all');
+    assert.equal((await W.dailyAllowance(makeEnv({ RATE: undefined }), 'x', now, 'ai', 2, 3)).scope, 'unconfigured');
   });
 });
 

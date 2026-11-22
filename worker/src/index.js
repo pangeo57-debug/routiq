@@ -74,6 +74,15 @@ const LIMITS = {
   // it the app quietly falls back to HERE and nothing is billed. Raise it
   // (GOOGLE_MONTHLY_CAP) once there is revenue to pay for more.
   googleMonthlyCap: 9500,
+  // The paid services, capped for everyone together per day, so a script
+  // that fakes the Origin header from many addresses still cannot run up a
+  // bill: past the cap the app falls back (Nominatim, its own estimates) and
+  // nothing is charged. Each can be raised by a Worker variable.
+  aiPerPersonPerDay: 30,     // AI_PER_DAY
+  aiDailyCap: 300,           // AI_DAILY_CAP
+  hereDailyCap: 900,         // HERE_DAILY_CAP (free tier ~30,000 a month)
+  matrixPerPersonPerDay: 40, // HERE_MATRIX_PER_DAY
+  matrixDailyCap: 80,        // HERE_MATRIX_DAILY_CAP (free tier ~2,500 a month)
   matrixPointsMax: 120, // HERE's own matrix limit for the sync endpoint
   bodyBytesMax: 32 * 1024,
   qMaxLength: 300,
@@ -164,6 +173,29 @@ async function googleAllowance(env, clientId, now, kind = 'search') {
   ]);
   return { ok: true, used: n + 1 };
 }
+
+/**
+ * One more call to a paid service today, or not: within the person's own
+ * daily allowance (if any) and within everyone's daily ceiling. Without the
+ * KV binding there is no way to count, so the paid services refuse rather
+ * than run uncapped.
+ */
+async function dailyAllowance(env, clientId, now, name, perPerson, cap) {
+  if (!env.RATE) return { ok: false, scope: 'unconfigured' };
+  const day = Math.floor(now / 86400000);
+  const mine = `rl:${name}:${clientId}:${day}`, all = `rl:${name}all:${day}`;
+  const [n, total] = (await Promise.all([perPerson ? env.RATE.get(mine) : null, env.RATE.get(all)])).map(x => Number(x) || 0);
+  if (perPerson && n >= perPerson) return { ok: false, scope: 'person' };
+  if (total >= cap) return { ok: false, scope: 'all' };
+  await Promise.all([
+    perPerson ? env.RATE.put(mine, String(n + 1), { expirationTtl: 90000 }) : null,
+    env.RATE.put(all, String(total + 1), { expirationTtl: 90000 }),
+  ]);
+  return { ok: true };
+}
+const capOf = (env, name, dflt) => Number(env[name]) > 0 ? Number(env[name]) : dflt;
+const noMore = (a, cors) => json({ error: a.scope === 'unconfigured' ? 'not configured' : 'daily allowance used', scope: a.scope },
+  a.scope === 'unconfigured' ? 503 : 429, { ...cors, 'Retry-After': '3600' });
 
 /** Values that reach an upstream URL, checked rather than trusted. */
 function cleanParams(kind, url) {
@@ -256,6 +288,7 @@ async function handle(request, env, ctx) {
   // ---- Google (fallback geocoding) ------------------------------------------
   if (group === 'google' && GOOGLE_HOSTS[action]) {
     if (!env.GOOGLE_API_KEY) return json({ error: 'not configured' }, 503, cors);
+    if (!env.RATE) return json({ error: 'not configured' }, 503, cors);
     const clean = cleanParams('google_' + action, url);
     if (clean.error) return json({ error: clean.error }, 400, cors);
     if (!clean.params.get('address') && !clean.params.get('place_id'))
@@ -282,6 +315,9 @@ async function handle(request, env, ctx) {
       catch { return json({ error: 'body is not JSON' }, 400, cors); }
       const bad = validateMatrixBody(body);
       if (bad) return json({ error: bad }, 400, cors);
+      const allow = await dailyAllowance(env, clientId, Date.now(), 'mx',
+        capOf(env, 'HERE_MATRIX_PER_DAY', LIMITS.matrixPerPersonPerDay), capOf(env, 'HERE_MATRIX_DAILY_CAP', LIMITS.matrixDailyCap));
+      if (!allow.ok) return noMore(allow, cors);
 
       const upstream = `${HERE_HOSTS.matrix}?async=false&apiKey=${encodeURIComponent(env.HERE_API_KEY)}`;
       const res = await fetch(upstream, {
@@ -301,7 +337,14 @@ async function handle(request, env, ctx) {
       const upstream = `${HERE_HOSTS[action]}?${clean.params.toString()}`;
       // The key is in the upstream URL, so it must never appear in a cache key.
       const cacheKey = `here:${action}:${clean.params.toString().replace(/&?apiKey=[^&]*/, '')}`;
-      const out = await cachedFetch(env, cacheKey, CACHE_TTL.geocode, () => fetch(upstream));
+      // Only answers that really go to HERE count against the day's ceiling.
+      let refused = null;
+      const out = await cachedFetch(env, cacheKey, CACHE_TTL.geocode, async () => {
+        const allow = await dailyAllowance(env, clientId, Date.now(), 'here', 0, capOf(env, 'HERE_DAILY_CAP', LIMITS.hereDailyCap));
+        if (!allow.ok){ refused = allow; return new Response('{}', { status: 429 }); }
+        return fetch(upstream);
+      });
+      if (refused) return noMore(refused, cors);
       return new Response(out.body, { status: out.status || 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8',
           'X-Cache': out.cached ? 'hit' : 'miss', ...stripPrivate(cors) } });
@@ -343,6 +386,11 @@ async function handle(request, env, ctx) {
     if (raw.length > 4096) return json({ error: 'body too large' }, 413, cors);
     let body;
     try { body = JSON.parse(raw); } catch { return json({ error: 'body is not JSON' }, 400, cors); }
+    if (who !== 'ollama') {
+      const allow = await dailyAllowance(env, clientId, Date.now(), 'ai',
+        capOf(env, 'AI_PER_DAY', LIMITS.aiPerPersonPerDay), capOf(env, 'AI_DAILY_CAP', LIMITS.aiDailyCap));
+      if (!allow.ok) return noMore(allow, cors);
+    }
     let out;
     if (who === 'ollama') out = await AI.understandOllama(env._fetch || fetch, env, body);
     else {
@@ -428,4 +476,4 @@ export default {
   },
 };
 
-export { cleanParams, validateMatrixBody, corsHeaders, rateLimit, LIMITS, handle };
+export { cleanParams, validateMatrixBody, corsHeaders, rateLimit, dailyAllowance, LIMITS, handle };

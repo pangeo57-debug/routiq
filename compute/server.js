@@ -33,7 +33,27 @@ const CONF = {
   bodyMax: 4 * 1024 * 1024,
   resultTtlMs: 24 * 3600 * 1000,
   jobMaxMs: 20 * 60 * 1000,
+  remindersPerIpHour: Number(process.env.REMINDERS_PER_IP_HOUR) || 60,
+  remindersMax: Number(process.env.REMINDERS_MAX) || 5000,   // phones with reminders at once
+  // The header that carries the caller's real address, set ONLY when a proxy
+  // in front writes it (behind Cloudflare: cf-connecting-ip). Otherwise the
+  // socket's address: a header the caller can write is not an address.
+  ipHeader: (process.env.TRUST_IP_HEADER || '').toLowerCase(),
 };
+
+// Push messages go only to the browsers' own push services, never to an
+// address the caller picks (the server would otherwise POST wherever told).
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)push\.apple\.com$/,
+  /(^|\.)notify\.windows\.com$/, /^updates\.push\.services\.mozilla\.com$/];
+function pushOk(push) {
+  if (!push || typeof push.endpoint !== 'string') return false;
+  let u; try { u = new URL(push.endpoint); } catch { return false; }
+  return u.protocol === 'https:' && PUSH_HOSTS.some(re => re.test(u.hostname));
+}
+function clientIp(req) {
+  const h = CONF.ipHeader && req.headers[CONF.ipHeader];
+  return String(h || (req.socket && req.socket.remoteAddress) || '').split(',')[0].trim();
+}
 
 let webpush = null;
 if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
@@ -147,7 +167,7 @@ const reminders = new Map();   // endpoint hash -> [timeouts]
 const KEY = /^[0-9a-f]{8,48}$/;
 function setReminders(body, now) {
   const push = body && body.push;
-  if (!push || typeof push.endpoint !== 'string' || !/^https:\/\//.test(push.endpoint)) return 'push subscription required';
+  if (!pushOk(push)) return 'push subscription required';
   const items = Array.isArray(body.items) ? body.items : null;
   if (!items || items.length > 60) return 'items: at most 60';
   for (const it of items) {
@@ -155,12 +175,17 @@ function setReminders(body, now) {
     if (!KEY.test(String(it.k))) return 'bad key';
   }
   const id = crypto.createHash('sha256').update(push.endpoint).digest('hex');
+  if (!reminders.has(id) && reminders.size >= CONF.remindersMax) return 'busy';
   for (const tm of reminders.get(id) || []) clearTimeout(tm);
   const title = String((body.fallback && body.fallback.title) || 'RoutePal').slice(0, 60);
   const timers = items.map(it => {
     const tm = setTimeout(() => {
       if (webpush) webpush.sendNotification(push, JSON.stringify({ kind: 'reminder', k: it.k, title })).catch(() => {});
       sent.push({ id, k: it.k, at: Date.now() }); if (sent.length > 100) sent.shift();
+      // The last one gone, the phone's entry goes too: the map only holds
+      // what is still to come.
+      const left = (reminders.get(id) || []).filter(x => x !== tm);
+      if (left.length) reminders.set(id, left); else reminders.delete(id);
     }, Math.max(0, it.t - now));
     tm.unref();
     return tm;
@@ -181,10 +206,14 @@ function send(res, status, body, headers) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
   res.end(JSON.stringify(body));
 }
-function allowIp(ip, now) {
-  const log = (ipLog.get(ip) || []).filter(t => now - t < 3600 * 1000);
-  if (log.length >= CONF.perIpHour) { ipLog.set(ip, log); return false; }
-  log.push(now); ipLog.set(ip, log); return true;
+function allowIp(ip, now, kind = 'jobs') {
+  const key = kind + ':' + ip, max = kind === 'reminders' ? CONF.remindersPerIpHour : CONF.perIpHour;
+  const log = (ipLog.get(key) || []).filter(t => now - t < 3600 * 1000);
+  if (log.length >= max) { ipLog.set(key, log); return false; }
+  log.push(now); ipLog.set(key, log);
+  // Old addresses are let go, so the log itself cannot grow without end.
+  if (ipLog.size > 20000) for (const [k, v] of ipLog) if (!v.length || now - v[v.length - 1] > 3600 * 1000) ipLog.delete(k);
+  return true;
 }
 
 async function handle(req, res) {
@@ -195,8 +224,7 @@ async function handle(req, res) {
   if (!c.ok) return send(res, 403, { error: 'origin not allowed' }, {});
 
   if (url.pathname === '/jobs' && req.method === 'POST') {
-    const ip = (req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-    if (!allowIp(ip, Date.now())) return send(res, 429, { error: 'too many jobs this hour' }, c.headers);
+    if (!allowIp(clientIp(req), Date.now())) return send(res, 429, { error: 'too many jobs this hour' }, c.headers);
     if (queue.length >= CONF.queueMax) return send(res, 503, { error: 'busy' }, c.headers);
     let raw = '';
     for await (const chunk of req) { raw += chunk; if (raw.length > CONF.bodyMax) return send(res, 413, { error: 'body too large' }, c.headers); }
@@ -204,6 +232,7 @@ async function handle(req, res) {
     try { body = JSON.parse(raw); } catch { return send(res, 400, { error: 'body is not JSON' }, c.headers); }
     const bad = validate(body);
     if (bad) return send(res, 400, { error: bad }, c.headers);
+    if (body.push && !pushOk(body.push)) return send(res, 400, { error: 'push subscription not accepted' }, c.headers);
     const id = crypto.randomBytes(16).toString('hex');
     const job = { id, status: 'queued', progress: null, input: body.input, matrix: body.matrix,
       push: body.push && body.push.endpoint ? body.push : null, notify: body.notify || null,
@@ -212,11 +241,13 @@ async function handle(req, res) {
     return send(res, 202, { id, position: queue.indexOf(job) + 1 }, c.headers);
   }
   if (url.pathname === '/reminders' && req.method === 'POST') {
+    if (!allowIp(clientIp(req), Date.now(), 'reminders')) return send(res, 429, { error: 'too many this hour' }, c.headers);
     let raw = '';
     for await (const chunk of req) { raw += chunk; if (raw.length > 64 * 1024) return send(res, 413, { error: 'body too large' }, c.headers); }
     let body;
     try { body = JSON.parse(raw); } catch { return send(res, 400, { error: 'body is not JSON' }, c.headers); }
     const bad = setReminders(body, Date.now());
+    if (bad === 'busy') return send(res, 503, { error: 'busy' }, c.headers);
     if (bad) return send(res, 400, { error: bad }, c.headers);
     return send(res, 200, { ok: true, n: body.items.length }, c.headers);
   }
@@ -248,4 +279,4 @@ function start(port = CONF.port) {
 
 if (require.main === module) start().then(() => console.log(`compute on :${CONF.port}, ${CONF.runs} runs per round`));
 
-module.exports = { start, validate, CONF, jobs, setReminders, reminders, sent };
+module.exports = { start, validate, CONF, jobs, setReminders, reminders, sent, pushOk, clientIp, allowIp };
