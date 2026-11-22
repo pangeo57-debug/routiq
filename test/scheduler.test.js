@@ -6160,7 +6160,7 @@ describe('home: the map on top, cards that slide, the drive before each stop', (
     const L = { client: 'Πελάτης', clients: 'Πελάτες', session: 'Ραντεβού', sessions: 'Ραντεβού' };
     const html = app.App._homeTodayHtml(L, 0, 0, { km: 0 }, []);
     assert.match(html, /class="home-card next-card main"/);
-    assert.match(html, /href="tel:6941234568"/, 'a call button when the next stop has a number');
+    assert.match(html, /href="tel:6941234567"/, 'a call button for the next stop (23:40, before 23:50), which has a number');
     assert.equal((html.match(/class="agenda-leg"/g) || []).length, 3, 'two drives in, one home');
     assert.match(html, /2 στάσεις/);
   });
