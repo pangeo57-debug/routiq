@@ -176,3 +176,29 @@ describe('forceDayOptions (level 5): what it would take', () => {
     assert.equal(!!(sts[0].availability[3] && sts[0].availability[3].on), false, 'and closed again');
   });
 });
+
+describe('bumpDayOptions: the last resort', () => {
+  test('a day nothing else can fix still gets an answer: who steps out', () => {
+    const app = loadApp();
+    // Wednesday 15-18 holds B, C, D, each free only in their hour and on no
+    // other day: nobody can move anywhere. G is free on Wednesday.
+    const sts = [student('G', { days: [1, 3] }), student('B', { days: [3] }), student('C', { days: [3] }), student('D', { days: [3] })];
+    sts[1].availability[3] = { on: true, start: '15:00', end: '16:00' };
+    sts[2].availability[3] = { on: true, start: '16:00', end: '17:00' };
+    sts[3].availability[3] = { on: true, start: '17:00', end: '18:00' };
+    const sched = { 1: [slot('G', '15:00', '16:00')], 2: [], 3: [slot('B', '15:00', '16:00'), slot('C', '16:00', '17:00'), slot('D', '17:00', '18:00')], 4: [], 5: [] };
+    const { cfg, S } = week(app, { sts, sched, extra: { dayHours: hours('18:00'), travelMargin: 0 } });
+    const ref = { studentId: 'G', day: 1, start: '15:00' };
+    assert.equal(S.forceDayOptions(sched, sts, cfg, ref, 3).length, 0, 'nobody can go elsewhere');
+    const o = S.bumpDayOptions(sched, sts, cfg, ref, 3)[0];
+    assert.ok(o, 'but G can still go there');
+    assert.equal(o.bumped.length, 1, 'pushing out one');
+    assert.equal(o.recalc, true);
+    const rows = Object.fromEntries(Array.from(S.dayChoices(sched, sts, cfg, ref)).map(r => [r.day, r]));
+    assert.equal(rows[3].status, 'force', 'never "does not fit" on a day G is free');
+    const r = S.applyRescheduleOption(sched, sts, cfg, o);
+    assert.equal(r.ok, true);
+    assert.ok(sched[3].some(x => x.studentId === 'G'));
+    assert.equal(sched[3].length, 3, 'one stepped out, G in');
+  });
+});
