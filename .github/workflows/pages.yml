@@ -35,6 +35,9 @@ concurrency:
 
 jobs:
   deploy:
+    # Only the public repo has a GitHub Pages site. The private one (free plan:
+    # no Pages for private repos) would fail on every push and send an email.
+    if: github.repository == 'pangeo57-debug/routiq'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
