@@ -888,6 +888,18 @@ input[type=time]{color-scheme:light}
   </div>
 </div>
 
+<!-- SMART RESCHEDULING: ways to make a refused move fit -->
+<div class="confirm-overlay" id="rs-overlay">
+  <div class="confirm-box" style="max-width:420px">
+    <div class="confirm-title" id="rs-title"></div>
+    <div class="confirm-text" id="rs-hint" style="margin-bottom:10px"></div>
+    <div id="rs-list" style="max-height:55vh;overflow-y:auto"></div>
+    <div class="confirm-actions" style="margin-top:10px">
+      <button class="btn btn-secondary" style="flex:1" id="rs-cancel-btn" onclick="App.closeRescheduleOptions()">Άκυρο</button>
+    </div>
+  </div>
+</div>
+
 <!-- SEND TIMES SHEET -->
 <div class="confirm-overlay" id="send-overlay">
   <div class="confirm-box" style="max-width:420px">
@@ -1774,6 +1786,9 @@ function defaultSettings(){
     lunchBreak:0,
     // Most appointments the scheduler may put on one day. 0 = no limit.
     maxPerDay:0,
+    // Offer moves that keep the same student off two days in a row. Only the
+    // repair suggestions use it, not the automatic planning. Unset counts as on.
+    avoidConsecutiveDays:true,
     avgCitySpeedKmh:25,
     // OSRM prices a journey at the roads' speed limits, as if there were no
     // traffic lights, no queues and no looking for a place to park, so in a city
@@ -1890,6 +1905,30 @@ const I18N = {
     toast_move_already_booked:'{name}: είναι ήδη στο πρόγραμμα — {day}',
     toast_move_no_room:'{name}: δεν υπάρχει ελεύθερη ώρα — {day}',
     toast_swap_blocked:'Δεν γίνεται η αλλαγή — {reason}',
+    rs_title:"Δεν χωράει όπως ζητήθηκε",
+    rs_hint:"{name} → {target}. Διάλεξε πώς να γίνει:",
+    rs_kind_relocate:"Εναλλακτική ώρα",
+    rs_kind_swap:"Ανταλλαγή με {name}",
+    rs_kind_shift_earlier:"Μετατόπιση {name} κατά {min}′ νωρίτερα",
+    rs_kind_shift_later:"Μετατόπιση {name} κατά {min}′ αργότερα",
+    rs_line:"{name}: {day} {from}–{to}",
+    rs_delta_plus:"+{n} λεπτά διαδρομής",
+    rs_delta_minus:"−{n} λεπτά διαδρομής",
+    rs_delta_zero:"ίδια διαδρομή",
+    rs_apply:"Εφαρμογή",
+    rs_applied:"Έγινε: {name} → {target}",
+    rs_stale:"Το πρόγραμμα άλλαξε και η πρόταση δεν ισχύει πια. Δεν άλλαξε τίποτα.",
+    rs_undone:"Η αλλαγή ακυρώθηκε",
+    rs_undo_blocked:"Δεν ακυρώθηκε — το πρόγραμμα έχει αλλάξει από τότε.",
+    settings_spacing_label:"Όχι διαδοχικές μέρες για το ίδιο άτομο",
+    settings_spacing_hint:"Όταν μετακινείς ένα ραντεβού, οι προτάσεις αποφεύγουν να βάλουν το ίδιο άτομο δύο μέρες στη σειρά, όταν γίνεται. Ο αυτόματος προγραμματισμός δεν επηρεάζεται.",
+    spacing_yes:"Ναι, απόφευγέ το",
+    spacing_no:"Όχι",
+    form_spacing_label:"Διαδοχικές μέρες",
+    form_spacing_auto:"Όπως στις ρυθμίσεις",
+    form_spacing_on:"Να αποφεύγονται πάντα",
+    form_spacing_off:"Δεν με νοιάζει",
+    rs_spacing_warn:"{name}: δύο μέρες στη σειρά ({days})",
     mode_week:'Εβδομάδα', mode_day:'Ημέρα', day_title:'Ημερήσιο πρόγραμμα', day_plan_btn:'Σχεδίασε τη μέρα', day_today:'Σήμερα', day_tomorrow:'Αύριο', day_stops:'στάσεις', day_driving:'οδήγηση', day_add_job:'Νέα δουλειά', day_edit_job:'Επεξεργασία δουλειάς', day_jobs_count:'{n} δουλειές — {date}', day_no_jobs:'Καμία δουλειά για αυτή τη μέρα. Πρόσθεσε ό,τι έχεις κλείσει και πάτα «Σχεδίασε τη μέρα».', day_not_planned:'εκτός προγράμματος', day_unplanned:'{n} δεν χώρεσαν', day_planned_ok:'{n} στάσεις, {km} km', day_nothing_to_plan:'Δεν υπάρχει δουλειά να προγραμματιστεί', day_planning:'Υπολογίζω…', day_job_name:'Τι είναι η δουλειά', day_job_name_ph:'π.χ. Διαρροή — Παπαδόπουλος', day_dur_min:'Διάρκεια (λεπτά)', day_dur_max:'Το πολύ', day_dur_max_ph:'προαιρετικό', day_window:'Χρονικό παράθυρο πελάτη', day_window_hint:'Άφησέ το κενό αν μπορεί οποιαδήποτε ώρα μέσα στο ωράριό σου.', day_window_invalid:'Το «ως» πρέπει να είναι μετά το «από»', day_delete_title:'Διαγραφή «{name}»;', day_delete_text:'Η δουλειά θα αφαιρεθεί από αυτή τη μέρα.',
     usage_ask_title:'Βοήθησε να γίνει καλύτερο;', usage_ask_text:'Αν θες, η εφαρμογή στέλνει μια φορά τη μέρα ανώνυμα: ότι χρησιμοποιήθηκε και πόσα km γλίτωσες. Κανένα όνομα, διεύθυνση ή πρόγραμμα. Το αλλάζεις όποτε θες στις Ρυθμίσεις.', usage_ask_ok:'Ναι, στείλε', settings_usage:'Ανώνυμα στατιστικά χρήσης', settings_usage_hint:'Μια φορά τη μέρα: ότι άνοιξε η εφαρμογή και πόσα km γλίτωσες. Χωρίς ονόματα, διευθύνσεις ή πρόγραμμα.',
     settings_workplace:'Χώρος εργασίας (προαιρετικό)', settings_workplace_ph:'π.χ. Γυμναστήριο, Ερμού 20, Πάτρα', settings_workplace_hint:'Αν οι πελάτες έρχονται σε σένα (γυμναστήριο, ιατρείο, φροντιστήριο), γράψε τη διεύθυνση μία φορά. Στον πελάτη τικάρεις «Στον χώρο μου» αντί για διεύθυνση, και τα ραντεβού εκεί μπαίνουν το ένα μετά το άλλο, χωρίς διαδρομή.', form_at_workplace:'Έρχεται στον χώρο μου', form_workplace_missing:'Γράψε πρώτα τη διεύθυνση του χώρου σου στις Ρυθμίσεις.',
@@ -2100,6 +2139,30 @@ const I18N = {
     toast_move_already_booked:'{name} is already scheduled — {day}',
     toast_move_no_room:'{name}: no free time — {day}',
     toast_swap_blocked:"Can't swap these — {reason}",
+    rs_title:"Doesn't fit as asked",
+    rs_hint:"{name} → {target}. Pick how to make it work:",
+    rs_kind_relocate:"Another time",
+    rs_kind_swap:"Swap with {name}",
+    rs_kind_shift_earlier:"Move {name} {min}′ earlier",
+    rs_kind_shift_later:"Move {name} {min}′ later",
+    rs_line:"{name}: {day} {from}–{to}",
+    rs_delta_plus:"+{n} min driving",
+    rs_delta_minus:"−{n} min driving",
+    rs_delta_zero:"same driving",
+    rs_apply:"Apply",
+    rs_applied:"Done: {name} → {target}",
+    rs_stale:"The schedule changed and this option no longer applies. Nothing was changed.",
+    rs_undone:"Change undone",
+    rs_undo_blocked:"Not undone — the schedule has changed since.",
+    settings_spacing_label:"No consecutive days for the same person",
+    settings_spacing_hint:"When you move an appointment, the suggestions avoid putting the same person on two days in a row, when possible. Automatic planning is not affected.",
+    spacing_yes:"Yes, avoid it",
+    spacing_no:"No",
+    form_spacing_label:"Consecutive days",
+    form_spacing_auto:"As in settings",
+    form_spacing_on:"Always avoid",
+    form_spacing_off:"Don't mind",
+    rs_spacing_warn:"{name}: two days in a row ({days})",
     mode_week:'Week', mode_day:'Day', day_title:'Day plan', day_plan_btn:'Plan the day', day_today:'Today', day_tomorrow:'Tomorrow', day_stops:'stops', day_driving:'driving', day_add_job:'New job', day_edit_job:'Edit job', day_jobs_count:'{n} jobs — {date}', day_no_jobs:'Nothing booked for this day. Add what you have and press Plan the day.', day_not_planned:'not scheduled', day_unplanned:'{n} did not fit', day_planned_ok:'{n} stops, {km}km', day_nothing_to_plan:'There is no work to plan', day_planning:'Working it out…', day_job_name:'What the job is', day_job_name_ph:'e.g. Leak — Papadopoulos', day_dur_min:'Takes (minutes)', day_dur_max:'At most', day_dur_max_ph:'optional', day_window:'Customer time window', day_window_hint:'Leave empty if any time within your working hours will do.', day_window_invalid:'The end must be after the start', day_delete_title:'Delete \u201c{name}\u201d?', day_delete_text:'The job will be removed from this day.',
     usage_ask_title:'Help make it better?', usage_ask_text:'If you like, the app sends once a day, anonymously: that it was used and how many km you saved. No names, addresses or schedule. You can change this any time in Settings.', usage_ask_ok:'Yes, send', settings_usage:'Anonymous usage statistics', settings_usage_hint:'Once a day: that the app was opened and how many km you saved. No names, addresses or schedule.',
     settings_workplace:'Workplace (optional)', settings_workplace_ph:'e.g. Gym, 20 Ermou St', settings_workplace_hint:'If clients come to you (gym, practice, studio), enter the address once. On a client, tick “At my place” instead of an address, and sessions there follow one another with no travel.', form_at_workplace:'Comes to my place', form_workplace_missing:'First enter your workplace address in Settings.',
@@ -2310,6 +2373,30 @@ const I18N = {
     toast_move_already_booked:'{name} a déjà un cours — {day}',
     toast_move_no_room:'{name} : aucun créneau libre — {day}',
     toast_swap_blocked:'Échange impossible — {reason}',
+    rs_title:"Ne rentre pas tel quel",
+    rs_hint:"{name} → {target}. Choisissez comment faire :",
+    rs_kind_relocate:"Autre horaire",
+    rs_kind_swap:"Échange avec {name}",
+    rs_kind_shift_earlier:"Décaler {name} de {min}′ plus tôt",
+    rs_kind_shift_later:"Décaler {name} de {min}′ plus tard",
+    rs_line:"{name} : {day} {from}–{to}",
+    rs_delta_plus:"+{n} min de trajet",
+    rs_delta_minus:"−{n} min de trajet",
+    rs_delta_zero:"même trajet",
+    rs_apply:"Appliquer",
+    rs_applied:"Fait : {name} → {target}",
+    rs_stale:"Le planning a changé et cette option ne s’applique plus. Rien n’a été modifié.",
+    rs_undone:"Modification annulée",
+    rs_undo_blocked:"Non annulé — le planning a changé depuis.",
+    settings_spacing_label:"Pas de jours consécutifs pour une même personne",
+    settings_spacing_hint:"Quand vous déplacez un rendez-vous, les propositions évitent de mettre la même personne deux jours de suite, si possible. La planification automatique n'est pas modifiée.",
+    spacing_yes:"Oui, l'éviter",
+    spacing_no:"Non",
+    form_spacing_label:"Jours consécutifs",
+    form_spacing_auto:"Comme dans les réglages",
+    form_spacing_on:"Toujours éviter",
+    form_spacing_off:"Peu importe",
+    rs_spacing_warn:"{name} : deux jours de suite ({days})",
     mode_week:'Semaine', mode_day:'Jour', day_title:'Planning du jour', day_plan_btn:'Planifier la journée', day_today:'Aujourd\u2019hui', day_tomorrow:'Demain', day_stops:'arrêts', day_driving:'trajet', day_add_job:'Nouvelle intervention', day_edit_job:'Modifier l\u2019intervention', day_jobs_count:'{n} interventions — {date}', day_no_jobs:'Rien de prévu ce jour. Ajoutez vos interventions puis appuyez sur Planifier la journée.', day_not_planned:'non planifiée', day_unplanned:'{n} n\u2019ont pas tenu', day_planned_ok:'{n} arrêts, {km}km', day_nothing_to_plan:'Aucune intervention à planifier', day_planning:'Calcul en cours…', day_job_name:'Nature de l\u2019intervention', day_job_name_ph:'ex. Fuite — Papadopoulos', day_dur_min:'Durée (minutes)', day_dur_max:'Au plus', day_dur_max_ph:'facultatif', day_window:'Créneau du client', day_window_hint:'Laissez vide si n\u2019importe quelle heure de vos horaires convient.', day_window_invalid:'La fin doit suivre le début', day_delete_title:'Supprimer « {name} » ?', day_delete_text:'L\u2019intervention sera retirée de cette journée.',
     usage_ask_title:'Aider à l\'améliorer ?', usage_ask_text:'Si vous voulez, l\'application envoie une fois par jour, anonymement : qu\'elle a été utilisée et combien de km vous avez économisés. Aucun nom, adresse ni planning. Modifiable à tout moment dans les Réglages.', usage_ask_ok:'Oui, envoyer', settings_usage:'Statistiques d\'utilisation anonymes', settings_usage_hint:'Une fois par jour : que l\'application a été ouverte et combien de km vous avez économisés. Sans noms, adresses ni planning.',
     settings_workplace:'Lieu de travail (facultatif)', settings_workplace_ph:'p. ex. Salle de sport, 20 rue…', settings_workplace_hint:'Si les clients viennent chez vous (salle, cabinet, studio), saisissez l\'adresse une fois. Sur un client, cochez « Chez moi » au lieu d\'une adresse : les séances s\'y enchaînent sans trajet.', form_at_workplace:'Vient chez moi', form_workplace_missing:'Saisissez d\'abord l\'adresse de votre lieu de travail dans les Réglages.',
@@ -2520,6 +2607,30 @@ const I18N = {
     toast_move_already_booked:'{name} hat bereits eine Stunde — {day}',
     toast_move_no_room:'{name}: keine freie Zeit — {day}',
     toast_swap_blocked:'Tausch nicht möglich — {reason}',
+    rs_title:"Passt so nicht",
+    rs_hint:"{name} → {target}. Wählen Sie, wie es gehen soll:",
+    rs_kind_relocate:"Andere Zeit",
+    rs_kind_swap:"Tausch mit {name}",
+    rs_kind_shift_earlier:"{name} {min}′ früher",
+    rs_kind_shift_later:"{name} {min}′ später",
+    rs_line:"{name}: {day} {from}–{to}",
+    rs_delta_plus:"+{n} Min. Fahrt",
+    rs_delta_minus:"−{n} Min. Fahrt",
+    rs_delta_zero:"gleiche Fahrzeit",
+    rs_apply:"Anwenden",
+    rs_applied:"Erledigt: {name} → {target}",
+    rs_stale:"Der Plan hat sich geändert, diese Option gilt nicht mehr. Nichts wurde geändert.",
+    rs_undone:"Änderung rückgängig gemacht",
+    rs_undo_blocked:"Nicht rückgängig gemacht — der Plan hat sich seitdem geändert.",
+    settings_spacing_label:"Keine aufeinanderfolgenden Tage für dieselbe Person",
+    settings_spacing_hint:"Beim Verschieben eines Termins vermeiden die Vorschläge, dieselbe Person an zwei Tagen hintereinander einzuplanen, wenn möglich. Die automatische Planung bleibt unverändert.",
+    spacing_yes:"Ja, vermeiden",
+    spacing_no:"Nein",
+    form_spacing_label:"Aufeinanderfolgende Tage",
+    form_spacing_auto:"Wie in den Einstellungen",
+    form_spacing_on:"Immer vermeiden",
+    form_spacing_off:"Egal",
+    rs_spacing_warn:"{name}: zwei Tage hintereinander ({days})",
     mode_week:'Woche', mode_day:'Tag', day_title:'Tagesplan', day_plan_btn:'Tag planen', day_today:'Heute', day_tomorrow:'Morgen', day_stops:'Stopps', day_driving:'Fahrt', day_add_job:'Neuer Auftrag', day_edit_job:'Auftrag bearbeiten', day_jobs_count:'{n} Aufträge — {date}', day_no_jobs:'Für diesen Tag ist nichts eingetragen. Aufträge hinzufügen und Tag planen drücken.', day_not_planned:'nicht eingeplant', day_unplanned:'{n} passten nicht', day_planned_ok:'{n} Stopps, {km}km', day_nothing_to_plan:'Es gibt nichts zu planen', day_planning:'Wird berechnet…', day_job_name:'Worum es geht', day_job_name_ph:'z.B. Leck — Papadopoulos', day_dur_min:'Dauer (Minuten)', day_dur_max:'Höchstens', day_dur_max_ph:'optional', day_window:'Zeitfenster des Kunden', day_window_hint:'Leer lassen, wenn jede Zeit innerhalb Ihrer Arbeitszeit passt.', day_window_invalid:'Das Ende muss nach dem Beginn liegen', day_delete_title:'\u201e{name}\u201c löschen?', day_delete_text:'Der Auftrag wird von diesem Tag entfernt.',
     usage_ask_title:'Hilfst du mit, es besser zu machen?', usage_ask_text:'Wenn du willst, sendet die App einmal am Tag anonym: dass sie benutzt wurde und wie viele km du gespart hast. Keine Namen, Adressen oder Pläne. Jederzeit in den Einstellungen änderbar.', usage_ask_ok:'Ja, senden', settings_usage:'Anonyme Nutzungsstatistik', settings_usage_hint:'Einmal am Tag: dass die App geöffnet wurde und wie viele km du gespart hast. Ohne Namen, Adressen oder Pläne.',
     settings_workplace:'Arbeitsort (optional)', settings_workplace_ph:'z. B. Studio, Hauptstr. 20', settings_workplace_hint:'Wenn Kunden zu dir kommen (Studio, Praxis, Schule), gib die Adresse einmal ein. Beim Kunden hakst du „Kommt zu mir“ statt einer Adresse an, und Termine dort folgen ohne Fahrt aufeinander.', form_at_workplace:'Kommt zu mir', form_workplace_missing:'Gib zuerst die Adresse deines Arbeitsorts in den Einstellungen ein.',
@@ -6520,6 +6631,377 @@ const Scheduler = {
 
     if(changed) for(const d of days) schedule[d] = work[d];
     return { changed, adopted: changed > 0 };
+  },
+
+  // ---- SMART RESCHEDULING (repair engine) -------------------------------
+  //
+  // A move that does not fit used to end in a refusal. This turns the refusal
+  // into up to three ways of making it fit, each fully checked and priced:
+  //
+  //   level 1  relocate  the lesson goes into another free gap on the wanted day
+  //   level 2  swap      whoever blocks the day trades: they go to the lesson's
+  //                      old place or any other gap of the week, it takes theirs
+  //   level 3  shift     a neighbour moves 15 or 30 minutes, inside their own
+  //                      windows, and that opens the gap
+  //
+  // Nothing here changes the schedule. Every option is a list of `moves`, and
+  // the SAME builder (_applyMoves) turns that list into the trial week both
+  // when the options are drawn and when one is applied, so what the person
+  // sees is exactly what happens. Legality is verifySchedule on that trial,
+  // the one rule set the rest of the app holds itself to — only problems the
+  // change INTRODUCES count, as everywhere else.
+  //
+  // This is read-only on the optimizer: it calls verifySchedule, legMin,
+  // commonWindows and friends, and changes none of them.
+
+  // A lesson has no id of its own: it is told apart by who, which day, when.
+  // Accepts {studentId, day, start} or "studentId|day|start".
+  _slotRef(ref){
+    if(typeof ref === 'string'){
+      const p = ref.split('|');
+      return { studentId: p[0], day: Number(p[1]), start: p[2] };
+    }
+    return { studentId: ref.studentId, day: Number(ref.day), start: ref.start };
+  },
+
+  _cloneWeek(schedule, settings){
+    const w = {};
+    for(const d of (settings.workDays || [])) w[d] = (schedule[d] || []).slice();
+    return w;
+  },
+
+  // Drive time of the given days: every leg between different places plus the
+  // way out from home and back. The same figure before and after a change, so
+  // the difference is what the change costs the person on the road.
+  _travelMin(sch, days, settings){
+    const margin = (settings.travelMargin ?? 2);
+    const home = settings.homeAddress || '';
+    let total = 0;
+    for(const d of days){
+      const sl = (sch[d] || []).slice().sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+      if(!sl.length) continue;
+      const dh = settings.dayHours && settings.dayHours[d];
+      let prev = null;
+      for(const s of sl){
+        if(!prev) total += this.travelEstMin('home', home, s.studentId, s.address || '', d,
+          dh ? this.toMin(dh.start) : this.toMin(s.start));
+        else if(prev.studentId !== s.studentId)
+          total += this.legMin(margin, prev.studentId, prev.address, s.studentId, s.address, d, this.toMin(prev.end));
+        prev = s;
+      }
+      total += this.travelEstMin(prev.studentId, prev.address || '', 'home', home, d, this.toMin(prev.end));
+    }
+    return total;
+  },
+
+  // The one place a list of moves becomes a week. Returns null when a move
+  // names a lesson that is no longer where it was (the schedule changed since
+  // the options were drawn) or a day that is not a working day.
+  _applyMoves(schedule, settings, moves){
+    const trial = this._cloneWeek(schedule, settings);
+    const picked = [];
+    for(const m of moves){
+      if(!trial[m.fromDay] || !trial[m.toDay]) return null;
+      const sl = trial[m.fromDay].find(x => x.studentId === m.studentId &&
+        this.toMin(x.start) === this.toMin(m.fromStart));
+      if(!sl || picked.some(p => p[1] === sl)) return null;
+      picked.push([m, sl]);
+    }
+    for(const [m, sl] of picked) trial[m.fromDay] = trial[m.fromDay].filter(x => x !== sl);
+    for(const [m, sl] of picked)
+      trial[m.toDay] = trial[m.toDay].concat([{ ...sl, start: m.toStart, end: m.toEnd }]);
+    for(const d of Object.keys(trial))
+      trial[d].sort((a,b) => this.toMin(a.start) - this.toMin(b.start));
+    return trial;
+  },
+
+  /**
+   * Up to `opts.max` (3) ways to move one lesson to `targetDay` (at
+   * `targetTime` if the person aimed at a time), cheapest drive first.
+   *
+   *   ref         {studentId, day, start} or "studentId|day|start"
+   *   targetDay   the day number the lesson should go to
+   *   targetTime  "HH:MM" or minutes, optional; breaks ties and says whose
+   *               lesson is in the way
+   *
+   * Returns { ref, targetDay, targetTime, options, notes }. `notes` says why
+   * there is nothing to offer when `options` is empty.
+   *
+   * Each option: { id, level, kind, deltaTravelMin, moves, touchedDays,
+   * partner: {studentId,name}|null, shiftMin|null }. `moves` is the whole
+   * change, the lesson itself first; apply it with applyRescheduleOption.
+   */
+  findRescheduleOptions(schedule, students, settings, ref, targetDay, targetTime = null, opts = {}){
+    const max = opts.max || 3;
+    const deadline = Date.now() + (opts.budgetMs || 1500);
+    const r = this._slotRef(ref);
+    const srcDay = Number(r.day);
+    targetDay = Number(targetDay);
+    const tt = (targetTime == null || targetTime === '') ? null
+      : (typeof targetTime === 'number' ? targetTime : this.toMin(targetTime));
+    const res = { ref: r, targetDay, targetTime: tt == null ? null : this.toTime(tt), options: [], notes: [] };
+    const fail = (note) => { res.notes.push(note); return res; };
+
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+    const days = settings.workDays || [];
+    const src = (schedule[srcDay] || []).find(x => x.studentId === r.studentId &&
+      this.toMin(x.start) === this.toMin(r.start));
+    if(!src) return fail('no_lesson');
+    if(!this._movableAlone(src, byId)) return fail('not_movable');
+    if((schedule[srcDay] || []).some(x => x !== src && x.studentId === src.studentId)) return fail('multi_block');
+    if(!days.includes(targetDay)) return fail('day_off');
+    const st = byId[src.studentId];
+    const av = st.availability && st.availability[targetDay];
+    if(!av || !av.on) return fail('unavailable');
+    if((schedule[targetDay] || []).some(x => x !== src && this.occupantIds(x).includes(st.id))) return fail('already');
+    if(srcDay === targetDay && tt == null) return fail('same_day');
+
+    const dur = this.toMin(src.end) - this.toMin(src.start);
+    const grid = this.timeGrid(settings);
+    const before = new Set(this.verifySchedule(schedule, students, settings));
+    const legal = (trial) => !!trial &&
+      !this.verifySchedule(trial, students, settings).some(x => !before.has(x));
+    const timeUp = () => Date.now() > deadline;
+
+    const moveOf = (sl, toDay, t, role) => {
+      const d = this.toMin(sl.end) - this.toMin(sl.start);
+      return { studentId: sl.studentId, name: sl.studentName || (byId[sl.studentId] || {}).name || '',
+        fromDay: sl === src ? srcDay : sl._day, fromStart: sl.start, toDay,
+        toStart: this.toTime(t), toEnd: this.toTime(t + d), role };
+    };
+    // Lessons on the wanted day, each tagged with its day so a move can name it.
+    const onTarget = (schedule[targetDay] || []).filter(x => x !== src)
+      .map(x => Object.assign(Object.create(null), x, { _orig: x, _day: targetDay }));
+    const origOf = (x) => x._orig || x;
+    const isBlockerOk = (b) => this._movableAlone(origOf(b), byId) && !b.locked;
+
+    const dh = settings.dayHours && settings.dayHours[targetDay];
+    if(!dh) return fail('day_off');
+    const lo = this.toMin(dh.start), hi = this.toMin(dh.end) + this.endFlex();
+    const wins = this.commonWindows([st], targetDay, settings);
+    const inWin = (t, d = dur) => wins.some((w, i) => t >= w[0] && t + d <= w[1] + this.windowFlex(wins, i));
+    const firstGrid = (m) => Math.ceil(m / grid) * grid;
+    const cands = [];
+    const l1Legal = new Set();
+
+    // ---- level 1: another gap on the wanted day --------------------------
+    const spots = new Map();
+    for(let t = firstGrid(lo); t + dur <= hi; t += grid){
+      if(!inWin(t)) continue;
+      if(srcDay === targetDay && this.toMin(src.start) === t) continue;
+      if(onTarget.some(x => this.toMin(x.start) < t + dur && this.toMin(x.end) > t)) continue;
+      const moves = [moveOf(src, targetDay, t, 'primary')];
+      const trial = this._applyMoves(schedule, settings, moves);
+      if(!legal(trial)) continue;
+      l1Legal.add(t);
+      const pos = onTarget.filter(x => this.toMin(x.start) < t).length;
+      const score = tt == null ? t : Math.abs(t - tt);
+      const cur = spots.get(pos);
+      if(!cur || score < cur.score) spots.set(pos, { t, score, moves, trial });
+    }
+    for(const s of spots.values())
+      cands.push({ level: 1, kind: 'relocate', moves: s.moves, trial: s.trial, tdist: s.score, partner: null, shiftMin: null });
+
+    // ---- level 2: swap with whoever is in the way -------------------------
+    const nearTime = (b) => tt == null ? true
+      : (this.toMin(b.start) < tt + dur + 30 && this.toMin(b.end) > tt - 30);
+    const blockers = onTarget.filter(b => isBlockerOk(b) && nearTime(b))
+      .sort((a,b) => (tt == null ? 0 : Math.abs(this.toMin(a.start) - tt) - Math.abs(this.toMin(b.start) - tt)))
+      .slice(0, 6);
+    for(const B of blockers){
+      if(timeUp()) break;
+      const Bo = origOf(B);
+      const bs = this.toMin(B.start), be = this.toMin(B.end), bDur = be - bs;
+      const bSt = byId[B.studentId];
+      if(!bSt) continue;
+      // Where the lesson would go once B is out of the way. Checked on a week
+      // without B: removing a lesson can only clear problems, never add them.
+      const noB = this._cloneWeek(schedule, settings);
+      noB[targetDay] = noB[targetDay].filter(x => x !== Bo);
+      const others = onTarget.filter(x => x !== B);
+      let bestA = null;
+      for(let t = firstGrid(bs - dur); t <= be; t += grid){
+        if(t < lo || t + dur > hi || !inWin(t)) continue;
+        if(others.some(x => this.toMin(x.start) < t + dur && this.toMin(x.end) > t)) continue;
+        const mv = [moveOf(src, targetDay, t, 'primary')];
+        const trial = this._applyMoves(noB, settings, mv);
+        if(!legal(trial)) continue;
+        const score = Math.abs(t - (tt == null ? bs : tt));
+        if(!bestA || score < bestA.score) bestA = { t, score };
+      }
+      if(!bestA) continue;
+      const aMove = moveOf(src, targetDay, bestA.t, 'primary');
+      const bFrom = { studentId: B.studentId, name: B.studentName || bSt.name, fromDay: targetDay, fromStart: B.start };
+      for(const toDay of days){
+        if(timeUp()) break;
+        const bav = bSt.availability && bSt.availability[toDay];
+        if(!bav || !bav.on) continue;
+        const dayH = settings.dayHours && settings.dayHours[toDay];
+        if(!dayH) continue;
+        // B may not end up twice on one day.
+        if(toDay !== targetDay && (schedule[toDay] || []).some(x => x !== src && this.occupantIds(x).includes(bSt.id))) continue;
+        const bWins = this.commonWindows([bSt], toDay, settings);
+        const bIn = (t) => bWins.some((w, i) => t >= w[0] && t + bDur <= w[1] + this.windowFlex(bWins, i));
+        let pick = null;
+        // After the swap, what stands on that day: its lessons, minus B and
+        // the lesson if either left it, plus the lesson if it arrives.
+        const standing = (schedule[toDay] || []).filter(x => x !== Bo && x !== src)
+          .concat(toDay === targetDay ? [{ start: this.toTime(bestA.t), end: this.toTime(bestA.t + dur) }] : []);
+        for(let t = firstGrid(this.toMin(dayH.start)); t + bDur <= this.toMin(dayH.end) + this.endFlex(); t += grid){
+          if(timeUp()) break;
+          if(!bIn(t)) continue;
+          if(toDay === targetDay && t === bs) continue;
+          if(standing.some(x => this.toMin(x.start) < t + bDur && this.toMin(x.end) > t)) continue;
+          const bMove = Object.assign({}, bFrom, { toDay, toStart: this.toTime(t), toEnd: this.toTime(t + bDur), role: 'partner' });
+          const moves = [aMove, bMove];
+          const trial = this._applyMoves(schedule, settings, moves);
+          if(!legal(trial)) continue;
+          const touched = [...new Set(moves.flatMap(m => [m.fromDay, m.toDay]))];
+          const cost = this._travelMin(trial, touched, settings);
+          const score = Math.abs(t - bs);
+          if(!pick || cost < pick.cost || (cost === pick.cost && score < pick.score)) pick = { moves, trial, cost, score };
+        }
+        if(pick) cands.push({ level: 2, kind: 'swap', moves: pick.moves, trial: pick.trial, tdist: bestA.score,
+          partner: { studentId: bSt.id, name: bSt.name }, shiftMin: null });
+      }
+    }
+
+    // ---- level 3: a neighbour moves 15 or 30 minutes ----------------------
+    for(const B of onTarget.filter(isBlockerOk)){
+      if(timeUp()) break;
+      const Bo = origOf(B);
+      const bSt = byId[B.studentId];
+      if(!bSt) continue;
+      const bs = this.toMin(B.start), be = this.toMin(B.end);
+      for(const s of [-30, -15, 15, 30]){
+        if(timeUp()) break;
+        const bMove = { studentId: B.studentId, name: B.studentName || bSt.name, fromDay: targetDay,
+          fromStart: B.start, toDay: targetDay, toStart: this.toTime(bs + s), toEnd: this.toTime(be + s), role: 'partner' };
+        let best = null;
+        for(let t = firstGrid(bs - dur - 30); t <= be + 30; t += grid){
+          if(t < lo || t + dur > hi || !inWin(t) || l1Legal.has(t)) continue;
+          // Only what the shift itself makes possible: a time that already
+          // worked without it belongs to level 1.
+          const rest = onTarget.filter(x => x !== B);
+          if(rest.some(x => this.toMin(x.start) < t + dur && this.toMin(x.end) > t)) continue;
+          if(bs + s < t + dur && be + s > t) continue;
+          const moves = [moveOf(src, targetDay, t, 'primary'), bMove];
+          const trial = this._applyMoves(schedule, settings, moves);
+          if(!legal(trial)) continue;
+          const score = tt == null ? t : Math.abs(t - tt);
+          if(!best || score < best.score) best = { t, score, moves, trial };
+        }
+        if(best) cands.push({ level: 3, kind: 'shift', moves: best.moves, trial: best.trial, tdist: best.score,
+          partner: { studentId: bSt.id, name: bSt.name }, shiftMin: s });
+      }
+    }
+
+    // ---- rank: least extra driving first ----------------------------------
+    const spBefore = new Set(this.spacingViolations(schedule, students, settings).map(v => v.key));
+    for(const c of cands){
+      c.touchedDays = [...new Set(c.moves.flatMap(m => [m.fromDay, m.toDay]))];
+      c.deltaTravelMin = this._travelMin(c.trial, c.touchedDays, settings) -
+                         this._travelMin(schedule, c.touchedDays, settings);
+      // Consecutive days this change would NEWLY create. Ones already there are not its doing.
+      c.spacing = this.spacingViolations(c.trial, students, settings).filter(v => !spBefore.has(v.key));
+    }
+    const sig = (c) => c.moves.map(m => `${m.studentId}@${m.toDay}@${m.toStart}`).sort().join('|');
+    const seen = new Set();
+    cands.sort((a,b) => (a.spacing.length - b.spacing.length) || (a.deltaTravelMin - b.deltaTravelMin) ||
+      (a.moves.length - b.moves.length) || (a.tdist - b.tdist) || (a.level - b.level));
+    for(const c of cands){
+      const k = sig(c);
+      if(seen.has(k)) continue;
+      seen.add(k);
+      res.options.push({ id: `${c.kind}:${k}`, level: c.level, kind: c.kind, deltaTravelMin: c.deltaTravelMin,
+        moves: c.moves, touchedDays: c.touchedDays, partner: c.partner, shiftMin: c.shiftMin,
+        spacing: c.spacing.map(v => ({ studentId: v.studentId, name: v.name, days: v.days })) });
+      if(res.options.length >= max) break;
+    }
+    if(!res.options.length) res.notes.push('no_option');
+    return res;
+  },
+
+  /**
+   * Make one option happen, all or nothing. Rebuilt from the option's moves
+   * against the schedule as it is NOW — the list was drawn earlier and an
+   * offer is not a guarantee — and checked again before a single day is
+   * replaced. On success the touched days are swapped in together and `before`
+   * holds what they were, for Undo. On failure nothing has changed.
+   */
+  applyRescheduleOption(schedule, students, settings, option){
+    const trial = this._applyMoves(schedule, settings, option.moves || []);
+    if(!trial) return { ok: false, reason: 'stale' };
+    const before = new Set(this.verifySchedule(schedule, students, settings));
+    if(this.verifySchedule(trial, students, settings).some(x => !before.has(x)))
+      return { ok: false, reason: 'illegal' };
+    const days = [...new Set((option.moves || []).flatMap(m => [m.fromDay, m.toDay]))];
+    const snapshot = {};
+    for(const d of days) snapshot[d] = (schedule[d] || []).slice();
+    for(const d of days) schedule[d] = trial[d];
+    return { ok: true, before: snapshot, days };
+  },
+
+  // Undo of applyRescheduleOption: put the touched days back as they were.
+  restoreDays(schedule, snapshot){
+    for(const d of Object.keys(snapshot)) schedule[d] = snapshot[d].slice();
+  },
+
+  // ---- SPACING: the same student not on two days in a row ------------------
+  //
+  // Nobody wants to teach the same person Tuesday and Wednesday. The rule is
+  // kept OUT of verifySchedule on purpose: the optimizer does not know it yet
+  // and hands back weeks with consecutive days, so putting it there would
+  // raise warnings on every schedule that already exists. It lives here, and
+  // the moves the person makes (the repair engine) are held to it: an option
+  // that would create a new consecutive pair is offered after the ones that do
+  // not, and says so.
+  //
+  // "When possible": with 4-5 lessons a week nobody can be spread over five
+  // days, so the rule only applies where the week has room for it (up to 3 in
+  // a Mon-Fri week). A student can be set to always / never regardless.
+
+  // Sunday is 0 in the app's day numbers but the END of the week.
+  _dayNo(d){ return Number(d) === 0 ? 7 : Number(d); },
+
+  // How many lessons fit on days that are not next to each other.
+  _maxSpread(days){
+    const ds = (days || []).map(d => this._dayNo(d)).sort((a, b) => a - b);
+    let n = 0, last = -9;
+    for(const d of ds){ if(d - last >= 2){ n++; last = d; } }
+    return n;
+  },
+
+  spacingApplies(st, settings){
+    if(!st) return false;
+    const mode = st.spacing;                              // 'on' | 'off' | unset = follow the setting
+    if(mode === 'off') return false;
+    if(mode !== 'on' && settings.avoidConsecutiveDays === false) return false;   // unset counts as on
+    const n = st.lessonsPerWeek || 1;
+    if(n < 2) return false;
+    if(mode === 'on') return true;
+    return n <= this._maxSpread(settings.workDays);
+  },
+
+  // Every pair of consecutive days a student (anyone in a shared block too)
+  // has lessons on. { key, studentId, name, days:[a,b] }, key is stable so
+  // "before" and "after" can be compared.
+  spacingViolations(schedule, students, settings){
+    const sm = Object.fromEntries(students.map(s => [s.id, s]));
+    const daysOf = {};
+    for(const d of (settings.workDays || []))
+      for(const sl of (schedule[d] || []))
+        for(const id of this.occupantIds(sl)) (daysOf[id] = daysOf[id] || new Set()).add(Number(d));
+    const out = [];
+    for(const id of Object.keys(daysOf)){
+      const st = sm[id];
+      if(!this.spacingApplies(st, settings)) continue;
+      const ds = [...daysOf[id]].sort((a, b) => this._dayNo(a) - this._dayNo(b));
+      for(let i = 0; i + 1 < ds.length; i++)
+        if(this._dayNo(ds[i + 1]) - this._dayNo(ds[i]) === 1)
+          out.push({ key: `${id}:${ds[i]}-${ds[i + 1]}`, studentId: id, name: st.name, days: [ds[i], ds[i + 1]] });
+    }
+    return out;
   },
 
   /**
@@ -10994,6 +11476,14 @@ const App = {
           onclick="App.findMatchForForm()">${ico('search', 14)} ${esc(t('form_find_match'))}</button>
       </div>
       <div class="form-group" style="margin-top:14px">
+        <label>${t('form_spacing_label')}</label>
+        <select id="st-spacing">
+          <option value="" ${!st?.spacing?'selected':''}>${t('form_spacing_auto')}</option>
+          <option value="on" ${st?.spacing==='on'?'selected':''}>${t('form_spacing_on')}</option>
+          <option value="off" ${st?.spacing==='off'?'selected':''}>${t('form_spacing_off')}</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:14px">
         <label>${t('student_notes_label')}</label>
         <textarea id="st-notes" placeholder="${t('form_notes_placeholder')}">${esc(st?.notes||'')}</textarea>
       </div>
@@ -12747,6 +13237,7 @@ const App = {
       group: document.getElementById('st-group')?.value?.trim()||'',
       pairedWith: document.getElementById('st-paired')?.value||null,
       notes: document.getElementById('st-notes')?.value?.trim()||'',
+      spacing: document.getElementById('st-spacing')?.value || undefined,
       mergeMode: document.getElementById('st-mergemode')?.value||'off',
       forceMerge: document.getElementById('st-mergemode')?.value==='always',
       maxMergeSessions: Number(document.getElementById('st-mergesize')?.value)||undefined,
@@ -13854,7 +14345,8 @@ const App = {
     for(const d of touched){
       const laid = Scheduler.relayoutDay(trial[d], Number(d), state.students, state.settings);
       if(!laid){
-        Toast.show(tf('toast_swap_blocked',{reason:t('swap_reason_no_room')}),'error',6000);
+        if(!this.openRescheduleOptions({studentId:srcSlot0.studentId, day:srcDay, start:srcSlot0.start}, targetDay, tgtSlot0.start))
+          Toast.show(tf('toast_swap_blocked',{reason:t('swap_reason_no_room')}),'error',6000);
         return;
       }
       trial[d] = laid;
@@ -13882,7 +14374,8 @@ const App = {
         .filter(issue => !before.has(issue));
     }catch(e){ introduced = []; }
     if(introduced.length){
-      Toast.show(tf('toast_swap_blocked',{reason:introduced[0]}),'error',6000);
+      if(!this.openRescheduleOptions({studentId:srcSlot0.studentId, day:srcDay, start:srcSlot0.start}, targetDay, tgtSlot0.start))
+        Toast.show(tf('toast_swap_blocked',{reason:introduced[0]}),'error',6000);
       return;
     }
 
@@ -13916,7 +14409,9 @@ const App = {
     }
     const newTime = Scheduler.findSlotFixed(student, targetDay, existing, state.settings, srcSlot.duration);
     if(!newTime){
-      Toast.show(tf('toast_move_no_room',{name:student.name, day:DAYS_FULL[targetDay]}),'error');
+      // Instead of a bare refusal: ways to make it fit, if there are any.
+      if(!this.openRescheduleOptions({studentId:srcSlot.studentId, day:srcDay, start:srcSlot.start}, targetDay, null))
+        Toast.show(tf('toast_move_no_room',{name:student.name, day:DAYS_FULL[targetDay]}),'error');
       return;
     }
     const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
@@ -13931,6 +14426,83 @@ const App = {
     Storage.saveSchedule(state.schedule);
     this.renderSchedule();
     this.renderHome();
+  },
+
+  // ---- SMART RESCHEDULING: the panel ----------------------------------
+  // Called where a move was refused. Shows the ways Scheduler found to make it
+  // fit and returns true; returns false when there is nothing to offer, so the
+  // caller keeps its own message. Nothing is changed until a button is pressed.
+  openRescheduleOptions(ref, targetDay, targetTime){
+    let res;
+    try{
+      res = Scheduler.findRescheduleOptions(state.schedule, state.students, state.settings, ref, targetDay, targetTime);
+    }catch(e){ console.warn('reschedule options failed', e); return false; }
+    if(!res || !res.options.length) return false;
+    state._reschedule = { res };
+    const st = state.students.find(x => x.id === res.ref.studentId);
+    const name = (st && st.name) || '';
+    const target = (DAYS_FULL[res.targetDay] || '') + (res.targetTime ? ' ' + res.targetTime : '');
+    document.getElementById('rs-title').textContent = t('rs_title');
+    document.getElementById('rs-hint').textContent = tf('rs_hint', { name, target });
+    document.getElementById('rs-cancel-btn').textContent = t('btn_cancel');
+    const kindText = (o) => {
+      if(o.kind === 'swap') return tf('rs_kind_swap', { name: o.partner.name });
+      if(o.kind === 'shift') return tf(o.shiftMin < 0 ? 'rs_kind_shift_earlier' : 'rs_kind_shift_later',
+        { name: o.partner.name, min: Math.abs(o.shiftMin) });
+      return t('rs_kind_relocate');
+    };
+    const deltaText = (n) => n > 0 ? tf('rs_delta_plus', { n }) : n < 0 ? tf('rs_delta_minus', { n: -n }) : t('rs_delta_zero');
+    document.getElementById('rs-list').innerHTML = res.options.map((o, i) => `
+      <div class="card-sm" style="margin-bottom:8px;padding:10px 12px;text-align:left">
+        <div style="font-weight:600">${esc(kindText(o))}</div>
+        ${o.moves.map(m => `<div style="font-size:13px;margin-top:3px">${esc(tf('rs_line',
+          { name: m.name, day: DAYS_FULL[m.toDay] || '', from: m.toStart, to: m.toEnd }))}</div>`).join('')}
+        ${(o.spacing || []).map(v => `<div style="font-size:12px;margin-top:4px;color:var(--orange,#c2410c)">⚠ ${esc(tf('rs_spacing_warn',
+          { name: v.name, days: v.days.map(d => DAYS_FULL[d] || '').join('–') }))}</div>`).join('')}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">
+          <span style="font-size:12px;font-weight:600;color:${o.deltaTravelMin < 0 ? 'var(--green)' : 'var(--text3)'}">${esc(deltaText(o.deltaTravelMin))}</span>
+          <button class="btn btn-primary" style="padding:6px 14px" onclick="App.applyRescheduleOption(${i})">${esc(t('rs_apply'))}</button>
+        </div>
+      </div>`).join('');
+    document.getElementById('rs-overlay').classList.add('open');
+    return true;
+  },
+
+  closeRescheduleOptions(){
+    document.getElementById('rs-overlay')?.classList.remove('open');
+    state._reschedule = null;
+  },
+
+  // All or nothing: the week is rebuilt and checked again against the
+  // schedule as it is now, and only then are the days replaced together.
+  applyRescheduleOption(idx){
+    const rs = state._reschedule;
+    const o = rs && rs.res.options[idx];
+    if(!o) return;
+    const r = Scheduler.applyRescheduleOption(state.schedule, state.students, state.settings, o);
+    this.closeRescheduleOptions();
+    if(!r.ok){ Toast.show(t('rs_stale'), 'error', 6000); return; }
+    const after = JSON.stringify(r.days.map(d => state.schedule[d]));
+    Storage.saveSchedule(state.schedule);
+    this.renderSchedule();
+    this.renderHome();
+    const first = o.moves[0];
+    Toast.show(tf('rs_applied', { name: first.name, target: (DAYS_FULL[first.toDay] || '') + ' ' + first.toStart }),
+      'success', 9000, { label: t('swipe_undo'), run: () => this.undoReschedule(r, after) });
+  },
+
+  // Undo puts the touched days back, unless something has changed them since:
+  // then it would erase newer work, and says so instead.
+  undoReschedule(applied, afterJson){
+    if(JSON.stringify(applied.days.map(d => state.schedule[d])) !== afterJson){
+      Toast.show(t('rs_undo_blocked'), 'error', 5000);
+      return;
+    }
+    Scheduler.restoreDays(state.schedule, applied.before);
+    Storage.saveSchedule(state.schedule);
+    this.renderSchedule();
+    this.renderHome();
+    Toast.show(t('rs_undone'), 'success');
   },
 
   renderDaySlots(){
@@ -14968,6 +15540,14 @@ const App = {
           </select>
           <div class="settings-sub">${t('settings_maxday_hint')}</div>
         </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label>${t('settings_spacing_label')}</label>
+          <select id="set-spacing">
+            <option value="1" ${st.avoidConsecutiveDays!==false?'selected':''}>${t('spacing_yes')}</option>
+            <option value="0" ${st.avoidConsecutiveDays===false?'selected':''}>${t('spacing_no')}</option>
+          </select>
+          <div class="settings-sub">${t('settings_spacing_hint')}</div>
+        </div>
       </div>
 
       <div class="section-title">${t('settings_blocked')}</div>
@@ -15210,6 +15790,7 @@ const App = {
     s.hereApiKey = s.hereApiKey || '';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
     s.maxPerDay = Number(document.getElementById('set-maxday')?.value)||0;
+    { const sp = document.getElementById('set-spacing'); if(sp) s.avoidConsecutiveDays = sp.value !== '0'; }
 
     // If home address changed, use the coord already resolved by autocomplete/
     // map-picker selection if we have one — avoids an extra geocode round-trip
