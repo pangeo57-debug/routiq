@@ -156,6 +156,8 @@ describe('forceDayOptions (level 5): what it would take', () => {
     assert.ok(ev, 'someone leaves Wednesday');
     assert.equal(ev.toDay, 1, 'to Monday, which the move already frees: only two days change');
     assert.equal(o.touchedDays.length, 2);
+    assert.equal(ev.toStart, '15:00', 'into the place G leaves');
+    assert.equal(o.swapWith, ev.name, 'and it is called a swap');
   });
 
   test('outside the person\'s own hours: offered, flagged, hours stretched on apply, back on undo', () => {

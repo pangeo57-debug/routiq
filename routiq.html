@@ -1937,7 +1937,7 @@ const I18N = {
     rs_day_free:"Χωράει ελεύθερα", rs_day_shift:"Χωράει με μικρή αλλαγή", rs_day_replan:"Χωράει αν ξαναστηθεί η μέρα",
     rs_day_none:"Δεν χωράει", rs_day_off:"Δεν είναι διαθέσιμη", rs_day_already:"Έχει ήδη ραντεβού εκείνη τη μέρα", rs_day_current:"Είναι ήδη εδώ",
     rs_day_spacing:"δύο μέρες στη σειρά", rs_back:"Πίσω",
-    rs_kind_force:"Γίνεται, αλλά μετακινούνται και {n} άλλοι", rs_kind_force_alone:"Γίνεται, με συνεννόηση", rs_force_days:"Αλλάζει και άλλη μέρα: {n}",
+    rs_kind_force:"Γίνεται, αλλά μετακινούνται και {n} άλλοι", rs_kind_force_alone:"Γίνεται, με συνεννόηση", rs_kind_force_swap:"Ανταλλαγή με {name}, και μετακινούνται άλλοι {n}", rs_force_days:"Αλλάζει και άλλη μέρα: {n}",
     rs_force_outside:"{name}: εκτός των ωρών που έχει δηλώσει ({from}–{to}) — ρώτα αν μπορεί",
     rs_force_unlock:"Ξεκλειδώνει: {list}",
     rs_day_force:"Γίνεται μόνο με αλλαγές",
@@ -2184,7 +2184,7 @@ const I18N = {
     rs_day_free:"Fits freely", rs_day_shift:"Fits with a small change", rs_day_replan:"Fits if the day is re-planned",
     rs_day_none:"Doesn't fit", rs_day_off:"Not available", rs_day_already:"Already has an appointment that day", rs_day_current:"Already here",
     rs_day_spacing:"two days in a row", rs_back:"Back",
-    rs_kind_force:"Possible, but {n} others move too", rs_kind_force_alone:"Possible, if agreed", rs_force_days:"Other days change too: {n}",
+    rs_kind_force:"Possible, but {n} others move too", rs_kind_force_alone:"Possible, if agreed", rs_kind_force_swap:"Swap with {name}; {n} others move too", rs_force_days:"Other days change too: {n}",
     rs_force_outside:"{name}: outside the hours they gave ({from}–{to}) — ask if they can",
     rs_force_unlock:"Unlocks: {list}",
     rs_day_force:"Only with changes",
@@ -2431,7 +2431,7 @@ const I18N = {
     rs_day_free:"Rentre librement", rs_day_shift:"Rentre avec un petit changement", rs_day_replan:"Rentre si la journée est réorganisée",
     rs_day_none:"Ne rentre pas", rs_day_off:"Pas disponible", rs_day_already:"A déjà un rendez-vous ce jour-là", rs_day_current:"Déjà ici",
     rs_day_spacing:"deux jours de suite", rs_back:"Retour",
-    rs_kind_force:"Possible, mais {n} autres se déplacent aussi", rs_kind_force_alone:"Possible, après accord", rs_force_days:"D'autres jours changent aussi : {n}",
+    rs_kind_force:"Possible, mais {n} autres se déplacent aussi", rs_kind_force_alone:"Possible, après accord", rs_kind_force_swap:"Échange avec {name} ; {n} autres se déplacent aussi", rs_force_days:"D'autres jours changent aussi : {n}",
     rs_force_outside:"{name} : hors des heures indiquées ({from}–{to}) — demandez si c'est possible",
     rs_force_unlock:"Déverrouille : {list}",
     rs_day_force:"Seulement avec des changements",
@@ -2678,7 +2678,7 @@ const I18N = {
     rs_day_free:"Passt frei", rs_day_shift:"Passt mit kleiner Änderung", rs_day_replan:"Passt, wenn der Tag neu geplant wird",
     rs_day_none:"Passt nicht", rs_day_off:"Nicht verfügbar", rs_day_already:"Hat an dem Tag schon einen Termin", rs_day_current:"Schon hier",
     rs_day_spacing:"zwei Tage hintereinander", rs_back:"Zurück",
-    rs_kind_force:"Möglich, aber {n} andere verschieben sich auch", rs_kind_force_alone:"Möglich, nach Absprache", rs_force_days:"Weitere Tage ändern sich: {n}",
+    rs_kind_force:"Möglich, aber {n} andere verschieben sich auch", rs_kind_force_alone:"Möglich, nach Absprache", rs_kind_force_swap:"Tausch mit {name}; {n} andere verschieben sich auch", rs_force_days:"Weitere Tage ändern sich: {n}",
     rs_force_outside:"{name}: außerhalb der angegebenen Zeiten ({from}–{to}) — nachfragen, ob es geht",
     rs_force_unlock:"Entsperrt: {list}",
     rs_day_force:"Nur mit Änderungen",
@@ -7227,9 +7227,11 @@ const Scheduler = {
           if(!fitsW(w, t, d0)) continue;
           const c = { id: sl.studentId, addr: sl.address || '', s: t, e: t + d0 };
           if(!there.every(p => clear(c, p, d))) continue;
-          const score = (prefer.has(d) ? 0 : 1000) + Math.abs(t - this.toMin(sl.start));
+          // On the day the lesson leaves, the natural place is the one it
+          // frees: that is a straight swap.
+          const aim = d === srcDay ? this.toMin(src.start) : this.toMin(sl.start);
+          const score = (prefer.has(d) ? 0 : 1000) + Math.abs(t - aim);
           if(!best || score < best.score) best = { d, t, score };
-          break;
         }
       }
       return best;
@@ -7320,7 +7322,10 @@ const Scheduler = {
         const tDays = [...touched];
         const delta = this._travelMin(trial, tDays, settings) - this._travelMin(schedule, tDays, settings);
         const spacing = this.spacingViolations(trial, rs, settings).filter(v => !spBefore.has(v.key));
-        cands.push({ all, relax, delta, displaced, spacing, unlocked, evicted: evicted.map(nameOf), tDays,
+        const ev = all.filter(m => m.role === 'evicted');
+        const swapWith = ev.length === 1 && Number(ev[0].toDay) === srcDay &&
+          Math.abs(this.toMin(ev[0].toStart) - this.toMin(src.start)) <= 30 ? ev[0].name : null;
+        cands.push({ all, relax, delta, displaced, spacing, unlocked, evicted: evicted.map(nameOf), tDays, swapWith,
           cost: tDays.length * 1000 + unlocked.length * 300 + (outside ? 200 : 0) + evicted.length * 100 +
                 spacing.length * 150 + displaced / 2 + delta });
       }
@@ -7341,7 +7346,7 @@ const Scheduler = {
     for(const c of picked){
       out.push({ id: 'force:' + c.all.map(m => `${m.studentId}@${m.toDay}@${m.toStart}`).join('|'), level: 5, kind: 'force',
         deltaTravelMin: c.delta, displacedMin: c.displaced, moves: c.all, touchedDays: c.tDays, partner: null, shiftMin: null,
-        relax: c.relax, unlocked: c.unlocked, evicted: c.evicted,
+        relax: c.relax, unlocked: c.unlocked, evicted: c.evicted, swapWith: c.swapWith,
         spacing: c.spacing.map(v => ({ studentId: v.studentId, name: v.name, days: v.days })) });
     }
     return out;
@@ -14914,6 +14919,8 @@ const App = {
       if(o.kind === 'shift') return tf(o.shiftMin < 0 ? 'rs_kind_shift_earlier' : 'rs_kind_shift_later',
         { name: o.partner.name, min: Math.abs(o.shiftMin) });
       if(o.kind === 'replan') return tf('rs_kind_replan', { n: o.moves.length - 1 });
+      if(o.kind === 'force' && o.swapWith && o.moves.length === 2) return tf('rs_kind_swap', { name: o.swapWith });
+      if(o.kind === 'force' && o.swapWith) return tf('rs_kind_force_swap', { name: o.swapWith, n: o.moves.length - 2 });
       if(o.kind === 'force') return o.moves.length > 1 ? tf('rs_kind_force', { n: o.moves.length - 1 }) : t('rs_kind_force_alone');
       return t('rs_kind_relocate');
     };
