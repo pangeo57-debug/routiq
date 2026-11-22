@@ -1786,6 +1786,9 @@ function defaultSettings(){
     lunchBreak:0,
     // Most appointments the scheduler may put on one day. 0 = no limit.
     maxPerDay:0,
+    // Offer moves that keep the same student off two days in a row. Only the
+    // repair suggestions use it, not the automatic planning. Unset counts as on.
+    avoidConsecutiveDays:true,
     avgCitySpeedKmh:25,
     // OSRM prices a journey at the roads' speed limits, as if there were no
     // traffic lights, no queues and no looking for a place to park, so in a city
@@ -1916,6 +1919,15 @@ const I18N = {
     rs_stale:"Το πρόγραμμα άλλαξε και η πρόταση δεν ισχύει πια. Δεν άλλαξε τίποτα.",
     rs_undone:"Η αλλαγή ακυρώθηκε",
     rs_undo_blocked:"Δεν ακυρώθηκε — το πρόγραμμα έχει αλλάξει από τότε.",
+    settings_spacing_label:"Όχι διαδοχικές μέρες για το ίδιο άτομο",
+    settings_spacing_hint:"Όταν μετακινείς ένα ραντεβού, οι προτάσεις αποφεύγουν να βάλουν το ίδιο άτομο δύο μέρες στη σειρά, όταν γίνεται. Ο αυτόματος προγραμματισμός δεν επηρεάζεται.",
+    spacing_yes:"Ναι, απόφευγέ το",
+    spacing_no:"Όχι",
+    form_spacing_label:"Διαδοχικές μέρες",
+    form_spacing_auto:"Όπως στις ρυθμίσεις",
+    form_spacing_on:"Να αποφεύγονται πάντα",
+    form_spacing_off:"Δεν με νοιάζει",
+    rs_spacing_warn:"{name}: δύο μέρες στη σειρά ({days})",
     mode_week:'Εβδομάδα', mode_day:'Ημέρα', day_title:'Ημερήσιο πρόγραμμα', day_plan_btn:'Σχεδίασε τη μέρα', day_today:'Σήμερα', day_tomorrow:'Αύριο', day_stops:'στάσεις', day_driving:'οδήγηση', day_add_job:'Νέα δουλειά', day_edit_job:'Επεξεργασία δουλειάς', day_jobs_count:'{n} δουλειές — {date}', day_no_jobs:'Καμία δουλειά για αυτή τη μέρα. Πρόσθεσε ό,τι έχεις κλείσει και πάτα «Σχεδίασε τη μέρα».', day_not_planned:'εκτός προγράμματος', day_unplanned:'{n} δεν χώρεσαν', day_planned_ok:'{n} στάσεις, {km} km', day_nothing_to_plan:'Δεν υπάρχει δουλειά να προγραμματιστεί', day_planning:'Υπολογίζω…', day_job_name:'Τι είναι η δουλειά', day_job_name_ph:'π.χ. Διαρροή — Παπαδόπουλος', day_dur_min:'Διάρκεια (λεπτά)', day_dur_max:'Το πολύ', day_dur_max_ph:'προαιρετικό', day_window:'Χρονικό παράθυρο πελάτη', day_window_hint:'Άφησέ το κενό αν μπορεί οποιαδήποτε ώρα μέσα στο ωράριό σου.', day_window_invalid:'Το «ως» πρέπει να είναι μετά το «από»', day_delete_title:'Διαγραφή «{name}»;', day_delete_text:'Η δουλειά θα αφαιρεθεί από αυτή τη μέρα.',
     usage_ask_title:'Βοήθησε να γίνει καλύτερο;', usage_ask_text:'Αν θες, η εφαρμογή στέλνει μια φορά τη μέρα ανώνυμα: ότι χρησιμοποιήθηκε και πόσα km γλίτωσες. Κανένα όνομα, διεύθυνση ή πρόγραμμα. Το αλλάζεις όποτε θες στις Ρυθμίσεις.', usage_ask_ok:'Ναι, στείλε', settings_usage:'Ανώνυμα στατιστικά χρήσης', settings_usage_hint:'Μια φορά τη μέρα: ότι άνοιξε η εφαρμογή και πόσα km γλίτωσες. Χωρίς ονόματα, διευθύνσεις ή πρόγραμμα.',
     settings_workplace:'Χώρος εργασίας (προαιρετικό)', settings_workplace_ph:'π.χ. Γυμναστήριο, Ερμού 20, Πάτρα', settings_workplace_hint:'Αν οι πελάτες έρχονται σε σένα (γυμναστήριο, ιατρείο, φροντιστήριο), γράψε τη διεύθυνση μία φορά. Στον πελάτη τικάρεις «Στον χώρο μου» αντί για διεύθυνση, και τα ραντεβού εκεί μπαίνουν το ένα μετά το άλλο, χωρίς διαδρομή.', form_at_workplace:'Έρχεται στον χώρο μου', form_workplace_missing:'Γράψε πρώτα τη διεύθυνση του χώρου σου στις Ρυθμίσεις.',
@@ -2140,6 +2152,15 @@ const I18N = {
     rs_stale:"The schedule changed and this option no longer applies. Nothing was changed.",
     rs_undone:"Change undone",
     rs_undo_blocked:"Not undone — the schedule has changed since.",
+    settings_spacing_label:"No consecutive days for the same person",
+    settings_spacing_hint:"When you move an appointment, the suggestions avoid putting the same person on two days in a row, when possible. Automatic planning is not affected.",
+    spacing_yes:"Yes, avoid it",
+    spacing_no:"No",
+    form_spacing_label:"Consecutive days",
+    form_spacing_auto:"As in settings",
+    form_spacing_on:"Always avoid",
+    form_spacing_off:"Don't mind",
+    rs_spacing_warn:"{name}: two days in a row ({days})",
     mode_week:'Week', mode_day:'Day', day_title:'Day plan', day_plan_btn:'Plan the day', day_today:'Today', day_tomorrow:'Tomorrow', day_stops:'stops', day_driving:'driving', day_add_job:'New job', day_edit_job:'Edit job', day_jobs_count:'{n} jobs — {date}', day_no_jobs:'Nothing booked for this day. Add what you have and press Plan the day.', day_not_planned:'not scheduled', day_unplanned:'{n} did not fit', day_planned_ok:'{n} stops, {km}km', day_nothing_to_plan:'There is no work to plan', day_planning:'Working it out…', day_job_name:'What the job is', day_job_name_ph:'e.g. Leak — Papadopoulos', day_dur_min:'Takes (minutes)', day_dur_max:'At most', day_dur_max_ph:'optional', day_window:'Customer time window', day_window_hint:'Leave empty if any time within your working hours will do.', day_window_invalid:'The end must be after the start', day_delete_title:'Delete \u201c{name}\u201d?', day_delete_text:'The job will be removed from this day.',
     usage_ask_title:'Help make it better?', usage_ask_text:'If you like, the app sends once a day, anonymously: that it was used and how many km you saved. No names, addresses or schedule. You can change this any time in Settings.', usage_ask_ok:'Yes, send', settings_usage:'Anonymous usage statistics', settings_usage_hint:'Once a day: that the app was opened and how many km you saved. No names, addresses or schedule.',
     settings_workplace:'Workplace (optional)', settings_workplace_ph:'e.g. Gym, 20 Ermou St', settings_workplace_hint:'If clients come to you (gym, practice, studio), enter the address once. On a client, tick “At my place” instead of an address, and sessions there follow one another with no travel.', form_at_workplace:'Comes to my place', form_workplace_missing:'First enter your workplace address in Settings.',
@@ -2364,6 +2385,15 @@ const I18N = {
     rs_stale:"Le planning a changé et cette option ne s’applique plus. Rien n’a été modifié.",
     rs_undone:"Modification annulée",
     rs_undo_blocked:"Non annulé — le planning a changé depuis.",
+    settings_spacing_label:"Pas de jours consécutifs pour une même personne",
+    settings_spacing_hint:"Quand vous déplacez un rendez-vous, les propositions évitent de mettre la même personne deux jours de suite, si possible. La planification automatique n'est pas modifiée.",
+    spacing_yes:"Oui, l'éviter",
+    spacing_no:"Non",
+    form_spacing_label:"Jours consécutifs",
+    form_spacing_auto:"Comme dans les réglages",
+    form_spacing_on:"Toujours éviter",
+    form_spacing_off:"Peu importe",
+    rs_spacing_warn:"{name} : deux jours de suite ({days})",
     mode_week:'Semaine', mode_day:'Jour', day_title:'Planning du jour', day_plan_btn:'Planifier la journée', day_today:'Aujourd\u2019hui', day_tomorrow:'Demain', day_stops:'arrêts', day_driving:'trajet', day_add_job:'Nouvelle intervention', day_edit_job:'Modifier l\u2019intervention', day_jobs_count:'{n} interventions — {date}', day_no_jobs:'Rien de prévu ce jour. Ajoutez vos interventions puis appuyez sur Planifier la journée.', day_not_planned:'non planifiée', day_unplanned:'{n} n\u2019ont pas tenu', day_planned_ok:'{n} arrêts, {km}km', day_nothing_to_plan:'Aucune intervention à planifier', day_planning:'Calcul en cours…', day_job_name:'Nature de l\u2019intervention', day_job_name_ph:'ex. Fuite — Papadopoulos', day_dur_min:'Durée (minutes)', day_dur_max:'Au plus', day_dur_max_ph:'facultatif', day_window:'Créneau du client', day_window_hint:'Laissez vide si n\u2019importe quelle heure de vos horaires convient.', day_window_invalid:'La fin doit suivre le début', day_delete_title:'Supprimer « {name} » ?', day_delete_text:'L\u2019intervention sera retirée de cette journée.',
     usage_ask_title:'Aider à l\'améliorer ?', usage_ask_text:'Si vous voulez, l\'application envoie une fois par jour, anonymement : qu\'elle a été utilisée et combien de km vous avez économisés. Aucun nom, adresse ni planning. Modifiable à tout moment dans les Réglages.', usage_ask_ok:'Oui, envoyer', settings_usage:'Statistiques d\'utilisation anonymes', settings_usage_hint:'Une fois par jour : que l\'application a été ouverte et combien de km vous avez économisés. Sans noms, adresses ni planning.',
     settings_workplace:'Lieu de travail (facultatif)', settings_workplace_ph:'p. ex. Salle de sport, 20 rue…', settings_workplace_hint:'Si les clients viennent chez vous (salle, cabinet, studio), saisissez l\'adresse une fois. Sur un client, cochez « Chez moi » au lieu d\'une adresse : les séances s\'y enchaînent sans trajet.', form_at_workplace:'Vient chez moi', form_workplace_missing:'Saisissez d\'abord l\'adresse de votre lieu de travail dans les Réglages.',
@@ -2588,6 +2618,15 @@ const I18N = {
     rs_stale:"Der Plan hat sich geändert, diese Option gilt nicht mehr. Nichts wurde geändert.",
     rs_undone:"Änderung rückgängig gemacht",
     rs_undo_blocked:"Nicht rückgängig gemacht — der Plan hat sich seitdem geändert.",
+    settings_spacing_label:"Keine aufeinanderfolgenden Tage für dieselbe Person",
+    settings_spacing_hint:"Beim Verschieben eines Termins vermeiden die Vorschläge, dieselbe Person an zwei Tagen hintereinander einzuplanen, wenn möglich. Die automatische Planung bleibt unverändert.",
+    spacing_yes:"Ja, vermeiden",
+    spacing_no:"Nein",
+    form_spacing_label:"Aufeinanderfolgende Tage",
+    form_spacing_auto:"Wie in den Einstellungen",
+    form_spacing_on:"Immer vermeiden",
+    form_spacing_off:"Egal",
+    rs_spacing_warn:"{name}: zwei Tage hintereinander ({days})",
     mode_week:'Woche', mode_day:'Tag', day_title:'Tagesplan', day_plan_btn:'Tag planen', day_today:'Heute', day_tomorrow:'Morgen', day_stops:'Stopps', day_driving:'Fahrt', day_add_job:'Neuer Auftrag', day_edit_job:'Auftrag bearbeiten', day_jobs_count:'{n} Aufträge — {date}', day_no_jobs:'Für diesen Tag ist nichts eingetragen. Aufträge hinzufügen und Tag planen drücken.', day_not_planned:'nicht eingeplant', day_unplanned:'{n} passten nicht', day_planned_ok:'{n} Stopps, {km}km', day_nothing_to_plan:'Es gibt nichts zu planen', day_planning:'Wird berechnet…', day_job_name:'Worum es geht', day_job_name_ph:'z.B. Leck — Papadopoulos', day_dur_min:'Dauer (Minuten)', day_dur_max:'Höchstens', day_dur_max_ph:'optional', day_window:'Zeitfenster des Kunden', day_window_hint:'Leer lassen, wenn jede Zeit innerhalb Ihrer Arbeitszeit passt.', day_window_invalid:'Das Ende muss nach dem Beginn liegen', day_delete_title:'\u201e{name}\u201c löschen?', day_delete_text:'Der Auftrag wird von diesem Tag entfernt.',
     usage_ask_title:'Hilfst du mit, es besser zu machen?', usage_ask_text:'Wenn du willst, sendet die App einmal am Tag anonym: dass sie benutzt wurde und wie viele km du gespart hast. Keine Namen, Adressen oder Pläne. Jederzeit in den Einstellungen änderbar.', usage_ask_ok:'Ja, senden', settings_usage:'Anonyme Nutzungsstatistik', settings_usage_hint:'Einmal am Tag: dass die App geöffnet wurde und wie viele km du gespart hast. Ohne Namen, Adressen oder Pläne.',
     settings_workplace:'Arbeitsort (optional)', settings_workplace_ph:'z. B. Studio, Hauptstr. 20', settings_workplace_hint:'Wenn Kunden zu dir kommen (Studio, Praxis, Schule), gib die Adresse einmal ein. Beim Kunden hakst du „Kommt zu mir“ statt einer Adresse an, und Termine dort folgen ohne Fahrt aufeinander.', form_at_workplace:'Kommt zu mir', form_workplace_missing:'Gib zuerst die Adresse deines Arbeitsorts in den Einstellungen ein.',
@@ -6854,21 +6893,25 @@ const Scheduler = {
     }
 
     // ---- rank: least extra driving first ----------------------------------
+    const spBefore = new Set(this.spacingViolations(schedule, students, settings).map(v => v.key));
     for(const c of cands){
       c.touchedDays = [...new Set(c.moves.flatMap(m => [m.fromDay, m.toDay]))];
       c.deltaTravelMin = this._travelMin(c.trial, c.touchedDays, settings) -
                          this._travelMin(schedule, c.touchedDays, settings);
+      // Consecutive days this change would NEWLY create. Ones already there are not its doing.
+      c.spacing = this.spacingViolations(c.trial, students, settings).filter(v => !spBefore.has(v.key));
     }
     const sig = (c) => c.moves.map(m => `${m.studentId}@${m.toDay}@${m.toStart}`).sort().join('|');
     const seen = new Set();
-    cands.sort((a,b) => (a.deltaTravelMin - b.deltaTravelMin) || (a.moves.length - b.moves.length) ||
-      (a.tdist - b.tdist) || (a.level - b.level));
+    cands.sort((a,b) => (a.spacing.length - b.spacing.length) || (a.deltaTravelMin - b.deltaTravelMin) ||
+      (a.moves.length - b.moves.length) || (a.tdist - b.tdist) || (a.level - b.level));
     for(const c of cands){
       const k = sig(c);
       if(seen.has(k)) continue;
       seen.add(k);
       res.options.push({ id: `${c.kind}:${k}`, level: c.level, kind: c.kind, deltaTravelMin: c.deltaTravelMin,
-        moves: c.moves, touchedDays: c.touchedDays, partner: c.partner, shiftMin: c.shiftMin });
+        moves: c.moves, touchedDays: c.touchedDays, partner: c.partner, shiftMin: c.shiftMin,
+        spacing: c.spacing.map(v => ({ studentId: v.studentId, name: v.name, days: v.days })) });
       if(res.options.length >= max) break;
     }
     if(!res.options.length) res.notes.push('no_option');
@@ -6898,6 +6941,63 @@ const Scheduler = {
   // Undo of applyRescheduleOption: put the touched days back as they were.
   restoreDays(schedule, snapshot){
     for(const d of Object.keys(snapshot)) schedule[d] = snapshot[d].slice();
+  },
+
+  // ---- SPACING: the same student not on two days in a row ------------------
+  //
+  // Nobody wants to teach the same person Tuesday and Wednesday. The rule is
+  // kept OUT of verifySchedule on purpose: the optimizer does not know it yet
+  // and hands back weeks with consecutive days, so putting it there would
+  // raise warnings on every schedule that already exists. It lives here, and
+  // the moves the person makes (the repair engine) are held to it: an option
+  // that would create a new consecutive pair is offered after the ones that do
+  // not, and says so.
+  //
+  // "When possible": with 4-5 lessons a week nobody can be spread over five
+  // days, so the rule only applies where the week has room for it (up to 3 in
+  // a Mon-Fri week). A student can be set to always / never regardless.
+
+  // Sunday is 0 in the app's day numbers but the END of the week.
+  _dayNo(d){ return Number(d) === 0 ? 7 : Number(d); },
+
+  // How many lessons fit on days that are not next to each other.
+  _maxSpread(days){
+    const ds = (days || []).map(d => this._dayNo(d)).sort((a, b) => a - b);
+    let n = 0, last = -9;
+    for(const d of ds){ if(d - last >= 2){ n++; last = d; } }
+    return n;
+  },
+
+  spacingApplies(st, settings){
+    if(!st) return false;
+    const mode = st.spacing;                              // 'on' | 'off' | unset = follow the setting
+    if(mode === 'off') return false;
+    if(mode !== 'on' && settings.avoidConsecutiveDays === false) return false;   // unset counts as on
+    const n = st.lessonsPerWeek || 1;
+    if(n < 2) return false;
+    if(mode === 'on') return true;
+    return n <= this._maxSpread(settings.workDays);
+  },
+
+  // Every pair of consecutive days a student (anyone in a shared block too)
+  // has lessons on. { key, studentId, name, days:[a,b] }, key is stable so
+  // "before" and "after" can be compared.
+  spacingViolations(schedule, students, settings){
+    const sm = Object.fromEntries(students.map(s => [s.id, s]));
+    const daysOf = {};
+    for(const d of (settings.workDays || []))
+      for(const sl of (schedule[d] || []))
+        for(const id of this.occupantIds(sl)) (daysOf[id] = daysOf[id] || new Set()).add(Number(d));
+    const out = [];
+    for(const id of Object.keys(daysOf)){
+      const st = sm[id];
+      if(!this.spacingApplies(st, settings)) continue;
+      const ds = [...daysOf[id]].sort((a, b) => this._dayNo(a) - this._dayNo(b));
+      for(let i = 0; i + 1 < ds.length; i++)
+        if(this._dayNo(ds[i + 1]) - this._dayNo(ds[i]) === 1)
+          out.push({ key: `${id}:${ds[i]}-${ds[i + 1]}`, studentId: id, name: st.name, days: [ds[i], ds[i + 1]] });
+    }
+    return out;
   },
 
   /**
@@ -11372,6 +11472,14 @@ const App = {
           onclick="App.findMatchForForm()">${ico('search', 14)} ${esc(t('form_find_match'))}</button>
       </div>
       <div class="form-group" style="margin-top:14px">
+        <label>${t('form_spacing_label')}</label>
+        <select id="st-spacing">
+          <option value="" ${!st?.spacing?'selected':''}>${t('form_spacing_auto')}</option>
+          <option value="on" ${st?.spacing==='on'?'selected':''}>${t('form_spacing_on')}</option>
+          <option value="off" ${st?.spacing==='off'?'selected':''}>${t('form_spacing_off')}</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:14px">
         <label>${t('student_notes_label')}</label>
         <textarea id="st-notes" placeholder="${t('form_notes_placeholder')}">${esc(st?.notes||'')}</textarea>
       </div>
@@ -13110,6 +13218,7 @@ const App = {
       group: document.getElementById('st-group')?.value?.trim()||'',
       pairedWith: document.getElementById('st-paired')?.value||null,
       notes: document.getElementById('st-notes')?.value?.trim()||'',
+      spacing: document.getElementById('st-spacing')?.value || undefined,
       mergeMode: document.getElementById('st-mergemode')?.value||'off',
       forceMerge: document.getElementById('st-mergemode')?.value==='always',
       maxMergeSessions: Number(document.getElementById('st-mergesize')?.value)||undefined,
@@ -14329,6 +14438,8 @@ const App = {
         <div style="font-weight:600">${esc(kindText(o))}</div>
         ${o.moves.map(m => `<div style="font-size:13px;margin-top:3px">${esc(tf('rs_line',
           { name: m.name, day: DAYS_FULL[m.toDay] || '', from: m.toStart, to: m.toEnd }))}</div>`).join('')}
+        ${(o.spacing || []).map(v => `<div style="font-size:12px;margin-top:4px;color:var(--orange,#c2410c)">⚠ ${esc(tf('rs_spacing_warn',
+          { name: v.name, days: v.days.map(d => DAYS_FULL[d] || '').join('–') }))}</div>`).join('')}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">
           <span style="font-size:12px;font-weight:600;color:${o.deltaTravelMin < 0 ? 'var(--green)' : 'var(--text3)'}">${esc(deltaText(o.deltaTravelMin))}</span>
           <button class="btn btn-primary" style="padding:6px 14px" onclick="App.applyRescheduleOption(${i})">${esc(t('rs_apply'))}</button>
@@ -15410,6 +15521,14 @@ const App = {
           </select>
           <div class="settings-sub">${t('settings_maxday_hint')}</div>
         </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label>${t('settings_spacing_label')}</label>
+          <select id="set-spacing">
+            <option value="1" ${st.avoidConsecutiveDays!==false?'selected':''}>${t('spacing_yes')}</option>
+            <option value="0" ${st.avoidConsecutiveDays===false?'selected':''}>${t('spacing_no')}</option>
+          </select>
+          <div class="settings-sub">${t('settings_spacing_hint')}</div>
+        </div>
       </div>
 
       <div class="section-title">${t('settings_blocked')}</div>
@@ -15652,6 +15771,7 @@ const App = {
     s.hereApiKey = s.hereApiKey || '';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
     s.maxPerDay = Number(document.getElementById('set-maxday')?.value)||0;
+    { const sp = document.getElementById('set-spacing'); if(sp) s.avoidConsecutiveDays = sp.value !== '0'; }
 
     // If home address changed, use the coord already resolved by autocomplete/
     // map-picker selection if we have one — avoids an extra geocode round-trip
