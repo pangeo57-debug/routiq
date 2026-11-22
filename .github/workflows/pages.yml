@@ -46,8 +46,7 @@ jobs:
         with:
           node-version: 20
 
-      # Fails loudly when the secret is missing, so a site without a map never
-      # goes live by accident.
+      # Without the secret the site still deploys, just without the map key.
       - name: Write the Google Maps config
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}

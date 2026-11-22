@@ -1,12 +1,13 @@
 import { writeFile } from 'node:fs/promises';
 
+// Without the key the site still goes live; only the map stays off, and the
+// app already copes with an empty key (see the onerror on the script tag).
 const key = String(process.env.GOOGLE_MAPS_API_KEY || '').trim();
 if (!key) {
-  console.error('GOOGLE_MAPS_API_KEY is required');
-  process.exit(1);
+  console.warn('GOOGLE_MAPS_API_KEY is not set: deploying without the map key');
 }
 
 await writeFile(
   'google-maps-config.js',
-  `// Generated locally/deployment-only. Do not commit.\nwindow.ROUTEPAL_GOOGLE_MAPS_API_KEY=${JSON.stringify(key)};\n`,
+  `// Generated at deploy time. Do not commit.\nwindow.ROUTEPAL_GOOGLE_MAPS_API_KEY=${JSON.stringify(key)};\n`,
 );
