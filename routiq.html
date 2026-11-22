@@ -1850,6 +1850,7 @@ const I18N = {
     form_pick_on_map:'Επιλογή στον χάρτη', form_pick_confirm:'Επιβεβαίωση τοποθεσίας',
     form_location_map_label:'Τοποθεσία στον χάρτη',
     form_location_map_hint:'Σύρε το pin ή πάτα στον χάρτη για να διορθώσεις την ακριβή τοποθεσία.',
+    form_map_show:'Χάρτης',
     toast_location_picked:'Η τοποθεσία επιλέχθηκε',
     toast_home_location_saved:'Η διεύθυνσή σου αποθηκεύτηκε',
     form_times_per_week:'Φορές/εβδ.', form_merge_label:'Ενιαίο block (συνεχόμενα)',
@@ -2059,6 +2060,7 @@ const I18N = {
     form_pick_on_map:'Pick on map', form_pick_confirm:'Confirm location',
     form_location_map_label:'Location on map',
     form_location_map_hint:'Drag the pin or tap the map to fine-tune the exact location.',
+    form_map_show:'Map',
     toast_location_picked:'Location selected',
     toast_home_location_saved:'Your address was saved',
     form_times_per_week:'Times/wk', form_merge_label:'Single block (back to back)',
@@ -2268,6 +2270,7 @@ const I18N = {
     form_pick_on_map:'Choisir sur la carte', form_pick_confirm:'Confirmer l\'emplacement',
     form_location_map_label:'Emplacement sur la carte',
     form_location_map_hint:'Faites glisser le repère ou touchez la carte pour ajuster l\'emplacement exact.',
+    form_map_show:'Carte',
     toast_location_picked:'Emplacement sélectionné',
     toast_home_location_saved:'Votre adresse a été enregistrée',
     form_times_per_week:'Fois/sem.', form_merge_label:'Bloc unique (double cours, etc.)',
@@ -2477,6 +2480,7 @@ const I18N = {
     form_pick_on_map:'Auf der Karte wählen', form_pick_confirm:'Standort bestätigen',
     form_location_map_label:'Standort auf der Karte',
     form_location_map_hint:'Ziehen Sie den Pin oder tippen Sie auf die Karte, um den genauen Standort anzupassen.',
+    form_map_show:'Karte',
     toast_location_picked:'Standort ausgewählt',
     toast_home_location_saved:'Deine Adresse wurde gespeichert',
     form_times_per_week:'Mal/Woche', form_merge_label:'Einzelblock (Doppelstunde usw.)',
@@ -10878,6 +10882,11 @@ const App = {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
           <button type="button" class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.hereNow('st-addr')">${ico('pin', 13)} ${esc(t('gps_here'))}</button>
           <button type="button" class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.findInGoogleMaps('st-addr','st-name')">${ico('search', 13)} ${esc(t('gmaps_find'))}</button>
+          <button type="button" class="chip chip-gray" id="st-map-btn" aria-pressed="false" style="border:none;cursor:pointer;min-height:36px" onclick="App.toggleStudentMap()">${ico('map', 13)} ${esc(t('form_map_show'))}</button>
+        </div>
+        <div id="st-loc-wrap" style="display:none;margin-top:8px">
+          <div id="st-loc-map" style="height:170px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate"></div>
+          <div class="settings-sub" style="margin-top:4px">${t('form_location_map_hint')}</div>
         </div>
         <div id="addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
@@ -10902,16 +10911,34 @@ const App = {
           </select>
         </div>
       </div>
-      <details id="st-more" class="fold fold-plain" ${st ? 'open' : ''} style="margin:14px 0 0" ontoggle="if(this.open){const m=document.getElementById('st-loc-map');if(m&&m.__google_map)setTimeout(()=>google.maps.event.trigger(m.__google_map,'resize'),50);}">
+      <div class="form-group" id="merge-field" style="margin-top:14px;display:${(st?.lessonsPerWeek||1)>=2?'block':'none'}">
+        ${this._mergeFieldHtml(st?.lessonsPerWeek||1, st)}
+      </div>
+      <div class="section-title" style="padding:0;margin:16px 0 8px">${t('form_time_constraints_title')}</div>
+      <div id="avail-exceptions-block">
+        <div class="settings-sub" style="margin-bottom:10px">${t('form_avail_mode_hint')}</div>
+        <div id="avail-exceptions-list">${this.renderAvExceptionsList()}</div>
+        <div class="form-row" style="margin-top:10px;align-items:flex-end">
+          <div class="form-group" style="margin:0;flex:1">
+            <label style="font-size:12px">${t('form_avail_exceptions_title')}</label>
+            <select id="avex-day">
+              ${(state.settings.workDays||[1,2,3,4,5]).map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <input type="time" id="avex-start" value="17:00">
+          </div>
+          <div class="form-group" style="margin:0">
+            <input type="time" id="avex-end" value="18:00">
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-full" style="margin-top:8px" onclick="App.addAvException()">${t('form_avail_add_exception')}</button>
+      </div>
+      <details id="st-more" class="fold fold-plain" ${st ? 'open' : ''} style="margin:14px 0 0">
         <summary>${t('form_more')}</summary>
       <div class="form-group">
         <label>${t('form_phone_label')}</label>
         <input type="tel" id="st-phone" placeholder="${t('form_phone_ph')}" value="${esc(st?.phone||'')}" autocomplete="tel">
-      </div>
-      <div class="form-group">
-        <label>${t('form_location_map_label')}</label>
-        <div id="st-loc-map" style="height:170px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate"></div>
-        <div class="settings-sub" style="margin-top:4px">${t('form_location_map_hint')}</div>
       </div>
       <div class="form-group">
         <label>${L.session}</label>
@@ -10944,9 +10971,6 @@ const App = {
           placeholder="${esc(t('form_durations_ph'))}">
         <p style="font-size:12px;color:var(--text3);margin-top:4px">${esc(t('form_durations_hint'))}</p>
       </div>
-      <div class="form-group" id="merge-field" style="margin-top:14px;display:${(st?.lessonsPerWeek||1)>=2?'block':'none'}">
-        ${this._mergeFieldHtml(st?.lessonsPerWeek||1, st)}
-      </div>
       <div class="form-row" style="margin-top:14px">
         <div class="form-group" style="margin:0">
           <label>${t('form_type_label')}</label>
@@ -10959,26 +10983,6 @@ const App = {
           <label>${t('form_group_code_label')}</label>
           <input type="text" id="st-group" placeholder="${t('form_group_code_placeholder')}" value="${esc(st?.group||'')}">
         </div>
-      </div>
-      <div class="section-title" style="padding:0;margin:16px 0 8px">${t('form_time_constraints_title')}</div>
-      <div id="avail-exceptions-block">
-        <div class="settings-sub" style="margin-bottom:10px">${t('form_avail_mode_hint')}</div>
-        <div id="avail-exceptions-list">${this.renderAvExceptionsList()}</div>
-        <div class="form-row" style="margin-top:10px;align-items:flex-end">
-          <div class="form-group" style="margin:0;flex:1">
-            <label style="font-size:12px">${t('form_avail_exceptions_title')}</label>
-            <select id="avex-day">
-              ${(state.settings.workDays||[1,2,3,4,5]).map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group" style="margin:0">
-            <input type="time" id="avex-start" value="17:00">
-          </div>
-          <div class="form-group" style="margin:0">
-            <input type="time" id="avex-end" value="18:00">
-          </div>
-        </div>
-        <button type="button" class="btn btn-secondary btn-full" style="margin-top:8px" onclick="App.addAvException()">${t('form_avail_add_exception')}</button>
       </div>
       <div class="form-group" style="margin-top:14px">
         <label>${t('student_paired_label')}</label>
@@ -11002,7 +11006,22 @@ const App = {
     // Reset any picked-but-unsaved coord from a previous drawer session before
     // seeding the inline map from this student's actual saved location.
     this._addrPendingCoord = null;
-    this.initStudentLocationMap(st);
+    this._locStudent = st || null;   // the map is built only when it is asked for
+  },
+
+  // The map under the address: closed until wanted, built the first time it
+  // is opened, from a position already picked (suggestion, GPS) if there is one.
+  toggleStudentMap(){
+    const wrap = document.getElementById('st-loc-wrap');
+    if(!wrap) return;
+    const open = wrap.style.display === 'none';
+    wrap.style.display = open ? '' : 'none';
+    const btn = document.getElementById('st-map-btn');
+    if(btn) btn.setAttribute('aria-pressed', String(open));
+    if(!open) return;
+    const el = document.getElementById('st-loc-map');
+    if(el && el.__google_map) setTimeout(() => google.maps.event.trigger(el.__google_map, 'resize'), 50);
+    else this.initStudentLocationMap(this._locStudent);
   },
 
   // Inline draggable-pin map shown right in the edit form (in addition to the
@@ -11011,7 +11030,7 @@ const App = {
   initStudentLocationMap(st){
     const el = document.getElementById('st-loc-map');
     if(!el) return;
-    const existing = st && state.coords[st.id];
+    const existing = this._addrPendingCoord || (st && state.coords[st.id]);
     const home = state.coords['home'] || {lat:38.2466, lon:21.7346};
     const start = existing || home;
     const onPin = (lat, lon)=>{
@@ -11036,7 +11055,7 @@ const App = {
   // coordinate picked another way (search suggestion, full-screen map picker).
   updateStudentLocationMapMarker(coord){
     const el = document.getElementById('st-loc-map');
-    if(!el) return;
+    if(!el || !el.__google_map) return;   // not opened yet: it will start from this position
     this._googleMapUpdate(el,{center:coord,zoom:16,
       markers:[{lat:coord.lat,lon:coord.lon,draggable:true,title:''}],fitBounds:[coord]});
   },
