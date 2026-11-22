@@ -101,6 +101,8 @@ npm run bench -- --against HEAD~1  # αυτή η έκδοση εναντίον �
 
 Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζωντανό μέσα σε 30-60 δευτερόλεπτα.
 
+Το deploy γίνεται από GitHub Actions (`.github/workflows/pages.yml`), γιατί το Google Maps key δεν είναι στο repo: το workflow το γράφει στο site την ώρα του deploy από το secret `GOOGLE_MAPS_API_KEY` (Settings → Secrets and variables → Actions). Μία φορά: Settings → Pages → Source → «GitHub Actions». Για τοπική δοκιμή: `GOOGLE_MAPS_API_KEY=... npm run config:google`.
+
 Ο service worker είναι network-first, οπότε μια συσκευή με σήμα παίρνει πάντα την τελευταία έκδοση χωρίς hard refresh. (Συσκευές που είχαν τον παλιό, blob-based worker χρειάζονται ένα τελευταίο hard refresh για να περάσουν στον νέο.)
 
 ## Roadmap

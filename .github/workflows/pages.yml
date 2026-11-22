@@ -1,0 +1,63 @@
+# Deploys the site to GitHub Pages and puts the Google Maps key into it.
+#
+# The key is NOT in the repository (google-maps-config.js is git-ignored).
+# It lives in a repository secret and is written into the site here, at
+# deploy time:
+#
+#   Repo -> Settings -> Secrets and variables -> Actions -> New repository secret
+#     Name:  GOOGLE_MAPS_API_KEY
+#     Value: the browser key (restricted to this site's address, and to the
+#            Maps JavaScript, Places (New) and Geocoding APIs)
+#
+# One-time switch: Repo -> Settings -> Pages -> Build and deployment -> Source
+# -> "GitHub Actions". Until then Pages keeps deploying straight from the
+# branch, without the key.
+#
+# A browser key is visible to anyone who opens the site; that is how Google
+# designed it. What protects it is the restrictions set on the key in Google
+# Cloud, plus a daily quota and a billing alert there.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Fails loudly when the secret is missing, so a site without a map never
+      # goes live by accident.
+      - name: Write the Google Maps config
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        run: npm run config:google
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
