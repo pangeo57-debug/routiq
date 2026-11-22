@@ -9778,7 +9778,11 @@ const App = {
   },
   async _googlePlacesAutocomplete(val, boxId){
     const googleMaps=await this._ensureGoogleMapsReady();
-    const home=state.coords?.home||{lat:38.2466,lon:21.7346};
+    // Near the person: their home, else their workplace, else Patras. A
+    // tight bias (15 km) keeps the shop round the corner above the one with
+    // the same name across the country; far places still appear if typed.
+    const near=[state.coords?.home, state.coords?.workplace].find(c=>Scheduler.validCoord(c));
+    const home=near||{lat:38.2466,lon:21.7346};
     const sessionToken=this._googlePlacesSession(boxId);
     const request={
       input:String(val||'').trim(),
@@ -9786,7 +9790,8 @@ const App = {
       includedRegionCodes:['gr'],
       // The JavaScript API wants {center:{lat,lng}, radius}; the REST shape
       // ({circle:{center:{latitude,…}}}) is rejected and no suggestion came back.
-      locationBias:{center:{lat:home.lat,lng:home.lon},radius:50000}
+      locationBias:{center:{lat:home.lat,lng:home.lon},radius:15000},
+      origin:{lat:home.lat,lng:home.lon}
     };
     const suggestions=await googleMaps.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions?.(request);
     if(suggestions && Array.isArray(suggestions.suggestions)){
@@ -12138,6 +12143,9 @@ const App = {
     // seeding the inline map from this student's actual saved location.
     this._addrPendingCoord = null;
     this._locStudent = st || null;   // the map is built only when it is asked for
+    // Someone with a known position: the map shows it straight away.
+    if(st && Scheduler.validCoord(state.coords[st.id]) && this._googleMapsApiKey())
+      setTimeout(() => this._openLocMap('st-loc-wrap', () => this.toggleStudentMap()), 0);
   },
 
   // The map under the address: closed until wanted, built the first time it
@@ -12185,6 +12193,10 @@ const App = {
   // Moves the inline location-map's marker (if currently open) to match a
   // coordinate picked another way (search suggestion, full-screen map picker).
   updateStudentLocationMapMarker(coord){
+    // An address was just picked: show where it is, so a wrong pin is seen
+    // now and not at the door. Opening builds the map from this position.
+    const w = document.getElementById('st-loc-wrap');
+    if(w && w.style.display === 'none' && this._googleMapsApiKey()){ this.toggleStudentMap(); return; }
     const el = document.getElementById('st-loc-map');
     if(!el || !el.__google_map) return;   // not opened yet: it will start from this position
     this._googleMapUpdate(el,{center:coord,zoom:16,
@@ -12244,6 +12256,7 @@ const App = {
     Storage.saveCoords(state.coords);
     Storage.saveSettings(state.settings);
     this._homeAddrPendingCoord = null;
+    this._openLocMap('set-home-wrap', () => this.toggleHomeMap());
     this.updateHomeLocationMapMarker(coord);
     // Surgical DOM update instead of a full renderSettings() — that would
     // rebuild the whole screen (losing scroll position/keyboard focus) just
@@ -16458,6 +16471,16 @@ const App = {
       <p style="text-align:center;font-size:12px;color:var(--text3);margin:14px 16px 0">${esc(tf('copyright_line', { year: new Date().getFullYear() }))}</p>
       <div style="height:16px"></div>
     `;
+    // With a known home position and a map key, the map is shown under the
+    // address from the start; without one it waits to be asked for.
+    if(Scheduler.validCoord(state.coords && state.coords.home) && this._googleMapsApiKey())
+      setTimeout(() => this._openLocMap('set-home-wrap', () => this.toggleHomeMap()), 0);
+  },
+
+  // Opens a closed address map (no-op when already open).
+  _openLocMap(wrapId, toggle){
+    const w = document.getElementById(wrapId);
+    if(w && w.style.display === 'none') toggle();
   },
 
   // The home map is built only when asked for, like the one in the client form.
