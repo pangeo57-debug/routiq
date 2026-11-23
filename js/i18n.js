@@ -1222,3 +1222,61 @@ Object.assign(I18N.fr, { cal_add_week: 'Toute la semaine au calendrier', cal_wee
 Object.assign(I18N.de, { cal_add_week: 'Ganze Woche in den Kalender', cal_week_saved: '{n} Termine für den Handykalender, jede Woche, mit Erinnerung. Ändert sich der Plan, erneut hinzufügen.',
   remind_before_label: 'Erinnerung vor jedem Termin', remind_before_hint: 'Für die Benachrichtigungen der App und den Handykalender, der auch bei geschlossener App erinnert.',
   remind_before_15: '15 Minuten', remind_before_30: '30 Minuten', remind_before_60: '1 Stunde', remind_before_120: '2 Stunden', remind_before_1440: '1 Tag' });
+
+// Strings for a lesson cancelled for one day, and filling its place (js/dayfill.js).
+Object.assign(I18N.el, {
+  df_cancel_btn: 'Ακύρωση μόνο γι’ αυτή τη μέρα', df_cancel_title: 'Ακύρωση: {name}', df_cancel_text: 'Μόνο για {date}, {time}. Το εβδομαδιαίο πρόγραμμα μένει ίδιο.', df_cancel_ok: 'Ακύρωση',
+  df_cancelled: 'Ακυρώθηκε για σήμερα: {name}', df_restore: 'Επαναφορά', df_fill_btn: 'Γέμισε το κενό', df_only_today: 'μόνο αυτή τη μέρα',
+  df_fill_title: 'Ελεύθερο {from}–{to}: ποιος θα μπορούσε;', df_fill_hint: 'Μόνο γι’ αυτή τη μέρα. Τα υπόλοιπα ραντεβού της μέρας μένουν στην ώρα τους.',
+  df_fill_none: 'Κανείς δεν μπορεί να έρθει σε αυτό το διάστημα, με τις ώρες που έχουν δηλώσει.', df_leave_free: 'Το αφήνω ελεύθερο', df_choose: 'Αυτό',
+  df_from: 'Έρχεται από {day} {time}', df_extra_label: 'Επιπλέον ραντεβού', df_on_time: 'Στην ώρα του ακυρωμένου: η μέρα σου μένει όπως ήταν',
+  df_km_less_today: '{km} km λιγότερα σήμερα', df_km_more_today: '{km} km περισσότερα σήμερα', df_km_less_there: '{km} km λιγότερα την {day}',
+  df_km_more_there: '{km} km περισσότερα την {day}', df_day_free: 'Η {day} μένει ελεύθερη', df_day_shorter: 'Η {day} τελειώνει νωρίτερα ή ξεκινά αργότερα',
+  df_gap_there: 'Ανοίγει κενό {min}′ την {day} στις {time}', df_two_days: 'Δύο συνεχόμενες μέρες για τον ίδιο πελάτη', df_other_time: 'Σε άλλη ώρα: {time}',
+  df_extra: 'Επιπλέον έσοδο', df_extra_paid: 'Επιπλέον {eur} €',
+  df_ask_title: 'Ρώτα: {name}', df_ask_hint: 'Στείλε το μήνυμα. Αν πει όχι, το αναιρείς από την Αρχική.',
+  df_filled: '{name} στις {time}, μόνο γι’ αυτή τη μέρα', df_msg_move: 'Γεια σου {name}! Μου ελευθερώθηκε μια ώρα: μπορείς {date} στις {time} αντί για {day} {was};',
+  df_msg_extra: 'Γεια σου {name}! Μου ελευθερώθηκε μια ώρα: θέλεις ένα επιπλέον ραντεβού ({session}) {date} στις {time};',
+});
+Object.assign(I18N.en, {
+  df_cancel_btn: 'Cancel for this day only', df_cancel_title: 'Cancel: {name}', df_cancel_text: 'Only for {date}, {time}. The weekly plan stays as it is.', df_cancel_ok: 'Cancel it',
+  df_cancelled: 'Cancelled for today: {name}', df_restore: 'Restore', df_fill_btn: 'Fill the gap', df_only_today: 'this day only',
+  df_fill_title: 'Free {from}–{to}: who could come?', df_fill_hint: 'For this day only. The rest of the day stays on time.',
+  df_fill_none: 'Nobody can come in this stretch, with the hours they gave.', df_leave_free: 'Leave it free', df_choose: 'This one',
+  df_from: 'Brought from {day} {time}', df_extra_label: 'Extra appointment', df_on_time: 'At the cancelled time: your day stays as it was',
+  df_km_less_today: '{km} km less today', df_km_more_today: '{km} km more today', df_km_less_there: '{km} km less on {day}',
+  df_km_more_there: '{km} km more on {day}', df_day_free: '{day} becomes free', df_day_shorter: '{day} ends earlier or starts later',
+  df_gap_there: 'A {min}′ gap on {day} at {time}', df_two_days: 'Two days in a row for this client', df_other_time: 'At another time: {time}',
+  df_extra: 'Extra income', df_extra_paid: 'Extra €{eur}',
+  df_ask_title: 'Ask: {name}', df_ask_hint: 'Send the message. If they say no, undo it from Home.',
+  df_filled: '{name} at {time}, this day only', df_msg_move: 'Hi {name}! A slot opened up: could you come {date} at {time} instead of {day} {was}?',
+  df_msg_extra: 'Hi {name}! A slot opened up: would you like an extra appointment ({session}) {date} at {time}?',
+});
+Object.assign(I18N.fr, {
+  df_cancel_btn: 'Annuler pour ce jour seulement', df_cancel_title: 'Annuler : {name}', df_cancel_text: 'Seulement pour {date}, {time}. Le planning de la semaine ne change pas.', df_cancel_ok: 'Annuler',
+  df_cancelled: 'Annulé pour aujourd’hui : {name}', df_restore: 'Rétablir', df_fill_btn: 'Combler le créneau', df_only_today: 'ce jour seulement',
+  df_fill_title: 'Libre {from}–{to} : qui pourrait venir ?', df_fill_hint: 'Pour ce jour seulement. Le reste de la journée reste à l’heure.',
+  df_fill_none: 'Personne ne peut venir sur ce créneau, selon les horaires donnés.', df_leave_free: 'Le laisser libre', df_choose: 'Celui-ci',
+  df_from: 'Avancé de {day} {time}', df_extra_label: 'Rendez-vous en plus', df_on_time: 'À l’heure annulée : votre journée ne change pas',
+  df_km_less_today: '{km} km de moins aujourd’hui', df_km_more_today: '{km} km de plus aujourd’hui', df_km_less_there: '{km} km de moins {day}',
+  df_km_more_there: '{km} km de plus {day}', df_day_free: '{day} devient libre', df_day_shorter: '{day} finit plus tôt ou commence plus tard',
+  df_gap_there: 'Un trou de {min}′ {day} à {time}', df_two_days: 'Deux jours de suite pour ce client', df_other_time: 'À une autre heure : {time}',
+  df_extra: 'Revenu en plus', df_extra_paid: '{eur} € en plus',
+  df_ask_title: 'Demander : {name}', df_ask_hint: 'Envoyez le message. S’il refuse, annulez depuis l’Accueil.',
+  df_filled: '{name} à {time}, ce jour seulement', df_msg_move: 'Bonjour {name} ! Un créneau s’est libéré : pourriez-vous venir {date} à {time} au lieu de {day} {was} ?',
+  df_msg_extra: 'Bonjour {name} ! Un créneau s’est libéré : une séance en plus ({session}) {date} à {time} ?',
+});
+Object.assign(I18N.de, {
+  df_cancel_btn: 'Nur für diesen Tag absagen', df_cancel_title: 'Absagen: {name}', df_cancel_text: 'Nur für {date}, {time}. Der Wochenplan bleibt.', df_cancel_ok: 'Absagen',
+  df_cancelled: 'Für heute abgesagt: {name}', df_restore: 'Wiederherstellen', df_fill_btn: 'Lücke füllen', df_only_today: 'nur an diesem Tag',
+  df_fill_title: 'Frei {from}–{to}: wer könnte kommen?', df_fill_hint: 'Nur für diesen Tag. Der Rest des Tages bleibt pünktlich.',
+  df_fill_none: 'Niemand kann in dieser Zeit kommen, laut den angegebenen Zeiten.', df_leave_free: 'Frei lassen', df_choose: 'Diesen',
+  df_from: 'Vorgezogen von {day} {time}', df_extra_label: 'Zusätzlicher Termin', df_on_time: 'Zur abgesagten Zeit: Ihr Tag bleibt wie er war',
+  df_km_less_today: '{km} km weniger heute', df_km_more_today: '{km} km mehr heute', df_km_less_there: '{km} km weniger am {day}',
+  df_km_more_there: '{km} km mehr am {day}', df_day_free: '{day} wird frei', df_day_shorter: '{day} endet früher oder beginnt später',
+  df_gap_there: 'Eine Lücke von {min}′ am {day} um {time}', df_two_days: 'Zwei Tage hintereinander für diesen Kunden', df_other_time: 'Zu anderer Zeit: {time}',
+  df_extra: 'Zusätzliche Einnahme', df_extra_paid: '{eur} € zusätzlich',
+  df_ask_title: 'Fragen: {name}', df_ask_hint: 'Nachricht senden. Bei einem Nein auf der Startseite rückgängig machen.',
+  df_filled: '{name} um {time}, nur an diesem Tag', df_msg_move: 'Hallo {name}! Ein Termin ist frei geworden: kannst du {date} um {time} statt {day} {was}?',
+  df_msg_extra: 'Hallo {name}! Ein Termin ist frei geworden: möchtest du einen Extratermin ({session}) {date} um {time}?',
+});

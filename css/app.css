@@ -735,3 +735,7 @@ body.sched-on .toast-container{bottom:calc(var(--nav-h) + 20px + var(--sched-h, 
 @media(prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important}
 }
+
+/* An open dialog sits above the progress panel and the messages: their
+   buttons must never be covered by a calculation running underneath. */
+.confirm-overlay.open{z-index:10010}

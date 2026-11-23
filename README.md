@@ -156,6 +156,7 @@ Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζ�
 | `js/payments.js` | who owes what, counted in appointments |
 | `js/cadence.js` | clients every 2 or 4 weeks |
 | `js/feedback.js` | "tell us what you think" (FEEDBACK_TO) |
+| `js/dayfill.js` | a lesson cancelled for one day, and who could take its place |
 | `js/app.js` | the screens |
 | `js/toast.js` | messages |
 

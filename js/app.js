@@ -1565,10 +1565,10 @@ const App = {
     date = date || this.todayISO();
     const day = Scheduler.weekdayOf(date);
     const out = [];
-    for(const sl of (state.schedule[day] || [])){
+    for(const sl of DayFill.lessonsOn(date)){
       // A client on a 2- or 4-week rhythm, on one of their off weeks.
-      if(!Cadence.onWeek((state.students || []).find(s => s.id === sl.studentId), date)) continue;
-      out.push({ kind: 'lesson', id: sl.studentId, title: sl.studentName, sub: subjectText(sl.subject), address: sl.address,
+      if(!sl.oneOff && !Cadence.onWeek((state.students || []).find(s => s.id === sl.studentId), date)) continue;
+      out.push({ kind: 'lesson', id: sl.studentId, title: sl.studentName, sub: [subjectText(sl.subject), sl.oneOff ? t('df_only_today') : ''].filter(Boolean).join(' · '), address: sl.address, oneOff: !!sl.oneOff,
                  date, done: Payments.isDone(date, sl.studentId, sl.start),
                  time: sl.start, end: sl.end, note: ((state.students || []).find(s => s.id === sl.studentId) || {}).notes || '' });
     }
@@ -1723,7 +1723,7 @@ const App = {
           ${x.note ? `<div class="agenda-note">${ico('edit', 11)} ${esc(x.note)}</div>` : ''}
         </div>
         ${x.kind !== 'lesson' ? `<button class="agenda-check" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">${x.done ? '↺' : '✓'}</button>`
-          : `<button class="agenda-check" aria-label="${esc(t('pay_done_btn'))}" title="${esc(t('pay_done_btn'))}" onclick="event.stopPropagation();Payments.toggleDone('${esc(x.date)}','${esc(x.id)}','${esc(x.time || '')}')">${x.done ? '↺' : '✓'}</button>`}
+          : `${!x.done ? `<button class="agenda-check" aria-label="${esc(t('df_cancel_btn'))}" title="${esc(t('df_cancel_btn'))}" onclick="event.stopPropagation();${x.oneOff ? `DayFill.unapply('${esc(x.date)}','${esc(x.id)}');App.renderHome()` : `DayFill.askCancel('${esc(x.date)}','${esc(x.id)}','${esc(x.time || '')}')`}">✕</button>` : ''}<button class="agenda-check" aria-label="${esc(t('pay_done_btn'))}" title="${esc(t('pay_done_btn'))}" onclick="event.stopPropagation();Payments.toggleDone('${esc(x.date)}','${esc(x.id)}','${esc(x.time || '')}')">${x.done ? '↺' : '✓'}</button>`}
       </div>`;
     };
     return `
@@ -1743,6 +1743,11 @@ const App = {
           </span>
         </div>
         <div class="home-timeline">
+          ${DayFill.of(date).cancel.map(c => { const st = (state.students || []).find(s => s.id === c.sid) || {};
+            return `<div class="card-sm" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;font-size:13px;opacity:.85">
+              <span style="flex:1;text-decoration:line-through">${esc(c.start)} ${esc(st.name || '')}</span>
+              <button class="chip chip-gray" style="border:none;cursor:pointer" onclick="DayFill.openFill('${esc(date)}','${esc(c.start)}')">${esc(t('df_fill_btn'))}</button>
+              <button class="chip chip-gray" style="border:none;cursor:pointer" onclick="DayFill.restore('${esc(date)}','${esc(c.sid)}','${esc(c.start)}');App.renderHome()">${esc(t('df_restore'))}</button></div>`; }).join('')}
           ${items.length ? items.map(row).join('') : firstRun ? `<div class="card-sm" style="padding:16px">
             <div style="font-weight:700;font-size:16px;margin-bottom:4px">${esc(t('first_title'))}</div>
             <div class="settings-sub" style="margin-bottom:10px">${esc(t('first_sub'))}</div>
