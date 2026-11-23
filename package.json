@@ -11,6 +11,7 @@
     "test:i18n": "node --test test/i18n.test.js",
     "bench": "node test/benchmark.js",
     "bench:tsptw": "node test/bench-tsptw.js",
+    "bench:pvrp": "node test/bench-pvrp.js",
     "dev": "python3 -m http.server 8080",
     "dev:api": "cd worker && npx wrangler dev --port 8787",
     "test:worker": "node --test worker/test/worker.test.js",
