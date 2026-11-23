@@ -26,11 +26,26 @@ describe('the genetic week search', () => {
     assert.ok(!S.isBetterStart(before, week, cfg), 'never worse than what it was given');
   });
   test('a week it does not handle yet is left exactly as it was', async () => {
-    const { S, sts, cfg, app } = world({ lunchBreak: 30 });
+    const { S, sts, cfg, app } = world();
     const r = await S.optimizeWeek({ students: sts, settings: cfg, coords: app.state.coords, attempts: 1, timeScale: 0.25, geneticMs: 0 });
+    const d = Object.keys(r.schedule).find(k => r.schedule[k].length);
+    r.schedule[d][0] = { ...r.schedule[d][0], locked: true };      // locked, but not through lockSplit
     const was = JSON.stringify(r.schedule);
     const used = await S.geneticWeek(r.schedule, sts, cfg, 2000);
     assert.equal(used, false); assert.equal(JSON.stringify(r.schedule), was);
+  });
+  test('locked lessons, as the plan button hands them over, stay at their day and time', async () => {
+    const { S, sts, cfg, app } = world({ lunchBreak: 30 });
+    const r = await S.optimizeWeek({ students: sts, settings: cfg, coords: app.state.coords, attempts: 1, timeScale: 0.25, geneticMs: 0 });
+    const locks = [];
+    for (const d of Object.keys(r.schedule)) for (const sl of r.schedule[d]) if (locks.length < 3 && !locks.some(l => l.studentId === sl.studentId)) { sl.locked = true; locks.push({ d, studentId: sl.studentId, start: sl.start }); }
+    const lk = S.lockSplit(sts, r.schedule, cfg);
+    for (const [v, real] of Object.entries(lk.alias)) app.state.coords[v] = app.state.coords[real];
+    app.state.idAlias = lk.alias;
+    await S.geneticWeek(lk.schedule, lk.students, cfg, 3000);
+    const back = S.lockJoin(lk.schedule, lk.alias);
+    for (const l of locks) assert.ok((back[l.d] || []).some(sl => sl.studentId === l.studentId && sl.start === l.start && sl.locked), `${l.studentId} ${l.d} ${l.start}`);
+    assert.equal(S.verifySchedule(back, sts, cfg).length, 0);
   });
   test('the app runs it by default: 15 s in the quick plan, 45 s in the thorough one', () => {
     const app = loadApp({ genetic: true });

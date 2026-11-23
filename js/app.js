@@ -958,6 +958,18 @@ const App = {
       }catch(err){ self.postMessage({ ok: false, error: String((err && err.message) || err) }); }
     };
   `,
+  // The app's code for a worker: the page's own scripts, in the page's order.
+  // Since the page was split into files (js/*.js) there is no inline script
+  // holding the planner any more; the worker loads the same files instead,
+  // by absolute address (a worker made from a blob has no base of its own).
+  // An inline copy, where a build still has one, is used as before.
+  _workerSource(){
+    const inline = [...document.querySelectorAll('script:not([src])')].map(x => x.textContent).find(x => x.includes('const Scheduler = {'));
+    if(inline) return inline;
+    const files = [...document.querySelectorAll('script[src]')].map(x => x.getAttribute('src')).filter(u => /^js\/[\w-]+\.js$/.test(u || ''));
+    if(!files.some(u => u === 'js/scheduler.js')) return null;
+    return 'importScripts(' + files.map(u => JSON.stringify(new URL(u, location.href).href)).join(', ') + ');\n';
+  },
   // One worker job. Every live worker is kept in _schedWorkers so ✕ can
   // stop them all at once.
   _workerCall(message, onProgress){
@@ -966,7 +978,7 @@ const App = {
       try{
         if(typeof Worker === 'undefined' || typeof Blob === 'undefined' || !URL.createObjectURL) return reject(new Error('no-worker'));
         if(!this._schedWorkerUrl){
-          const src = [...document.querySelectorAll('script:not([src])')].map(x => x.textContent).find(x => x.includes('const Scheduler = {'));
+          const src = this._workerSource();
           if(!src) return reject(new Error('no-source'));
           this._schedWorkerUrl = URL.createObjectURL(new Blob([this._WORKER_PRELUDE, src, this._WORKER_HANDLER], { type: 'text/javascript' }));
         }
@@ -1031,7 +1043,7 @@ const App = {
       try{
         if(typeof Worker === 'undefined' || typeof Blob === 'undefined' || !URL.createObjectURL) return reject(new Error('no-worker'));
         if(!this._schedWorkerUrl){
-          const src = [...document.querySelectorAll('script:not([src])')].map(x => x.textContent).find(x => x.includes('const Scheduler = {'));
+          const src = this._workerSource();
           if(!src) return reject(new Error('no-source'));
           this._schedWorkerUrl = URL.createObjectURL(new Blob([this._WORKER_PRELUDE, src, this._WORKER_HANDLER], { type: 'text/javascript' }));
         }

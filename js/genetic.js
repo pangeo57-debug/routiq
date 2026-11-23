@@ -18,7 +18,7 @@
 //    its nearest others, so it does not collapse onto one week.
 //
 // Only weeks of plain clients are searched (no pairs, groups, merged blocks,
-// flexible hours, locked lessons or lunch break), and nothing is trusted from
+// flexible hours), and nothing is trusted from
 // here: every day of the result is laid out again by relayoutDay and the week
 // is checked by verifySchedule. It is kept only if that passes and it is
 // better by the app's own rule (more lessons, then km + waiting).
@@ -30,10 +30,12 @@ Object.assign(Scheduler, {
     const S = this, t0 = Date.now();
     const days = (settings.workDays || []).filter(d => settings.dayHours && settings.dayHours[d]);
     if(days.length < 2 || !(budgetMs > 200)) return false;
-    if(settings.lunchBreak) return false;
     const byId = Object.fromEntries(students.map(s => [s.id, s]));
     const flat = days.flatMap(d => schedule[d] || []);
-    if(flat.some(sl => sl.locked || !S._plainSlot(sl, byId))) return false;
+    // A locked lesson arrives here as lockSplit made it: a stand-in client
+    // (id ending in §L…) who can only come that day at that time, so the
+    // search cannot move it. A locked lesson in any other shape is not ours.
+    if(flat.some(sl => (sl.locked && !/§L\d+$/.test(sl.studentId)) || !S._plainSlot(sl, byId))) return false;
     // The lessons to place: one per lesson of every plain client.
     const L = [{ id: 'home', addr: settings.homeAddress || '' }];
     for(const st of students){
