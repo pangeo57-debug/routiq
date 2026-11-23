@@ -52,4 +52,20 @@ describe('the genetic week search', () => {
     assert.deepStrictEqual({ ...app.Scheduler.GENETIC_MS }, { quick: 15000, thorough: 45000 });
     assert.deepStrictEqual({ ...loadApp().Scheduler.GENETIC_MS }, { quick: 0, thorough: 0 }, 'off in the other tests');
   });
+  test('a pair and a merged block are moved whole, only to days all their people can do', async () => {
+    const { S, sts, cfg, app } = world();
+    sts[0].pairedWith = 's1'; sts[1].pairedWith = 's0';
+    sts[2].mergeMode = 'always'; sts[2].lessonsPerWeek = 2;
+    const r = await S.optimizeWeek({ students: sts, settings: cfg, coords: app.state.coords, attempts: 1, timeScale: 0.25, geneticMs: 0 });
+    const before = JSON.parse(JSON.stringify(r.schedule));
+    const week = JSON.parse(JSON.stringify(r.schedule));
+    await S.geneticWeek(week, sts, cfg, 3000);
+    assert.equal(S.verifySchedule(week, sts, cfg).length, 0, 'no rule broken');
+    assert.ok(!S.isBetterStart(before, week, cfg), 'never worse');
+    const slots = Object.values(week).flat();
+    const pairs = (x) => x.filter(sl => S.occupantIds(sl).includes('s0') && S.occupantIds(sl).includes('s1')).length;
+    assert.equal(pairs(slots), pairs(Object.values(before).flat()), 'the pair still has its lessons together');
+    const merged = (x) => x.filter(sl => sl.studentId === 's2').map(sl => S.toMin(sl.end) - S.toMin(sl.start)).sort().join();
+    assert.equal(merged(slots), merged(Object.values(before).flat()), 'the merged block keeps its length');
+  });
 });

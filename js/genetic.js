@@ -17,11 +17,14 @@
 //  · the population is ranked by cost AND by how different each week is from
 //    its nearest others, so it does not collapse onto one week.
 //
-// Only weeks of plain clients are searched (no pairs, groups, merged blocks,
-// flexible hours), and nothing is trusted from
-// here: every day of the result is laid out again by relayoutDay and the week
-// is checked by verifySchedule. It is kept only if that passes and it is
-// better by the app's own rule (more lessons, then km + waiting).
+// What it moves is each appointment as the planner made it — one person, a
+// pair, a group, a merged block — whole, to a day and a time where all its
+// people can be; lessons still missing are added only for clients with plain
+// ones. Locked lessons come as lockSplit hands them over and stay put.
+// Nothing is trusted from here: every day of the result is laid out again by
+// relayoutDay and the week is checked by verifySchedule. It is kept only if
+// that passes and it is better by the app's own rule (more lessons, then km
+// + waiting).
 Object.assign(Scheduler, {
   // How long the search runs: the quick plan the app uses by default, and the
   // thorough one ("search deeper"). Tests set both to 0 unless they test it.
@@ -35,15 +38,24 @@ Object.assign(Scheduler, {
     // A locked lesson arrives here as lockSplit made it: a stand-in client
     // (id ending in §L…) who can only come that day at that time, so the
     // search cannot move it. A locked lesson in any other shape is not ours.
-    if(flat.some(sl => (sl.locked && !/§L\d+$/.test(sl.studentId)) || !S._plainSlot(sl, byId))) return false;
-    // The lessons to place: one per lesson of every plain client.
+    if(flat.some(sl => sl.locked && !/§L\d+$/.test(sl.studentId))) return false;
+    // What is moved: every appointment of the week as it stands, whole —
+    // one person, a pair, a group or a merged block alike (its people, its
+    // length) — plus the lessons still missing for clients with plain ones.
+    // A pair or a group can only go where ALL its people can (commonWindows),
+    // and nobody is on a day twice.
     const L = [{ id: 'home', addr: settings.homeAddress || '' }];
+    for(const d of days) for(const sl of (schedule[d] || [])){
+      const people = S.occupantsOf(sl, byId);
+      if(!people) return false;
+      L.push({ id: sl.studentId, addr: sl.address || '', occ: S.occupantIds(sl), people,
+        dur: S.toMin(sl.end) - S.toMin(sl.start), tpl: sl });
+    }
     for(const st of students){
-      if(!S._plainStudent(st) || (S.isFlex && S.isFlex(st)) || (S.hasMixedDurations && S.hasMixedDurations(st))) {
-        if(flat.some(sl => sl.studentId === st.id) || (st.lessonsPerWeek || 0) > 0) return false;
-        continue;
-      }
-      for(let k = 0; k < (st.lessonsPerWeek || 1); k++) L.push({ id: st.id, addr: st.address || '', st, dur: Number(st.lessonDuration) || 60 });
+      if(!S._plainStudent(st) || (S.isFlex && S.isFlex(st)) || (S.hasMixedDurations && S.hasMixedDurations(st))) continue;
+      const have = L.filter(x => x.tpl && x.occ.includes(st.id)).length;
+      for(let k = have; k < (st.lessonsPerWeek || 1); k++)
+        L.push({ id: st.id, addr: st.address || '', occ: [st.id], people: [st], dur: Number(st.lessonDuration) || 60, tpl: null, st });
     }
     const n = L.length - 1;
     if(n < 4) return false;
@@ -66,7 +78,7 @@ Object.assign(Scheduler, {
       }
       const wins = L.map((x, i) => {
         if(!i) return null;
-        const clipped = S.availWindows(x.st, d).map(w => [Math.max(w[0], start), Math.min(w[1], end)]);
+        const clipped = S.commonWindows(x.people, d, settings).map(w => [Math.max(w[0], start), Math.min(w[1], end)]);
         // As relayoutDay has them: clipped to the day, long enough; the
         // end-of-day flex is added by earliestFit itself.
         return clipped.filter((w, j) => w[1] + S.windowFlex(clipped, j) - w[0] >= x.dur);
@@ -113,7 +125,8 @@ Object.assign(Scheduler, {
     };
     const daysOf = (ind) => { const m = new Int8Array(n + 1).fill(-1); ind.r.forEach((route, k) => route.forEach(j => { m[j] = k; })); return m; };
     // Same client twice on one day is never allowed (not even at a price).
-    const clash = (route, j) => route.some(x => L[x].id === L[j].id);
+    const clash = (route, j) => route.some(x => L[x].occ.some(o => L[j].occ.includes(o)));
+    const twice = (route) => { const seen = new Set(); for(const x of route) for(const o of L[x].occ){ if(seen.has(o)) return true; seen.add(o); } return false; };
 
     // Best place for lesson j in day k: [delta, position].
     const bestIn = (ind, k, j) => {
@@ -200,7 +213,7 @@ Object.assign(Scheduler, {
             if(!canGo[ja][b] || !canGo[jb][a]) continue;
             const ra = ind.r[a].slice(), rb = ind.r[b].slice();
             ra[p] = jb; rb[q] = ja;
-            if(ra.filter(x => L[x].id === L[jb].id).length > 1 || rb.filter(x => L[x].id === L[ja].id).length > 1) continue;
+            if(twice(ra) || twice(rb)) continue;
             const ca = evalDay(a, ra), cb = evalDay(b, rb);
             if(ca.cost + cb.cost < ind.c[a].cost + ind.c[b].cost - 1e-9){
               ind.r[a] = ra; ind.r[b] = rb; ind.c[a] = ca; ind.c[b] = cb; improved = true;
@@ -213,14 +226,12 @@ Object.assign(Scheduler, {
 
     // ---- the population ------------------------------------------------------
     const fromSchedule = (sch) => {
-      const used = new Set(), ind = { r: D.map(() => []) };
+      const ind = { r: D.map(() => []), u: [] };
       D.forEach((dd, k) => {
-        for(const sl of (sch[dd.d] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start))){
-          const j = L.findIndex((x, i) => i && !used.has(i) && x.id === sl.studentId);
-          if(j > 0){ used.add(j); ind.r[k].push(j); }
-        }
+        const mine = (sch[dd.d] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start));
+        for(const sl of mine){ const j = L.findIndex(x => x.tpl === sl); if(j > 0) ind.r[k].push(j); }
       });
-      ind.u = []; for(let j = 1; j <= n; j++) if(!used.has(j)) ind.u.push(j);
+      for(let j = 1; j <= n; j++) if(!L[j].tpl) ind.u.push(j);
       return evalWeek(ind);
     };
     const randomOne = () => {
@@ -298,7 +309,9 @@ Object.assign(Scheduler, {
     const out = {};
     for(const d of Object.keys(schedule)) out[d] = schedule[d];
     for(let k = 0; k < D.length; k++){
-      const slots = bestFeas.r[k].map(j => { const sl = S._lessonSlot(L[j].st, L[j].dur); return sl; });
+      // An appointment that was there keeps everything it had (its pair, its
+      // group, its merged count); one newly placed is a plain lesson.
+      const slots = bestFeas.r[k].map(j => L[j].tpl ? { ...L[j].tpl } : S._lessonSlot(L[j].st, L[j].dur));
       const laid = slots.length ? S.relayoutDay(slots, D[k].d, students, settings) : [];
       if(!laid) return false;
       out[D[k].d] = laid;
