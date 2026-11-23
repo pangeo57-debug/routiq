@@ -650,36 +650,15 @@ const App = {
   // fails falls back to the straight-line estimate for just that day, so a
   // single network hiccup never blanks out the whole week's total.
   async _estimateTotalKmReal(schedule){
-    const homeC = state.coords['home'] || Scheduler.coordsHash(state.settings.homeAddress||'Πλατεία Γεωργίου 1, Πάτρα');
+    // The week's km is the sum of each day's km, exactly as the week view shows
+    // it per day and as the planner prices it (Scheduler.dayKm: the road
+    // matrix in use, each drive at the time it is made, so rush hour and quiet
+    // hours as the plan has them). Summed here a second way, without the time
+    // of day, Home and the week view showed one week as two different numbers.
     let total = 0;
     for(const day of Object.keys(schedule)){
-      const slots = schedule[day].slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
-      if(!slots.length) continue;
-      const uniqueSlots = [];
-      let prevSl = null;
-      slots.forEach(sl=>{
-        const sameLocation = prevSl && (prevSl.studentId === sl.studentId ||
-          (prevSl.groupCode && prevSl.groupCode === sl.groupCode));
-        if(!sameLocation) uniqueSlots.push(sl);
-        prevSl = sl;
-      });
-      if(!uniqueSlots.length) continue;
-      // Reuse the road matrix already fetched for this run (HERE when a key is
-      // set, OSRM otherwise) via travelEstKm, instead of firing a second,
-      // OSRM-only request per day. Previously this ignored a configured HERE
-      // key entirely, so the headline km figure came from a different engine
-      // than the schedule was planned with — and cost one extra network round
-      // trip per day on every run. travelEstKm falls back to straight-line
-      // internally when no matrix is available.
-      const homeAddr = state.settings.homeAddress || '';
-      let dayKm = 0;
-      let prevId = 'home', prevAddr = homeAddr;
-      uniqueSlots.forEach(sl=>{
-        dayKm += Scheduler.travelEstKm(prevId, prevAddr, sl.studentId, sl.address, Number(day));
-        prevId = sl.studentId; prevAddr = sl.address;
-      });
-      dayKm += Scheduler.travelEstKm(prevId, prevAddr, 'home', homeAddr, Number(day));
-      total += dayKm;
+      const slots = (schedule[day] || []).slice().sort((a,b)=>Scheduler.toMin(a.start)-Scheduler.toMin(b.start));
+      if(slots.length) total += Scheduler.dayKm(slots, Number(day), state.settings);
     }
     return total;
   },
