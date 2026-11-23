@@ -776,6 +776,17 @@ const Scheduler = {
       P(94, 'phase_refine_title', 'phase_refine_sub');
       await guard((x) => this.refineWeek(x, students, settings, B(20000), (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
     }catch(e){}
+    // Which client on which day, searched once more the HGS way (js/genetic.js):
+    // a population of weeks, crossed and educated, broken rules allowed at a
+    // price on the way. Kept only if laid out legally and better.
+    if(!stop() && this.geneticWeek){
+      const quickRun = input.timeScale > 0 && input.timeScale < 1;
+      const gms = input.geneticMs != null ? input.geneticMs : (quickRun ? this.GENETIC_MS.quick : this.GENETIC_MS.thorough);
+      if(gms > 0){
+        P(96, 'phase_refine_title', 'phase_refine_sub');
+        await guard((x) => this.geneticWeek(x, students, settings, gms, stop, (f) => P(96 + Math.round(3 * f), 'phase_refine_title', 'phase_refine_sub')));
+      }
+    }
     if(!stop()) await guard((x) => this.polishDays(x, students, settings, 700));
     try{ await this.flexFit(sch, students, settings, 6000, stop); }catch(e){}
     try{ this.rebalanceDays(sch, students, settings); }catch(e){}

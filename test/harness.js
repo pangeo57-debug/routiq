@@ -156,6 +156,9 @@ function loadApp(opts = {}) {
   vm.runInContext(src, ctx, { filename: 'routiq.html' });
 
   const ex = ctx.__exports;
+  // The genetic week search runs 15-45 s by design; a test that wants it asks
+  // for it (opts.genetic), so the rest of the suite keeps its pace.
+  if(ex.Scheduler && ex.Scheduler.GENETIC_MS && !opts.genetic) ex.Scheduler.GENETIC_MS = { quick: 0, thorough: 0 };
 
   // Silence UI side effects that tests don't care about but code paths call.
   // opts.realRender keeps them, so a test can catch errors that only happen

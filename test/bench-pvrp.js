@@ -22,6 +22,7 @@
  *   npm run bench:pvrp                      p03 (50 clients, 5 days)
  *   npm run bench:pvrp -- --only p03,p06,p09
  *   npm run bench:pvrp -- --mode quick      the app's quick plan (default: thorough)
+ *   npm run bench:pvrp -- --genetic 30000   the genetic stage's budget in ms (0 = off)
  */
 const fs = require('fs');
 const path = require('path');
@@ -86,8 +87,9 @@ async function run(name, mode) {
   const S = app.Scheduler;
   const t0 = Date.now();
   const quick = mode === 'quick' ? { attempts: 1, timeScale: 0.25, p1: { backtrackMs: 3000, repairMs: 1500 } } : { attempts: 2 };
-  let out = await S.optimizeWeek({ students: sts, settings: cfg, coords, warm: null, ...quick });
-  const again = await S.optimizeWeek({ students: sts, settings: cfg, coords, warm: out.schedule, skipPhase1: true, ...(mode === 'quick' ? { attempts: 0, timeScale: 0.25 } : { attempts: 0 }) });
+  const gen = arg('--genetic') != null ? { geneticMs: Number(arg('--genetic')) } : {};
+  let out = await S.optimizeWeek({ students: sts, settings: cfg, coords, warm: null, ...quick, ...gen });
+  const again = await S.optimizeWeek({ students: sts, settings: cfg, coords, warm: out.schedule, skipPhase1: true, ...(mode === 'quick' ? { attempts: 0, timeScale: 0.25 } : { attempts: 0 }), ...gen });
   if (S.isBetterStart(again.schedule, out.schedule, cfg)) out = again;
   const ms = Date.now() - t0;
   const tours = days.map(d => (out.schedule[d] || []).slice().sort((a, b) => S.toMin(a.start) - S.toMin(b.start)).map(sl => Number(sl.studentId.slice(1))));

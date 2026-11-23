@@ -148,6 +148,7 @@ Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζ�
 | `js/storage.js` | what is kept on the device |
 | `js/i18n.js` | the four languages |
 | `js/scheduler.js` | the planner: week, day, locks, spacing |
+| `js/genetic.js` | the week searched the HGS way (Vidal et al.), after the planner |
 | `js/services.js` | reminders, compute server, AI, usage counts, sync |
 | `js/router.js` | addresses and road distances |
 | `js/progress.js` | the progress panel and keeping the screen on |
