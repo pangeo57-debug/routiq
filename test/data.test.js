@@ -560,7 +560,7 @@ describe('the API key is not in the page any more', () => {
   const { APP_FILE } = require('./harness');
 
   test('no HERE key is embedded in the file', () => {
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     // The key that used to ship here, and the shape of any replacement.
     assert.ok(!src.includes('ZYbtkcLwZXstiGaBGzxJHCuHiA-wFqW41iTCJe0y_6g'),
       'the old shared key must be gone from the client');
@@ -604,7 +604,7 @@ describe('the API key is not in the page any more', () => {
   });
 
   test('the CSP allows the proxy to be called', () => {
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     const csp = src.match(/Content-Security-Policy" content="([^"]+)"/);
     assert.ok(csp, 'the page must still declare a CSP');
     const connect = csp[1].match(/connect-src([^;]+)/)[1];
@@ -806,13 +806,13 @@ describe('nothing is fetched from Google before a page is drawn', () => {
   const { APP_FILE } = require('./harness');
 
   test('no Google font links remain in the page', () => {
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     assert.ok(!/fonts\.googleapis\.com/.test(src), 'no stylesheet from Google');
     assert.ok(!/fonts\.gstatic\.com/.test(src), 'and nothing preconnecting to it');
   });
 
   test('the CSP forbids it, so it cannot creep back in unnoticed', () => {
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     const csp = src.match(/Content-Security-Policy" content="([^"]+)"/)[1];
     const fontSrc = csp.match(/font-src([^;]+)/)[1];
     assert.ok(!/gstatic|googleapis/.test(fontSrc),
@@ -823,7 +823,7 @@ describe('nothing is fetched from Google before a page is drawn', () => {
   });
 
   test('the font files the page asks for are actually in the repository', () => {
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     const path = require('path');
     const root = path.dirname(APP_FILE);
     const refs = [...src.matchAll(/url\('(fonts\/[^']+)'\)/g)].map(m => m[1]);
@@ -839,7 +839,7 @@ describe('nothing is fetched from Google before a page is drawn', () => {
     // DM Sans has no Greek subset at all, so Greek body text falls back to a
     // system font. That was already true; the unicode-range now says so
     // rather than leaving it to chance.
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     const faces = [...src.matchAll(/@font-face\s*\{([^}]+)\}/g)].map(m => m[1]);
     const greek = faces.filter(f => /U\+0370-0377/.test(f));
     assert.equal(greek.length, 1, 'exactly one face should claim the Greek range');
@@ -994,7 +994,7 @@ describe('one rule decides whether HERE is used, everywhere', () => {
   // the browser at all, so a check on the KEY silently means "no".
   const fs = require('fs');
   const { APP_FILE } = require('./harness');
-  const src = fs.readFileSync(APP_FILE, 'utf8');
+  const src = require('./harness').appSource();
 
   test('no code gates HERE on the presence of a key', () => {
     const gates = src.split('\n').map((l, i) => [i + 1, l])
@@ -1083,7 +1083,7 @@ describe('the map\'s drive times are scaled to what a drive really takes', () =>
   test('the setting is saved as a multiplier from a percentage, and 0 is kept', () => {
     const fs = require('fs');
     const { APP_FILE } = require('./harness');
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     // The save path reads the field and converts % to a multiplier.
     assert.match(src, /set-time-factor/, 'the field must exist');
     assert.match(src, /osrmTimeFactor\s*=\s*1\s*\+/, 'and be stored as 1 + pct/100');

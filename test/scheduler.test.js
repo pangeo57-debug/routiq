@@ -3325,7 +3325,7 @@ describe('a lesson that causes a wait can move to a day it fits without waiting'
     // Written and not wired is the mistake this project has made three times.
     const fs = require('fs');
     const { APP_FILE } = require('./harness');
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     // The pipeline lives in Scheduler.optimizeWeek (run in workers or on the page).
     const run = src.slice(src.indexOf('async optimizeWeek('));
     assert.match(run.slice(0, run.indexOf('\n  },\n')), /this\.relocateForTime\(/,
@@ -3947,7 +3947,7 @@ describe('saving a job keeps its position honest', () => {
 });
 
 describe('the job form finds addresses the way the student form does', () => {
-  const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
   function world() {
     const app = loadApp();
     app.setState({ settings: settings(), jobs: [], students: [], coords: {} });
@@ -4171,7 +4171,7 @@ describe('reordering the stops of a planned day by hand', () => {
   });
 
   test('every stop has move buttons, the first cannot go up and the last cannot go down', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /App\.moveStop\(\$\{i\},-1\)/);
     assert.match(src, /App\.moveStop\(\$\{i\},1\)/);
     assert.match(src, /\$\{i===0\?'disabled':''\}/);
@@ -4334,7 +4334,7 @@ describe('a note becomes a job without a form', () => {
   });
 
   test('the form for a note starts a NEW job, not an edit of one', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /state\.editingJobId = id && j \? j\.id : null;/);
     assert.match(src, /id="qn-text"/);
   });
@@ -4548,7 +4548,7 @@ describe('errands: the day for people who are not at work', () => {
   });
 
   test('a plan made for work is not shown on the errands tab', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /!!state\.dayPlan\.errand === this\.isErrands\(\)/);
   });
 
@@ -4557,7 +4557,7 @@ describe('errands: the day for people who are not at work', () => {
     app.state.scheduleMode = 'errands';
     const html = app.App._modeTabsHtml();
     for (const k of ["'week'", "'day'", "'errands'"]) assert.ok(html.includes(`setScheduleMode(${k})`), k);
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /if\(state\.scheduleMode === 'day' \|\| state\.scheduleMode === 'errands'\) return this\.renderDayPlanner\(\);/,
       'the test harness stubs renderSchedule, so the routing is checked in the source');
     app.App.setScheduleMode('nonsense');
@@ -4694,7 +4694,7 @@ describe('Google Maps opens the leg from the previous stop, and wrong towns are 
   });
 
   test('the day plan shows the warning on the stop', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /this\.suspiciousDistanceKm\(x\.job\.id\) \?/);
   });
 });
@@ -4773,7 +4773,7 @@ describe('opening a leg in the Maps app itself', () => {
 describe('Google Maps is singleton and the day map zooms to the stops', () => {
   const fs = require('fs'), path = require('path');
   const root = path.join(__dirname, '..');
-  const html = fs.readFileSync(process.env.ROUTIQ_APP_FILE || path.join(root, 'routiq.html'), 'utf8');
+  const html = require('./harness').appSource();
 
   test('Google Maps loads through runtime config, not a hardcoded key', () => {
     assert.match(html, /google-maps-config\.js/);
@@ -5024,7 +5024,7 @@ describe('refineWeek: fit the lessons that are out, then win the kilometres back
   });
 
   test('the app runs refineWeek after relocateForTime and before the final check', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const week = src.slice(src.indexOf('async optimizeWeek('));
     const iRel = week.indexOf('this.relocateForTime('), iRef = week.indexOf('this.refineWeek(');
     assert.ok(iRel > 0 && iRef > iRel, 'order in the pipeline: relocateForTime, then refineWeek');
@@ -5138,7 +5138,7 @@ describe('one note, several errands: each becomes its own box', () => {
 
 
 describe('a map on every schedule view, a neutral start, and fewer settings', () => {
-  const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
   function mapWorld(coords) {
     const app = loadApp();
     app.setState({ settings: settings(), jobs: [], students: [], schedule: {}, coords });
@@ -5414,7 +5414,7 @@ describe('finding a place by name or kind, and taking a Google Maps link', () =>
   });
 
   test('both forms have the button', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /App\.findInGoogleMaps\('st-addr','st-name'\)/);
     assert.match(src, /App\.findInGoogleMaps\('jb-addr','jb-name'\)/);
   });
@@ -5586,7 +5586,7 @@ describe('house numbers: Google as the fallback, "I am here", and honest positio
   });
 
   test('every address field has the "I am here" button, and the refresh runs before each plan', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     for (const id of ['st-addr', 'jb-addr', 'set-home', 'ob-addr']) assert.ok(src.includes(`App.hereNow('${id}')`), id);
     assert.match(src.slice(src.indexOf('async runAndNotify()')), /await this\.refreshGoogleCoords\(\)/);
     assert.match(src.slice(src.indexOf('async _ensureDayCoords(date){')), /^async _ensureDayCoords\(date\)\{\s*try\{ await this\.refreshGoogleCoords\(\); \}/);
@@ -5770,7 +5770,7 @@ describe('flexible weekly time: "4 hours" splits into whatever fits', () => {
 
 
 describe('found on a phone: new users, a stuck button, the week map', () => {
-  const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
 
   test('finishing the welcome gives working hours, so the first client can be saved', () => {
     const app = loadApp();
@@ -5896,7 +5896,7 @@ describe('home is today: next stop, the day in order, add in one line, tick off'
   });
 
   test('the home screen shows the next stop, the map, the day tools and the statistics', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const home = src.slice(src.indexOf('  _homeMapHtml(empty){'), src.indexOf('  homeQuickAdd(boxId){'));
     assert.match(home, /next-card/);
     assert.match(home, /id="home-map"/);
@@ -6165,7 +6165,7 @@ describe('home: the map on top, cards that slide, the drive before each stop', (
     assert.match(html, /2 στάσεις/);
   });
   test('"in 13 hours" reads as hours, not 793 minutes', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /inMin < 60 \? tf\('home_in_min'/);
     assert.match(src, /home_in_hm:'σε \{h\}ω \{m\}′'/);
   });
@@ -6230,7 +6230,7 @@ describe('✕ stops the calculation at once', () => {
     assert.equal(app.state._cancelShown, true, 'the cancel is said once, at the tap');
   });
   test('every long loop of the refinement checks the cancel', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.ok((src.match(/timeUp = \(\) => Date\.now\(\) - t0 > budgetMs \|\| this\._stopped\(\)/g) || []).length >= 4, 'ejection chains, inter-day moves, block moves, 2-opt*');
     assert.match(src, /while\(Date\.now\(\) - t0 < budgetMs && !this\._stopped\(\)\)/, 'string removals');
     assert.match(src, /round < 40 && Date\.now\(\) - t0 < budgetMs && !this\._stopped\(\)/, 'rebalancing');
@@ -6329,7 +6329,7 @@ describe('reminders: the phone calendar, and notifications while the app runs', 
     assert.equal(timers[1], (20 * 60 + 45 - 600) * 60000);
   });
   test('the home screen offers the calendar, and reminders while permission is still to be asked', () => {
-    const src = require('fs').readFileSync(process.env.ROUTIQ_APP_FILE || require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const home = src.slice(src.indexOf('  _homeTodayHtml('), src.indexOf('  homeQuickAdd(){'));
     assert.match(home, /App\.exportCalendar\(\)/);
     assert.match(home, /Notification\.permission === 'default'[\s\S]*App\.enableReminders\(\)/);
@@ -6446,7 +6446,7 @@ describe('the day solver (solveDay)', () => {
   });
 
   test('the day is laid out by relayoutDay itself, so its times are the app\'s times', async () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  async solveDay('), src.indexOf('  // The one-day frame every day computation shares'));
     assert.match(body, /this\.relayoutDay\(best\.ord\.map/);
     assert.match(body, /this\.verifySchedule\(\{ \[day\]: slots \}/);
@@ -6487,7 +6487,7 @@ describe('each day of the week ordered by the day solver (polishDays)', () => {
   });
 
   test('the week pipeline runs it after refineWeek', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  async optimizeWeek('), src.indexOf('  // Make each flexible student'));
     assert.ok(body.indexOf('this.refineWeek(') < body.indexOf('this.polishDays('));
   });
@@ -6636,7 +6636,7 @@ describe('locked appointments stay where they are', () => {
   });
 
   test('the plan button goes through lockSplit and puts the lessons back', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
     assert.match(body, /Scheduler\.lockSplit\(state\.students, scheduleBackup, state\.settings\)/);
     assert.match(body, /Scheduler\.lockJoin\(out\.schedule, lk\.alias\)/);
@@ -6683,7 +6683,7 @@ describe('a new client goes into the week without moving anyone', () => {
 });
 
 describe('home, week and messages: less on screen', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
   test('with no stop to show, the home map gives its room back', () => {
     assert.match(src, /\.home-mapwrap\.empty\{height:92px\}/);
     assert.match(src, /if\(!mapEmpty\) this\._drawStopsMap\('home-map'/);
@@ -6720,7 +6720,7 @@ describe('home, week and messages: less on screen', () => {
 });
 
 describe('four tabs, one spelling of units', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
   test('the route is reached from the schedule and lights the schedule tab', () => {
     assert.ok(!/class="nav-btn" data-screen="route"/.test(src));
     assert.match(src, /screen === 'route' \? 'schedule' : screen/);
@@ -6734,7 +6734,7 @@ describe('four tabs, one spelling of units', () => {
 });
 
 describe('the first minutes: less to fill in', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
 
   test('a pasted list becomes clients: name, address, times a week', () => {
     const app = loadApp();
@@ -6810,7 +6810,7 @@ describe('the first minutes: less to fill in', () => {
 });
 
 describe('the quick plan', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+  const src = require('./harness').appSource();
   test('is the default; the thorough setting or "search deeper" runs the long one', () => {
     const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
     assert.match(body, /const deep = state\.settings\.scheduleQuality==='thorough' \|\| !!state\._deepOnce/);
@@ -6921,7 +6921,7 @@ describe('sentences about a client, spoken or typed', () => {
   });
 
   test('"Fix" opens the form filled in, and saving it is the usual save', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  proposalFix(){'), src.indexOf('  // "This one stays here"'));
     assert.match(body, /this\.buildStudentForm\(p\.st\)/);
     assert.match(body, /state\.editingStudentId = p\.base \? p\.base\.id : null/);
@@ -6991,7 +6991,7 @@ describe('clients and their week from a calendar file (.ics)', () => {
   });
 
   test('the first plan after an import is measured against the imported week', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     assert.match(src, /const own = state\._ownWeek && Scheduler\.countTotal\(scheduleBackup\) \? scheduleBackup : null;/);
   });
 });
@@ -7017,7 +7017,7 @@ describe('the first placement measures with the road matrix, not a straight line
     assert.equal(sch[1][0].studentId, 'b', 'nearest by road goes first');
   });
   test('the attempts are compared on dayKm, the same kilometres everything else uses', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  async runMultiAttempt('), src.indexOf('  // _SCHED_BUFFER kept'));
     assert.match(body, /km\+=this\.dayKm\(slots, day, settings\)/);
     assert.ok(!/haversineKm\(a,b\)\*1\.4/.test(body));
@@ -7391,7 +7391,7 @@ describe('the printed week opens with a timetable on its side', () => {
     assert.match(html, /15:00–16:00/); assert.match(html, /Πελάτης b/);
   });
   test('the file is one page, on its side', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'routiq.html'), 'utf8');
+    const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  async printSchedule(){'), src.indexOf('  // The week as a timetable'));
     assert.match(body, /orientation:'landscape'/);
     assert.match(body, /this\._pdfGrid\(/);

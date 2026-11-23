@@ -410,8 +410,10 @@ function compare(a, b) {
 
   if (idx > -1 && process.argv[idx + 1]) {
     const ref = process.argv[idx + 1];
-    const tmp = path.join(os.tmpdir(), `routiq-${ref.replace(/[^\w]/g, '_')}.html`);
-    fs.writeFileSync(tmp, execSync(`git show ${ref}:routiq.html`, { maxBuffer: 64 * 1024 * 1024 }));
+    // The whole tree of that commit: a page split into files needs its files.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `routiq-${ref.replace(/[^\w]/g, '_')}-`));
+    execSync(`git archive ${ref} | tar -x -C ${dir}`, { maxBuffer: 64 * 1024 * 1024 });
+    const tmp = path.join(dir, 'routiq.html');
     console.log(`Re-running against ${ref} …\n`);
     const sameSet = process.argv.slice(2)
       .filter(x => x !== '--against' && x !== ref).join(' ');

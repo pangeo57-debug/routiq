@@ -17,7 +17,7 @@ const APP_FILE = process.env.ROUTIQ_APP_FILE
 function extractScript(file) {
   const out = [];
   let inScript = false;
-  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+  for (const line of require('../tools/assemble').assemble(file).split('\n')) {
     if (!inScript && /<script>/.test(line)) { inScript = true; continue; }
     if (inScript && /<\/script>/.test(line)) { inScript = false; continue; }
     if (inScript) out.push(line);

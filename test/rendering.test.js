@@ -18,7 +18,7 @@ const PAYLOAD = '<img src=x onerror="alert(1)">';
 
 describe('the original theme', () => {
   test('light emerald and dark graphite + orange, not the green/warm-white trial', () => {
-    const html = fs.readFileSync(APP_FILE, 'utf8');
+    const html = require('./harness').appSource();
     assert.ok(html.includes('--green: #059669'), 'light accent');
     assert.ok(html.includes('--bg: #f7f6f3'), 'light background');
     assert.ok(html.includes('--bg: #101010'), 'dark background');
@@ -29,7 +29,7 @@ describe('the original theme', () => {
 
   describe('Google Maps and Places migration', () => {
     test('the page loads Google Maps config without hardcoded keys', () => {
-      const html = fs.readFileSync(APP_FILE, 'utf8');
+      const html = require('./harness').appSource();
       assert.ok(html.includes('google-maps-config.js'), 'generated runtime config script');
       assert.ok(html.includes('window.ROUTEPAL_GOOGLE_MAPS_API_KEY'), 'Google key is read from runtime config');
       assert.ok(!/<script[^>]+maps\.googleapis\.com[^>]+key=[^&"']+/i.test(html),
@@ -37,7 +37,7 @@ describe('the original theme', () => {
     });
 
     test('Places uses 400ms debounce, three-character minimum and Greece region bias', () => {
-      const html = fs.readFileSync(APP_FILE, 'utf8');
+      const html = require('./harness').appSource();
       assert.ok(html.includes('val.length < 3'), 'minimum three characters');
       assert.ok(html.includes('}, 400)'), '400ms debounce');
       assert.ok(html.includes("includedRegionCodes:['gr']"), 'Greece region restriction');
@@ -45,13 +45,13 @@ describe('the original theme', () => {
     });
 
     test('Place Details fetches only location and formattedAddress', () => {
-      const html = fs.readFileSync(APP_FILE, 'utf8');
+      const html = require('./harness').appSource();
       assert.ok(html.includes("fields:['location','formattedAddress']"),
         'Place Details field mask is limited to Essentials fields');
     });
 
     test('map updates reuse existing containers and no Leaflet bootstrap remains', () => {
-      const html = fs.readFileSync(APP_FILE, 'utf8');
+      const html = require('./harness').appSource();
       assert.ok(html.includes('_googleMapUpdate(el'), 'shared Google map updater');
       assert.ok(html.includes('if(!el.__google_map)'), 'Google map container is mounted once');
       assert.ok(!html.includes('vendor/leaflet/leaflet.js'), 'Leaflet bootstrap removed');
@@ -449,7 +449,7 @@ describe('buttons point at handlers that exist', () => {
   // Scheduler directly and never the wiring, so the button was simply dead.
   test('every App.x() referenced from an onclick is a real function', () => {
     const app = loadApp();
-    const html = require('fs').readFileSync(APP_FILE, 'utf8');
+    const html = require('./harness').appSource();
     const called = new Set();
     for (const m of html.matchAll(/App\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)) called.add(m[1]);
     const missing = [...called].filter(name => typeof app.App[name] !== 'function');
@@ -539,7 +539,7 @@ describe('finding a match while the client is still being typed', () => {
 function state_editing(app, id) { app.state.editingStudentId = id; }
 
 describe('what the page is allowed to load and talk to', () => {
-  const head = () => require('fs').readFileSync(APP_FILE, 'utf8').split('<style>')[0];
+  const head = () => require('./harness').appSource().split('<style>')[0];
   const policy = () => {
     const m = head().match(/http-equiv="Content-Security-Policy" content="([^"]+)"/);
     assert.ok(m, 'the page must carry a Content-Security-Policy');
@@ -548,7 +548,7 @@ describe('what the page is allowed to load and talk to', () => {
   };
 
   test('every remote script carries an integrity hash', () => {
-    const html = require('fs').readFileSync(APP_FILE, 'utf8');
+    const html = require('./harness').appSource();
     // A CDN is a single point at which somebody else's code can be swapped for
     // something that reads every student's name and address out of localStorage.
     for (const m of html.matchAll(/<(script|link)\b[^>]*?(?:src|href)="(https:\/\/cdn\.jsdelivr\.net[^"]+)"[^>]*>/g)) {
@@ -566,7 +566,7 @@ describe('what the page is allowed to load and talk to', () => {
   });
 
   test('connect-src lists every service the app actually calls', () => {
-    const html = require('fs').readFileSync(APP_FILE, 'utf8');
+    const html = require('./harness').appSource();
     const allowed = policy()['connect-src'];
     assert.ok(allowed, 'connect-src is the directive that stops data walking out');
     const hosts = new Set();
@@ -1146,7 +1146,7 @@ describe('the kilometres on screen belong to the schedule on screen', () => {
     // routeFor can never accept them and the screen recalculates forever.
     const fs = require('fs');
     const { APP_FILE } = require('./harness');
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
     const stores = src.match(/state\.routeResults\[day\]\s*=\s*\{[^}]*\}/g) || [];
     assert.equal(stores.length, 2, 'there are two places a route is stored');
     for (const st of stores) assert.match(st, /_key:\s*this\.dayKey\(day\)/, `unstamped: ${st.slice(0, 60)}`);

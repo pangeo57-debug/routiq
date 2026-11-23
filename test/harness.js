@@ -25,8 +25,12 @@ const APP_FILE = process.env.ROUTIQ_APP_FILE
   ? path.resolve(process.env.ROUTIQ_APP_FILE)
   : path.join(__dirname, '..', 'routiq.html');
 
+const { assemble } = require('../tools/assemble');
+/** The app as one page of text, as it was before it was split into files. */
+function appSource() { return assemble(APP_FILE); }
+
 function extractScript() {
-  const html = fs.readFileSync(APP_FILE, 'utf8');
+  const html = appSource();
   const lines = html.split('\n');
   const out = [];
   let inScript = false;
@@ -228,4 +232,4 @@ function slot(studentId, start, end, ov = {}) {
   }, ov);
 }
 
-module.exports = { loadApp, student, settings, cityCoords, slot, APP_FILE };
+module.exports = { loadApp, student, settings, cityCoords, slot, APP_FILE, appSource };

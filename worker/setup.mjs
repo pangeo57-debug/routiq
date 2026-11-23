@@ -18,14 +18,21 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TOML = join(here, 'wrangler.toml');
-const APP = join(here, '..', 'routiq.html');
+// API_BASE lives in one of the app's script files (js/*.js); find which.
+const APP = (() => {
+  const dir = join(here, '..', 'js');
+  try {
+    for (const f of readdirSync(dir)) if (f.endsWith('.js') && /const API_BASE = '/.test(readFileSync(join(dir, f), 'utf8'))) return join(dir, f);
+  } catch (e) {}
+  return join(here, '..', 'routiq.html');
+})();
 const CHECK = process.argv.includes('--check');
 
 const c = { dim:'\x1b[2m', red:'\x1b[31m', green:'\x1b[32m', yellow:'\x1b[33m', bold:'\x1b[1m', off:'\x1b[0m' };
@@ -80,7 +87,7 @@ async function main() {
     left.length ? warn(`still to fill in: ${[...new Set(left)].join(', ')}`) : ok('wrangler.toml has no placeholders left');
     const app = existsSync(APP) ? readFileSync(APP, 'utf8') : '';
     const base = app.match(/const API_BASE = '([^']*)'/);
-    base && base[1] ? ok(`the app points at ${base[1]}`) : warn('API_BASE in routiq.html is still empty');
+    base && base[1] ? ok(`the app points at ${base[1]}`) : warn('API_BASE in the app is still empty');
     existsSync(join(here, '.dev.vars')) ? ok('.dev.vars exists for local development') : warn('no .dev.vars — `npm run dev:api` will have no key');
     return;
   }
@@ -180,14 +187,14 @@ async function main() {
 
   step(7, 'Pointing the app at it');
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const ans = (await rl.question(`   Set API_BASE in routiq.html to ${url}? [Y/n] `)).trim().toLowerCase();
+  const ans = (await rl.question(`   Set API_BASE in the app to ${url}? [Y/n] `)).trim().toLowerCase();
   rl.close();
   if (ans === 'n') { warn(`not changed — set it yourself: const API_BASE = '${url}';`); }
   else {
     const app = readFileSync(APP, 'utf8');
-    if (!/const API_BASE = '[^']*';/.test(app)) throw new Error('could not find API_BASE in routiq.html');
+    if (!/const API_BASE = '[^']*';/.test(app)) throw new Error('could not find API_BASE in the app');
     writeFileSync(APP, app.replace(/const API_BASE = '[^']*';/, `const API_BASE = '${url}';`));
-    ok('routiq.html updated — commit and push it');
+    ok(`${APP.split(/[\\/]/).slice(-2).join('/')} updated — commit and push it`);
   }
 
   say(`\n${c.bold}Done.${c.off} Check it with:`);

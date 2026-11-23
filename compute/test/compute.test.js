@@ -112,7 +112,7 @@ describe('reminders with the app closed', () => {
     assert.ok(!keys.includes('aaaaaaaa'), 'the replaced set must not fire');
   });
   test('the phone sends the server no name and no address for a reminder', () => {
-    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'routiq.html'), 'utf8');
+    const src = require('../../tools/assemble').assemble(require('path').join(__dirname, '..', '..', 'routiq.html'));
     const body = src.slice(src.indexOf('  async _pushReminders('), src.indexOf('  _remind(x){'));
     assert.match(body, /items\.push\(\{ t: at, k \}\)/);
     assert.match(body, /JSON\.stringify\(\{ push, items, fallback/);

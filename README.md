@@ -132,3 +132,34 @@ Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζ�
   που δεν υπάρχει.
 - **Το κλειδί HERE είναι δημόσιο** στον client — συνειδητή επιλογή μέχρι να
   υπάρξει backend. Αξίζει να περιοριστεί σε αυτό το domain από το portal του HERE.
+
+
+## Where the code lives
+
+`routiq.html` is the page; the code it runs is in files, loaded in this order:
+
+| File | What it holds |
+|---|---|
+| `css/app.css` | the look |
+| `js/core.js` | first globals |
+| `js/calendar-import.js` | reading .ics / Google Calendar exports |
+| `js/client-command.js` | a client in one sentence (typed or spoken) |
+| `js/quick-note.js` | notes and errands |
+| `js/storage.js` | what is kept on the device |
+| `js/i18n.js` | the four languages |
+| `js/scheduler.js` | the planner: week, day, locks, spacing |
+| `js/services.js` | reminders, compute server, AI, usage counts, sync |
+| `js/router.js` | addresses and road distances |
+| `js/progress.js` | the progress panel and keeping the screen on |
+| `js/app.js` | the screens |
+| `js/toast.js` | messages |
+
+They are plain scripts sharing one scope, run in the order above exactly as
+the single `<script>` they came from; nothing is built or bundled, and
+GitHub Pages serves them as they are. `tools/assemble.js` puts them back
+together as that one page; tests and the compute server read the app
+through it, and `node tools/assemble.js --check <file>` compares the result
+with another copy byte for byte.
+
+Change the file that holds what you are changing; a new file is added as a
+`<script src>` line in `routiq.html`, in the place its code needs.

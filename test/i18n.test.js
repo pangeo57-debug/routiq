@@ -33,7 +33,7 @@ describe('i18n', () => {
   test('every t()/tf() key used in the code actually exists', () => {
     const app = loadApp();
     const dict = app.I18N;
-    const src = fs.readFileSync(APP_FILE, 'utf8');
+    const src = require('./harness').appSource();
 
     // Literal single-quoted keys only; dynamically composed ones
     // (t('profession_'+v+'_label')) are covered by the test below.
