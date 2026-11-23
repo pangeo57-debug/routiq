@@ -372,6 +372,23 @@ nav{
 .btn,.chip[onclick],button.chip,.nav-btn,.day-tab,.agenda-check{transition:transform .12s ease, background .15s ease}
 .btn:active,.chip[onclick]:active,button.chip:active,.day-tab:active,.agenda-check:active{transform:scale(.96)}
 .nav-btn.active svg{transform:scale(1.15) translateY(-1px)}
+
+/* Steady under the finger. The page never moves sideways: no sideways
+   overscroll, and no pinch zoom (iOS ignores user-scalable=no, and a zoomed
+   page then slides left and right under every touch). Rows that can be
+   swiped still slide, inside their own box. */
+html,body{overflow-x:hidden;overscroll-behavior-x:none}
+body{touch-action:pan-x pan-y}
+[data-swipe]:not(.swiping){transition:transform .18s ease}
+.swipe-bg{transition:opacity .12s ease}
+@media (pointer:coarse){
+  /* Big enough for a thumb: 44px, the size both iOS and Android ask for. */
+  .btn,.chip,.day-tab,.home-pill,.day-toggle,.btn-icon,.slot-lock,#sched-cancel-btn{min-height:44px!important}
+  .btn-icon,.slot-lock,#sched-cancel-btn{min-width:44px!important}
+  .chip{display:inline-flex;align-items:center;justify-content:center;min-width:44px}
+  /* 16px text in fields, or iOS zooms in on every tap into one. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px!important;min-height:44px}
+}
 @media (min-width:1100px){ .toast-container{ bottom:24px; }
   .nav-fab-slot{flex:none;display:block;margin:4px 0 10px}
   .nav-fab{width:100%;height:auto;margin:0;border:none;border-radius:12px;padding:12px 14px;justify-content:flex-start;box-shadow:none}
@@ -638,6 +655,13 @@ input[type=time]{color-scheme:light}
 .confirm-text{font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.5}
 .confirm-actions{display:flex;gap:10px}
 
+/* While the progress panel is up, messages sit above it, never on it. */
+body.sched-on .toast-container{bottom:calc(var(--nav-h) + 20px + var(--sched-h, 110px) + env(safe-area-inset-bottom, 0px))}
+@media (min-width:1100px){
+  #sched-overlay{left:calc(50% + var(--side-w) / 2)!important;bottom:24px!important;max-width:640px!important}
+  body .toast-container{left:calc(50% + var(--side-w) / 2);max-width:640px}
+  body.sched-on .toast-container{bottom:calc(32px + var(--sched-h, 110px))}
+}
 /* TOAST */
 .toast-container{
   position:fixed;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom, 0px));left:50%;transform:translateX(-50%);
@@ -9552,6 +9576,7 @@ function schedProgress(pct, phase, sub, icon){
   if(pct!==null && typeof state!=='undefined' && state._schedulingCancelled) return;
   if(pct===null){
     _schedStopAnim();
+    document.body.classList.remove('sched-on');
     ov.style.opacity='0';
     setTimeout(()=>{
       ov.style.display='none'; ov.style.opacity=''; ov.classList.remove('done');
@@ -9562,6 +9587,9 @@ function schedProgress(pct, phase, sub, icon){
     return;
   }
   ov.style.display='block';
+  document.body.classList.add('sched-on');
+  // The toasts keep above the panel, whatever its height (one or two lines).
+  requestAnimationFrame(() => { try{ document.body.style.setProperty('--sched-h', ov.offsetHeight + 'px'); }catch(e){} });
   const ph=document.getElementById('sched-phase');
   const sb=document.getElementById('sched-sub');
   const wn=document.getElementById('sched-warn');
@@ -10350,6 +10378,31 @@ const App = {
     return this._pdfLibsPromise;
   },
 
+  // Hand the finished PDF to the person the way their device expects. Phones
+  // and tablets get the share sheet (Save to Files, WhatsApp, Print…): a
+  // download from an app on the home screen often goes nowhere on iOS. Else a
+  // plain download, with a real file name and .pdf at the end.
+  async _deliverPdf(blob, fileName){
+    const pdf = new Blob([blob], { type: 'application/pdf' });
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+    try{
+      const file = typeof File === 'function' ? new File([pdf], fileName, { type: 'application/pdf' }) : null;
+      if(coarse && file && navigator.canShare && navigator.canShare({ files: [file] })){
+        await navigator.share({ files: [file], title: fileName });
+        Toast.show(t('toast_pdf_downloaded'), 'success');
+        return;
+      }
+    }catch(e){
+      if(e && e.name === 'AbortError') return;        // closed the share sheet: nothing to say
+    }
+    const url = URL.createObjectURL(pdf);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.rel = 'noopener'; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    Toast.show(t('toast_pdf_downloaded'), 'success');
+  },
+
   async printSchedule(){
     Toast.show(t('toast_pdf_generating'),'info');
     try{
@@ -10382,8 +10435,13 @@ const App = {
       const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', useCORS:true});
       doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight());
       const safeTeacher = teacherName.replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'') || 'routepal';
-      doc.save(`${safeTeacher}-${t('print_title').toLowerCase()}.pdf`);
-      Toast.show(t('toast_pdf_downloaded'),'success');
+      // Latin letters only: with Greek ones in it Chrome drops the name and
+      // saves a file called "download", with no .pdf for the phone to open.
+      const G = { α:'a',β:'v',γ:'g',δ:'d',ε:'e',ζ:'z',η:'i',θ:'th',ι:'i',κ:'k',λ:'l',μ:'m',ν:'n',ξ:'x',ο:'o',π:'p',ρ:'r',σ:'s',ς:'s',τ:'t',υ:'y',φ:'f',χ:'ch',ψ:'ps',ω:'o' };
+      const latin = (x) => String(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        .replace(/[α-ω]/g, c => G[c] || '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const fileName = `${latin(safeTeacher) || 'RoutePal'}-${latin(t('print_title')) || 'schedule'}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      await this._deliverPdf(doc.output('blob'), fileName);
     }catch(e){
       console.error('PDF generation failed:', e);
       Toast.show(t('toast_pdf_lib_failed'),'error');
@@ -10966,18 +11024,6 @@ const App = {
       }
       state.scheduleKmBefore = km;
       state._keptPreviousSchedule = keptPrevious;
-      try{
-        // The person's own week, imported from their calendar, is the real
-        // "before"; otherwise the first plain placement stands in for it.
-        const own = state._ownWeek && Scheduler.countTotal(scheduleBackup) ? scheduleBackup : null;
-        const base = own || (r && r._baseline);
-        if(base){
-          const b = Scheduler.measureWeek(base, state.settings), a = Scheduler.measureWeek(state.schedule, state.settings);
-          b.km = await this._kmOf(base); a.km = km;       // the km the person reads, both sides
-          this.recordSavings('week', null, { kind: own ? 'own' : 'plain', before: b, after: a });
-        }
-        state._ownWeek = false;
-      }catch(e){ console.warn('before/after failed', e); }
       // The same person not on two days in a row: moved apart after the plan
       // is built, as far as the setting allows.
       try{
@@ -11005,6 +11051,25 @@ const App = {
       }catch(e){ console.warn('final day polish failed', e); }
       Scheduler.flexSync(state.schedule, state.students);
       if(flexBackup.length) Storage.saveStudents(state.students);
+
+      // Before / after is measured on the week as it is now, after spacing and
+      // the last per-day pass, which both move lessons. Measured earlier, the
+      // "after" here and the week's km on Home were two different weeks.
+      km = await this._kmOf(state.schedule);
+      state.scheduleKmBefore = km;
+      try{
+        // The person's own week, imported from their calendar, is the real
+        // "before"; otherwise the first plain placement stands in for it.
+        const own = state._ownWeek && Scheduler.countTotal(scheduleBackup) ? scheduleBackup : null;
+        const base = own || (r && r._baseline);
+        if(base){
+          const b = Scheduler.measureWeek(base, state.settings), a = Scheduler.measureWeek(state.schedule, state.settings);
+          b.km = await this._kmOf(base); a.km = km;       // the km the person reads, both sides
+          a.key = this.scheduleKey();                     // which week this "after" is
+          this.recordSavings('week', null, { kind: own ? 'own' : 'plain', before: b, after: a });
+        }
+        state._ownWeek = false;
+      }catch(e){ console.warn('before/after failed', e); }
 
       // Phases 2-5 can place students that were still unplaced after phase 1 —
       // recompute the unplaced list from the FINAL schedule (which may now be
@@ -11691,7 +11756,7 @@ const App = {
   },
   _initSwipe(){
     if(this._swipeInit) return; this._swipeInit = true;
-    let el = null, x0 = 0, y0 = 0, dx = 0, active = false, bg = null;
+    let el = null, x0 = 0, y0 = 0, dx = 0, active = false, bg = null, armed = false;
     const reset = () => { if(el){ el.classList.remove('swiping'); el.style.transform = ''; } if(bg) bg.remove(); el = null; bg = null; active = false; dx = 0; };
     document.addEventListener('pointerdown', (e) => {
       const t0 = e.target.closest && e.target.closest('[data-swipe]');
@@ -11702,15 +11767,23 @@ const App = {
       if(!el) return;
       const mx = e.clientX - x0, my = e.clientY - y0;
       if(!active){
-        if(Math.abs(my) > 12 && Math.abs(my) > Math.abs(mx)){ reset(); return; }   // a scroll
-        if(Math.abs(mx) < 14) return;
-        active = true; el.classList.add('swiping');
+        // Only a clearly sideways drag is a swipe: past 24px, and more than
+        // twice as wide as it is tall. Anything else is a scroll or a shaky
+        // tap, and the row stays where it is.
+        if(Math.abs(my) > 10 && Math.abs(my) * 2 > Math.abs(mx)){ reset(); return; }
+        if(Math.abs(mx) < 24) return;
+        active = true; el.classList.add('swiping'); armed = false;
         try{ window.getSelection().removeAllRanges(); }catch(e){}
         bg = document.createElement('div'); el.appendChild(bg);
       }
-      dx = mx;
-      const left = dx < 0;
+      // The row follows the finger less and less the further it goes, and no
+      // further than 45% of its width.
+      const w = el.offsetWidth || 300, raw = mx - Math.sign(mx) * 24, cap = w * 0.45;
+      dx = Math.sign(raw) * Math.min(cap, Math.abs(raw) < 90 ? Math.abs(raw) : 90 + (Math.abs(raw) - 90) * 0.4);
+      const left = dx < 0, far = Math.abs(dx) > Math.min(110, w * 0.3);
+      if(far !== armed){ armed = far; if(far) try{ navigator.vibrate && navigator.vibrate(8); }catch(e){} }
       bg.className = 'swipe-bg ' + (left ? 'del' : 'note');
+      bg.style.opacity = far ? '1' : String(0.35 + 0.65 * Math.abs(dx) / Math.min(110, w * 0.3));
       bg.innerHTML = left ? `<span>${esc(t('swipe_delete'))}</span>${ico('trash', 16)}` : `${ico('edit', 16)}<span>${esc(t('note_title'))}</span>`;
       el.style.transform = `translateX(${dx}px)`;
       bg.style.transform = `translateX(${-dx}px)`;
@@ -11719,7 +11792,7 @@ const App = {
       if(!el) return;
       if(active){
         this._swipeJustEnded = Date.now();                 // swallow the click that follows
-        const far = Math.abs(dx) > Math.min(130, el.offsetWidth * 0.33);
+        const far = Math.abs(dx) > Math.min(110, el.offsetWidth * 0.3);
         if(far){
           const spec = el.getAttribute('data-swipe'), dir = dx < 0 ? 'left' : 'right', target = el;
           if(bg) bg.remove(); el = null; bg = null; active = false;
@@ -14784,7 +14857,7 @@ const App = {
           <div class="progress-fill" style="width:${total?placed/total*100:0}%"></div>
         </div>
       </div>
-      ${state.savings && state.savings.week ? this._savingsCardHtml(state.savings.week, 'week') : ''}
+      ${state.savings && state.savings.week && (!state.savings.week.after || !state.savings.week.after.key || state.savings.week.after.key === this.scheduleKey()) ? this._savingsCardHtml(state.savings.week, 'week') : ''}
       ${this.renderUnplaced(result.unplaced)}
       ${placed > 0 && !this._lockHintSeen() ? `<div class="card-sm" style="margin:0 16px 12px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2)">
         ${ico('lock', 16)}<span style="flex:1">${esc(t('lock_hint'))}</span>
