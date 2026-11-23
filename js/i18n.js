@@ -1098,3 +1098,127 @@ function subjectLabel(subj){
 // DEMO DATA
 // ============================================================
 
+
+// Strings for the profession presets (js/professions.js).
+Object.assign(I18N.el, {
+  prof_summary: '{days}, {hours} · διάρκειες {durs} (νέος πελάτης: {dur}′, {per}× τη βδομάδα) · {margin}′ περιθώριο · {spacing}',
+  prof_every_day: 'Κάθε μέρα', prof_spacing_on: 'όχι συνεχόμενες μέρες', prof_spacing_off: 'και συνεχόμενες μέρες',
+  prof_apply_title: 'Προτεινόμενες ρυθμίσεις για «{prof}»', prof_apply_text: 'Ωράριο, διάρκειες και κανόνες για το επάγγελμα:\n{summary}\n\nΟι πελάτες σου δεν αλλάζουν. Όλα αλλάζουν μετά στις Ρυθμίσεις.',
+  prof_apply_ok: 'Βάλ’ τες', prof_applied: 'Μπήκαν οι ρυθμίσεις για «{prof}». Τις αλλάζεις όποτε θέλεις στις Ρυθμίσεις.',
+  prof_suggested_btn: 'Προτεινόμενες ρυθμίσεις επαγγέλματος', prof_durations_label: 'Κουμπιά διάρκειας (λεπτά)',
+  prof_durations_hint: 'Χωρισμένα με κόμμα, π.χ. 45, 60, 90. Κενό: του επαγγέλματος.', prof_perweek_label: 'Φορές τη βδομάδα για νέο πελάτη',
+  prof_service_dur: 'Διάρκεια από την υπηρεσία: {min}′',
+});
+Object.assign(I18N.en, {
+  prof_summary: '{days}, {hours} · lengths {durs} (new client: {dur}′, {per}× a week) · {margin}′ margin · {spacing}',
+  prof_every_day: 'Every day', prof_spacing_on: 'not two days in a row', prof_spacing_off: 'days in a row allowed',
+  prof_apply_title: 'Suggested settings for “{prof}”', prof_apply_text: 'Hours, lengths and rules for this profession:\n{summary}\n\nYour clients are not changed. Everything can be changed later in Settings.',
+  prof_apply_ok: 'Use them', prof_applied: 'Settings for “{prof}” are in. Change them any time in Settings.',
+  prof_suggested_btn: 'Suggested settings for my profession', prof_durations_label: 'Length buttons (minutes)',
+  prof_durations_hint: 'Separated by commas, e.g. 45, 60, 90. Empty: the profession’s.', prof_perweek_label: 'Times a week for a new client',
+  prof_service_dur: 'Length from the service: {min}′',
+});
+Object.assign(I18N.fr, {
+  prof_summary: '{days}, {hours} · durées {durs} (nouveau client : {dur}′, {per}× par semaine) · {margin}′ de marge · {spacing}',
+  prof_every_day: 'Tous les jours', prof_spacing_on: 'pas deux jours de suite', prof_spacing_off: 'jours consécutifs permis',
+  prof_apply_title: 'Réglages proposés pour « {prof} »', prof_apply_text: 'Horaires, durées et règles pour ce métier :\n{summary}\n\nVos clients ne changent pas. Tout se modifie ensuite dans Réglages.',
+  prof_apply_ok: 'Les appliquer', prof_applied: 'Réglages pour « {prof} » appliqués. Modifiables à tout moment dans Réglages.',
+  prof_suggested_btn: 'Réglages proposés pour mon métier', prof_durations_label: 'Boutons de durée (minutes)',
+  prof_durations_hint: 'Séparés par des virgules, ex. 45, 60, 90. Vide : ceux du métier.', prof_perweek_label: 'Fois par semaine pour un nouveau client',
+  prof_service_dur: 'Durée selon la prestation : {min}′',
+});
+Object.assign(I18N.de, {
+  prof_summary: '{days}, {hours} · Dauern {durs} (neuer Kunde: {dur}′, {per}× pro Woche) · {margin}′ Puffer · {spacing}',
+  prof_every_day: 'Jeden Tag', prof_spacing_on: 'nicht an zwei Tagen hintereinander', prof_spacing_off: 'aufeinanderfolgende Tage erlaubt',
+  prof_apply_title: 'Vorgeschlagene Einstellungen für „{prof}“', prof_apply_text: 'Zeiten, Dauern und Regeln für diesen Beruf:\n{summary}\n\nIhre Kunden bleiben unverändert. Alles lässt sich später in den Einstellungen ändern.',
+  prof_apply_ok: 'Übernehmen', prof_applied: 'Einstellungen für „{prof}“ übernommen. Jederzeit in den Einstellungen änderbar.',
+  prof_suggested_btn: 'Vorgeschlagene Einstellungen für meinen Beruf', prof_durations_label: 'Dauer-Tasten (Minuten)',
+  prof_durations_hint: 'Mit Komma getrennt, z. B. 45, 60, 90. Leer: die des Berufs.', prof_perweek_label: 'Termine pro Woche für neue Kunden',
+  prof_service_dur: 'Dauer laut Leistung: {min}′',
+});
+
+// Strings for telling clients about changed times (js/notify.js).
+Object.assign(I18N.el, {
+  notify_banner: 'Άλλαξαν οι ώρες για {n} {clients}', notify_open: 'Ενημέρωσέ τους', notify_title: 'Ποιοι πρέπει να μάθουν τις νέες ώρες',
+  notify_hint: 'Το μήνυμα ανοίγει έτοιμο στο WhatsApp ή στα SMS σου. Με το ✓ σημειώνεις όσους ενημέρωσες αλλιώς.',
+  notify_close: 'Κλείσιμο', notify_all: 'Όλοι ενημερώθηκαν', notify_all_done: 'Σημειώθηκε: όλοι ξέρουν τις νέες ώρες', notify_mark: 'Ενημερώθηκε',
+  notify_nothing: 'Κανείς δεν χρειάζεται ενημέρωση', notify_none_now: 'κανένα ραντεβού αυτή τη βδομάδα', notify_before: '(Μέχρι τώρα: {old})',
+  notify_msg_default: 'Γεια σου {name}! Αλλάζει λίγο το πρόγραμμά μας:\n{new}\n{old}\nΣου κάνει;',
+  settings_notify_label: 'Μήνυμα όταν αλλάζουν οι ώρες', settings_notify_hint: 'Κενό: το προτεινόμενο. Μπαίνουν αυτόματα: {name} όνομα, {new} νέες ώρες, {old} παλιές ώρες, {me} το όνομά σου.',
+});
+Object.assign(I18N.en, {
+  notify_banner: 'Times changed for {n} {clients}', notify_open: 'Let them know', notify_title: 'Who needs to hear the new times',
+  notify_hint: 'The message opens ready in your WhatsApp or SMS. Tick ✓ for anyone you told another way.',
+  notify_close: 'Close', notify_all: 'Everyone knows', notify_all_done: 'Noted: everyone knows the new times', notify_mark: 'Told',
+  notify_nothing: 'Nobody needs telling', notify_none_now: 'no appointment this week', notify_before: '(Until now: {old})',
+  notify_msg_default: 'Hi {name}! Our schedule changes a little:\n{new}\n{old}\nDoes that work for you?',
+  settings_notify_label: 'Message when times change', settings_notify_hint: 'Empty: the suggested one. Filled in for you: {name} name, {new} new times, {old} old times, {me} your name.',
+});
+Object.assign(I18N.fr, {
+  notify_banner: 'Horaires modifiés pour {n} {clients}', notify_open: 'Les prévenir', notify_title: 'Qui doit connaître les nouveaux horaires',
+  notify_hint: 'Le message s’ouvre prêt dans WhatsApp ou vos SMS. Cochez ✓ pour ceux prévenus autrement.',
+  notify_close: 'Fermer', notify_all: 'Tout le monde est prévenu', notify_all_done: 'Noté : tout le monde connaît les nouveaux horaires', notify_mark: 'Prévenu',
+  notify_nothing: 'Personne à prévenir', notify_none_now: 'aucun rendez-vous cette semaine', notify_before: '(Jusqu’ici : {old})',
+  notify_msg_default: 'Bonjour {name} ! Notre planning change un peu :\n{new}\n{old}\nCela vous convient ?',
+  settings_notify_label: 'Message quand les horaires changent', settings_notify_hint: 'Vide : celui proposé. Remplis pour vous : {name} nom, {new} nouveaux horaires, {old} anciens, {me} votre nom.',
+});
+Object.assign(I18N.de, {
+  notify_banner: 'Zeiten geändert für {n} {clients}', notify_open: 'Benachrichtigen', notify_title: 'Wer die neuen Zeiten erfahren muss',
+  notify_hint: 'Die Nachricht öffnet sich fertig in WhatsApp oder SMS. Mit ✓ markieren Sie, wen Sie anders informiert haben.',
+  notify_close: 'Schließen', notify_all: 'Alle wissen Bescheid', notify_all_done: 'Notiert: alle kennen die neuen Zeiten', notify_mark: 'Informiert',
+  notify_nothing: 'Niemand muss informiert werden', notify_none_now: 'kein Termin diese Woche', notify_before: '(Bisher: {old})',
+  notify_msg_default: 'Hallo {name}! Unser Plan ändert sich etwas:\n{new}\n{old}\nPasst das für dich?',
+  settings_notify_label: 'Nachricht bei geänderten Zeiten', settings_notify_hint: 'Leer: die vorgeschlagene. Automatisch eingesetzt: {name} Name, {new} neue Zeiten, {old} alte Zeiten, {me} Ihr Name.',
+});
+
+// Strings for who owes what (js/payments.js).
+Object.assign(I18N.el, {
+  pay_owes: 'Χρωστάει {n}', pay_owes_long: 'Χρωστάει {n} ραντεβού.', pay_total: 'Οφειλές: {n} ραντεβού συνολικά', pay_title: 'Πληρωμή · {name}',
+  pay_nothing_owed: 'Δεν χρωστάει τίποτα. Μπορείς να γράψεις προπληρωμή.', pay_nothing_short: 'Τίποτα', pay_how_many: 'Πόσα ραντεβού καλύπτει η πληρωμή',
+  pay_save: 'Καταχώρηση', pay_saved: 'Η πληρωμή καταχωρήθηκε', pay_btn: 'Πλήρωσε', pay_row: 'Οφειλή', pay_done_btn: 'Έγινε',
+  pay_price_label: 'Τιμή ανά ραντεβού (€)', pay_price_ph: 'π.χ. 20 — για να φαίνονται οι οφειλές σε €',
+});
+Object.assign(I18N.en, {
+  pay_owes: 'Owes {n}', pay_owes_long: 'Owes {n} appointments.', pay_total: 'Owed: {n} appointments in all', pay_title: 'Payment · {name}',
+  pay_nothing_owed: 'Nothing owed. You can record a prepayment.', pay_nothing_short: 'Nothing', pay_how_many: 'How many appointments this payment covers',
+  pay_save: 'Record', pay_saved: 'Payment recorded', pay_btn: 'Paid', pay_row: 'Owed', pay_done_btn: 'Done',
+  pay_price_label: 'Price per appointment (€)', pay_price_ph: 'e.g. 20 — to see what is owed in €',
+});
+Object.assign(I18N.fr, {
+  pay_owes: 'Doit {n}', pay_owes_long: 'Doit {n} rendez-vous.', pay_total: 'Dû : {n} rendez-vous au total', pay_title: 'Paiement · {name}',
+  pay_nothing_owed: 'Rien n’est dû. Vous pouvez noter un paiement d’avance.', pay_nothing_short: 'Rien', pay_how_many: 'Combien de rendez-vous ce paiement couvre',
+  pay_save: 'Enregistrer', pay_saved: 'Paiement enregistré', pay_btn: 'Payé', pay_row: 'Dû', pay_done_btn: 'Fait',
+  pay_price_label: 'Prix par rendez-vous (€)', pay_price_ph: 'ex. 20 — pour voir le dû en €',
+});
+Object.assign(I18N.de, {
+  pay_owes: 'Schuldet {n}', pay_owes_long: 'Schuldet {n} Termine.', pay_total: 'Offen: {n} Termine insgesamt', pay_title: 'Zahlung · {name}',
+  pay_nothing_owed: 'Nichts offen. Sie können eine Vorauszahlung erfassen.', pay_nothing_short: 'Nichts', pay_how_many: 'Wie viele Termine diese Zahlung abdeckt',
+  pay_save: 'Erfassen', pay_saved: 'Zahlung erfasst', pay_btn: 'Bezahlt', pay_row: 'Offen', pay_done_btn: 'Erledigt',
+  pay_price_label: 'Preis pro Termin (€)', pay_price_ph: 'z. B. 20 — um Offenes in € zu sehen',
+});
+
+// Strings for 2- and 4-week rhythms (js/cadence.js).
+Object.assign(I18N.el, { cad_label: 'Κάθε πότε', cad_opt_1: 'Κάθε βδομάδα', cad_opt_2: 'Κάθε 2 βδομάδες', cad_opt_4: 'Κάθε 4 βδομάδες', cad_every: 'κάθε {n} βδ.' });
+Object.assign(I18N.en, { cad_label: 'How often', cad_opt_1: 'Every week', cad_opt_2: 'Every 2 weeks', cad_opt_4: 'Every 4 weeks', cad_every: 'every {n} wks' });
+Object.assign(I18N.fr, { cad_label: 'Fréquence', cad_opt_1: 'Chaque semaine', cad_opt_2: 'Toutes les 2 semaines', cad_opt_4: 'Toutes les 4 semaines', cad_every: 'toutes les {n} sem.' });
+Object.assign(I18N.de, { cad_label: 'Wie oft', cad_opt_1: 'Jede Woche', cad_opt_2: 'Alle 2 Wochen', cad_opt_4: 'Alle 4 Wochen', cad_every: 'alle {n} Wo.' });
+
+// Strings for feedback from inside the app (js/feedback.js).
+Object.assign(I18N.el, { fb_btn: 'Πες μας τη γνώμη σου', fb_title: 'Τι να βελτιώσουμε;', fb_hint: 'Ό,τι σε δυσκόλεψε, ό,τι σου έλειψε, ό,τι σου άρεσε. Ανοίγει το email σου, χωρίς ονόματα ή διευθύνσεις πελατών.', fb_ph: 'Γράψε εδώ…', fb_send: 'Στείλε', fb_thanks: 'Ευχαριστούμε!', fb_subject: 'RoutePal — γνώμη' });
+Object.assign(I18N.en, { fb_btn: 'Tell us what you think', fb_title: 'What should we improve?', fb_hint: 'Whatever was hard, missing or good. Opens your email, with no client names or addresses.', fb_ph: 'Write here…', fb_send: 'Send', fb_thanks: 'Thank you!', fb_subject: 'RoutePal — feedback' });
+Object.assign(I18N.fr, { fb_btn: 'Donnez-nous votre avis', fb_title: 'Que devons-nous améliorer ?', fb_hint: 'Ce qui était difficile, manquant ou réussi. Ouvre votre e-mail, sans noms ni adresses de clients.', fb_ph: 'Écrivez ici…', fb_send: 'Envoyer', fb_thanks: 'Merci !', fb_subject: 'RoutePal — avis' });
+Object.assign(I18N.de, { fb_btn: 'Ihre Meinung', fb_title: 'Was sollen wir verbessern?', fb_hint: 'Was schwierig war, fehlte oder gefiel. Öffnet Ihre E-Mail, ohne Kundennamen oder Adressen.', fb_ph: 'Hier schreiben…', fb_send: 'Senden', fb_thanks: 'Danke!', fb_subject: 'RoutePal — Feedback' });
+
+// Strings for the week in the phone's calendar, with the reminder the person picks.
+Object.assign(I18N.el, { cal_add_week: 'Όλη η εβδομάδα στο ημερολόγιο', cal_week_saved: '{n} ραντεβού για το ημερολόγιο του κινητού, κάθε βδομάδα, με υπενθύμιση. Αν αλλάξει το πρόγραμμα, ξαναβάλ’ το.',
+  remind_before_label: 'Υπενθύμιση πριν από κάθε ραντεβού', remind_before_hint: 'Ισχύει για τις ειδοποιήσεις της εφαρμογής και για το ημερολόγιο του κινητού, που ειδοποιεί και με κλειστή εφαρμογή.',
+  remind_before_15: '15 λεπτά', remind_before_30: '30 λεπτά', remind_before_60: '1 ώρα', remind_before_120: '2 ώρες', remind_before_1440: '1 μέρα' });
+Object.assign(I18N.en, { cal_add_week: 'Whole week to calendar', cal_week_saved: '{n} appointments for your phone’s calendar, every week, with a reminder. If the schedule changes, add it again.',
+  remind_before_label: 'Reminder before each appointment', remind_before_hint: 'For the app’s notifications and for your phone’s calendar, which reminds you even with the app closed.',
+  remind_before_15: '15 minutes', remind_before_30: '30 minutes', remind_before_60: '1 hour', remind_before_120: '2 hours', remind_before_1440: '1 day' });
+Object.assign(I18N.fr, { cal_add_week: 'Toute la semaine au calendrier', cal_week_saved: '{n} rendez-vous pour le calendrier du téléphone, chaque semaine, avec rappel. Si le planning change, ajoutez-le à nouveau.',
+  remind_before_label: 'Rappel avant chaque rendez-vous', remind_before_hint: 'Pour les notifications de l’app et pour le calendrier du téléphone, qui rappelle même app fermée.',
+  remind_before_15: '15 minutes', remind_before_30: '30 minutes', remind_before_60: '1 heure', remind_before_120: '2 heures', remind_before_1440: '1 jour' });
+Object.assign(I18N.de, { cal_add_week: 'Ganze Woche in den Kalender', cal_week_saved: '{n} Termine für den Handykalender, jede Woche, mit Erinnerung. Ändert sich der Plan, erneut hinzufügen.',
+  remind_before_label: 'Erinnerung vor jedem Termin', remind_before_hint: 'Für die Benachrichtigungen der App und den Handykalender, der auch bei geschlossener App erinnert.',
+  remind_before_15: '15 Minuten', remind_before_30: '30 Minuten', remind_before_60: '1 Stunde', remind_before_120: '2 Stunden', remind_before_1440: '1 Tag' });

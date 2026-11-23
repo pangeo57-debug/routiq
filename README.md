@@ -151,6 +151,11 @@ Push στο branch `main` → αυτόματο deploy μέσω GitHub Pages, ζ�
 | `js/services.js` | reminders, compute server, AI, usage counts, sync |
 | `js/router.js` | addresses and road distances |
 | `js/progress.js` | the progress panel and keeping the screen on |
+| `js/professions.js` | suggested settings per profession (changeable) |
+| `js/notify.js` | telling clients whose times changed |
+| `js/payments.js` | who owes what, counted in appointments |
+| `js/cadence.js` | clients every 2 or 4 weeks |
+| `js/feedback.js` | "tell us what you think" (FEEDBACK_TO) |
 | `js/app.js` | the screens |
 | `js/toast.js` | messages |
 

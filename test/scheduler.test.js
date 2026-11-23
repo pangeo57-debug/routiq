@@ -6786,8 +6786,9 @@ describe('the first minutes: less to fill in', () => {
     assert.match(html, /onclick="App\.toggleStudentMap\(\)"/);
     const st = student('x'); app.setState({ students: [st] });
     assert.match(app.App.buildStudentForm(st), /<details id="st-more"[^>]* open/);
-    // length is picked with buttons, and an unusual one keeps its value
-    assert.match(html, /class="seg-btn on"[^>]*>60′</);
+    // length is picked with buttons (the profession's, here a tutor's), its
+    // usual length picked for a new client, and an unusual one keeps its value
+    assert.match(html, /class="seg-btn on"[^>]*>90′</);
     assert.match(app.App.buildStudentForm(student('y', { lessonDuration: 75 })), /id="st-dur-other"[^>]*value="75"/);
   });
 

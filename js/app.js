@@ -306,6 +306,8 @@ const App = {
   //  · a notification REMIND_MIN before each stop while the app is open or in
   //    the background (scheduleReminders).
   REMIND_MIN: 15,
+  // How long before an appointment to remind: the person's choice, 15′ unless set.
+  remindMin(){ const v = Number(state.settings && state.settings.remindMin); return v >= 5 && v <= 1440 ? v : this.REMIND_MIN; },
   _icsText(x){ return String(x || '').replace(/\\/g, '\\\\').replace(/([,;])/g, '\\$1').replace(/\r?\n/g, '\\n'); },
   buildICS(items, dateISO, alarmMin){
     const ymd = dateISO.replace(/-/g, '');
@@ -319,17 +321,65 @@ const App = {
         `DTSTART:${ymd}T${hm(x.time)}`, `DTEND:${ymd}T${hm(end)}`, `SUMMARY:${this._icsText(x.title)}`);
       if(x.address) lines.push(`LOCATION:${this._icsText(x.address)}`);
       lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${this._icsText(x.title)}`,
-        `TRIGGER:-PT${Number(alarmMin) || this.REMIND_MIN}M`, 'END:VALARM', 'END:VEVENT');
+        `TRIGGER:-PT${Number(alarmMin) || this.remindMin()}M`, 'END:VALARM', 'END:VEVENT');
     }
     lines.push('END:VCALENDAR');
     return lines.join('\r\n') + '\r\n';
+  },
+
+  /**
+   * The week as repeating events for the phone's calendar: one event per
+   * appointment, weekly (every 2 or 4 weeks for clients on that rhythm), each
+   * with a reminder. Imported once, the calendar reminds with the app closed
+   * until the week changes. UIDs are stable, so importing again updates.
+   */
+  buildWeekICS(alarmMin, fromISO){
+    const pad = (n) => String(n).padStart(2, '0');
+    const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const monday = Cadence.monday(fromISO || this.todayISO());
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const hm = (x) => x.replace(':', '') + '00';
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RoutePal//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:RoutePal'];
+    for(const d of [1, 2, 3, 4, 5, 6, 7]){
+      for(const sl of (state.schedule[d] || [])){
+        const st = (state.students || []).find(s => s.id === sl.studentId);
+        const every = Cadence.of(st);
+        // The first date on this weekday, from this week on, that is one of the client's weeks.
+        let date = new Date(monday); date.setDate(date.getDate() + d - 1);
+        for(let k = 0; k < every && st && !Cadence.onWeek(st, iso(date)); k++) date.setDate(date.getDate() + 7);
+        const ymd = iso(date).replace(/-/g, '');
+        lines.push('BEGIN:VEVENT', `UID:week-${String(sl.studentId).replace(/[^\w-]/g, '')}-${d}-${hm(sl.start)}@routepal`, `DTSTAMP:${stamp}`,
+          `DTSTART:${ymd}T${hm(sl.start)}`, `DTEND:${ymd}T${hm(sl.end)}`,
+          `RRULE:FREQ=WEEKLY${every > 1 ? ';INTERVAL=' + every : ''}`, `SUMMARY:${this._icsText(sl.studentName || (st && st.name) || '')}`);
+        if(sl.address) lines.push(`LOCATION:${this._icsText(sl.address)}`);
+        lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${this._icsText(sl.studentName || '')}`,
+          `TRIGGER:-PT${Number(alarmMin) || this.remindMin()}M`, 'END:VALARM', 'END:VEVENT');
+      }
+    }
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n') + '\r\n';
+  },
+
+  async exportWeekCalendar(){
+    const n = Object.values(state.schedule || {}).reduce((a, d) => a + (d || []).length, 0);
+    if(!n){ Toast.show(t('cal_nothing'), 'info'); return; }
+    const text = this.buildWeekICS(this.remindMin());
+    const name = 'routepal-week.ics';
+    try{
+      const file = (typeof File === 'function') ? new File([text], name, { type: 'text/calendar' }) : null;
+      if(file && navigator.canShare && navigator.canShare({ files: [file] })){ await navigator.share({ files: [file], title: 'RoutePal' }); Toast.show(tf('cal_week_saved', { n }), 'success', 7000); return; }
+    }catch(e){ if(e && e.name === 'AbortError') return; }
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    Toast.show(tf('cal_week_saved', { n }), 'success', 7000);
   },
 
   async exportCalendar(){
     const date = this.todayISO();
     const items = this._todayAgenda().filter(x => x.time && !x.done);
     if(!items.length){ Toast.show(t('cal_nothing'), 'info'); return; }
-    const text = this.buildICS(items, date, this.REMIND_MIN);
+    const text = this.buildICS(items, date, this.remindMin());
     const name = `routepal-${date}.ics`;
     try{
       const file = (typeof File === 'function') ? new File([text], name, { type: 'text/calendar' }) : null;
@@ -357,7 +407,7 @@ const App = {
     const d = now || new Date(), nowMin = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
     for(const x of this._todayAgenda()){
       if(!x.time || x.done) continue;
-      const wait = (Scheduler.toMin(x.time) - this.REMIND_MIN - nowMin) * 60000;
+      const wait = (Scheduler.toMin(x.time) - this.remindMin() - nowMin) * 60000;
       if(wait <= 0 || wait > 12 * 3600000) continue;
       this._remindTimers.push(setTimeout(() => this._remind(x), wait));
     }
@@ -373,10 +423,10 @@ const App = {
     const items = [], texts = {};
     for(const x of this._todayAgenda()){
       if(!x.time || x.done) continue;
-      const at = base.getTime() + (Scheduler.toMin(x.time) - this.REMIND_MIN) * 60000;
+      const at = base.getTime() + (Scheduler.toMin(x.time) - this.remindMin()) * 60000;
       if(at <= d.getTime() || at - d.getTime() > 24 * 3600000) continue;
       const k = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
-      texts[k] = { title: tf('remind_title', { min: this.REMIND_MIN, name: x.title }),
+      texts[k] = { title: tf('remind_title', { min: this.remindMin(), name: x.title }),
         body: [x.time, x.address].filter(Boolean).join(' · '), tag: 'rp-' + x.id };
       items.push({ t: at, k });
     }
@@ -384,10 +434,10 @@ const App = {
     const push = await Remote._push();
     if(!push) return;
     await fetch(Remote._url('/reminders'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ push, items, fallback: { title: tf('remind_title', { min: this.REMIND_MIN, name: '' }).replace(/[:\s]+$/, '') } }) });
+      body: JSON.stringify({ push, items, fallback: { title: tf('remind_title', { min: this.remindMin(), name: '' }).replace(/[:\s]+$/, '') } }) });
   },
   _remind(x){
-    const title = tf('remind_title', { min: this.REMIND_MIN, name: x.title });
+    const title = tf('remind_title', { min: this.remindMin(), name: x.title });
     const opts = { body: [x.time, x.address].filter(Boolean).join(' · '), icon: 'icon-192.png', tag: 'rp-' + x.id };
     try{
       if(navigator.serviceWorker && navigator.serviceWorker.ready)
@@ -1515,9 +1565,13 @@ const App = {
     date = date || this.todayISO();
     const day = Scheduler.weekdayOf(date);
     const out = [];
-    for(const sl of (state.schedule[day] || []))
+    for(const sl of (state.schedule[day] || [])){
+      // A client on a 2- or 4-week rhythm, on one of their off weeks.
+      if(!Cadence.onWeek((state.students || []).find(s => s.id === sl.studentId), date)) continue;
       out.push({ kind: 'lesson', id: sl.studentId, title: sl.studentName, sub: subjectText(sl.subject), address: sl.address,
+                 date, done: Payments.isDone(date, sl.studentId, sl.start),
                  time: sl.start, end: sl.end, note: ((state.students || []).find(s => s.id === sl.studentId) || {}).notes || '' });
+    }
     const plan = state.dayPlan && state.dayPlan.date === date ? state.dayPlan : null;
     for(const j of (state.jobs || [])){
       if(j.date !== date) continue;
@@ -1668,7 +1722,8 @@ const App = {
           <div class="agenda-sub">${esc([x.sub, x.address].filter(Boolean).join(' · '))}</div>
           ${x.note ? `<div class="agenda-note">${ico('edit', 11)} ${esc(x.note)}</div>` : ''}
         </div>
-        ${x.kind !== 'lesson' ? `<button class="agenda-check" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">${x.done ? '↺' : '✓'}</button>` : ''}
+        ${x.kind !== 'lesson' ? `<button class="agenda-check" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">${x.done ? '↺' : '✓'}</button>`
+          : `<button class="agenda-check" aria-label="${esc(t('pay_done_btn'))}" title="${esc(t('pay_done_btn'))}" onclick="event.stopPropagation();Payments.toggleDone('${esc(x.date)}','${esc(x.id)}','${esc(x.time || '')}')">${x.done ? '↺' : '✓'}</button>`}
       </div>`;
     };
     return `
@@ -1684,6 +1739,7 @@ const App = {
           <span style="display:flex;gap:6px">
             ${timed.length && typeof Notification !== 'undefined' && Notification.permission === 'default' ? `<button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.enableReminders()">${ico('bell', 14)} ${esc(t('remind_enable'))}</button>` : ''}
             ${timed.length ? `<button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.exportCalendar()">${ico('calendar', 14)} ${esc(t('cal_add'))}</button>` : ''}
+            <button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.exportWeekCalendar()">${ico('calendar', 14)} ${esc(t('cal_add_week'))}</button>
           </span>
         </div>
         <div class="home-timeline">
@@ -2209,6 +2265,7 @@ const App = {
           <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.openPasteClients()">${esc(t('paste_btn'))}</button>
           <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.openCalendarImport()">${ico('calendar', 13)} ${esc(t('cal_import_btn'))}</button>
         </div>
+        ${Payments.totalHtml()}
         ${students.map(st=>this.studentCard(st)).join('')}
       `}
     `;
@@ -2284,8 +2341,9 @@ const App = {
           <div class="student-avatar" style="background:${bg}20;color:${bg};border:1px solid ${bg}40">${initials}</div>
           <div class="student-info">
             <div class="student-name">${esc(st.name)} ${this._farFromHomeWarning(st.id)} ${this._locationNote(st.id)}</div>
-            <div class="student-sub">${subjectText(st.subject) ? esc(subjectText(st.subject)) + ' · ' : ''}${Scheduler.hasMixedDurations(st) ? st.durations.map(d => d + '′').join(' + ') : st.lessonsPerWeek + t('student_per_week_suffix')} · <span class="wallet-placed${placed>=st.lessonsPerWeek?'':' short'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
+            <div class="student-sub">${subjectText(st.subject) ? esc(subjectText(st.subject)) + ' · ' : ''}${Scheduler.hasMixedDurations(st) ? st.durations.map(d => d + '′').join(' + ') : st.lessonsPerWeek + t('student_per_week_suffix')}${Cadence.label(st) ? ' · ' + esc(Cadence.label(st)) : ''} · <span class="wallet-placed${placed>=st.lessonsPerWeek?'':' short'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
             ${times.length ? `<div class="wallet-times">${times.slice(0, 5).map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+            ${Payments.badgeHtml(st)}
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
@@ -2293,6 +2351,7 @@ const App = {
           <div class="student-detail-row"><span class="student-detail-label">${t('student_address_label')}</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="${t('student_geocoded_title')} ✓">${ico('pin', 11)}</span>`:`<span style="color:var(--text3);font-size:10px" title="${t('student_not_geocoded_title')}"> ○</span>`} ${this._farFromHomeWarning(st.id)}</span></div>
           ${st.phone?`<div class="student-detail-row"><span class="student-detail-label">${t('student_phone_label')}</span><span style="font-size:12px">${esc(st.phone)}</span></div>`:''}
           <div class="student-detail-row"><span class="student-detail-label">${t('student_duration_label')}</span><span>${st.lessonDuration} ${t('student_minutes_suffix')}</span></div>
+          <div class="student-detail-row"><span class="student-detail-label">${t('pay_row')}</span><span style="display:flex;align-items:center;gap:8px">${esc(Payments.owedText(st) || t('pay_nothing_short'))}${Payments.price(st) ? ` <span style="color:var(--text3)">(${Payments.price(st)} €)</span>` : ''}<button class="chip chip-gray" style="border:none;cursor:pointer" onclick="event.stopPropagation();Payments.openPay('${st.id}')">${esc(t('pay_btn'))}</button></span></div>
           <div class="student-detail-row"><span class="student-detail-label">${t('student_type_label')}</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?t('student_type_group_prefix')+': '+esc(st.group):t('student_type_solo')}</span></div>
           ${st.pairedWith ? (()=>{
             const partner = state.students.find(s=>s.id===st.pairedWith);
@@ -2404,7 +2463,7 @@ const App = {
       </div>
       <div class="form-group">
         <label id="st-dur-label">${t('form_duration_label')}</label>
-        ${(() => { const cur = st?.lessonDuration ?? (state.settings.defaultLessonDuration || 60), presets = [45, 60, 90, 120], other = !presets.includes(cur);
+        ${(() => { const cur = st?.lessonDuration ?? (state.settings.defaultLessonDuration || Professions.preset(state.settings.profession).dur), presets = Professions.durations(state.settings), other = !presets.includes(cur);
           return `<input type="hidden" id="st-dur" value="${cur}">
         <div class="seg" id="st-dur-seg" role="group" aria-labelledby="st-dur-label">
           ${presets.map(v => `<button type="button" class="seg-btn${cur === v ? ' on' : ''}" aria-pressed="${cur === v}" onclick="App._setDur(${v},this)">${v}′</button>`).join('')}
@@ -2418,7 +2477,13 @@ const App = {
         <div class="form-group" style="margin:0">
           <label>${t('form_times_per_week')}</label>
           <select id="st-freq" onchange="App.toggleMergeField()">
-            ${[1,2,3,4,5].map(v=>`<option value="${v}" ${st?.lessonsPerWeek===v?'selected':''}>${v}×</option>`).join('')}
+            ${[1,2,3,4,5,6,7].map(v=>`<option value="${v}" ${(st ? st.lessonsPerWeek : Professions.defaultPerWeek(state.settings))===v?'selected':''}>${v}×</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label for="st-cadence">${t('cad_label')}</label>
+          <select id="st-cadence">
+            ${[1,2,4].map(n=>`<option value="${n}" ${Cadence.of(st)===n?'selected':''}>${t('cad_opt_'+n)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -2454,7 +2519,7 @@ const App = {
       <div class="form-group">
         <label>${L.session}</label>
         ${(() => { const cur = st?.subject || '', list = getSubjects(), own = !!cur && subjectText(cur) === cur && !list.includes(cur);
-          return `<select id="st-subject" onchange="document.getElementById('st-subject-own').style.display=this.value==='Άλλο'?'':'none'">
+          return `<select id="st-subject" onchange="document.getElementById('st-subject-own').style.display=this.value==='Άλλο'?'':'none';App._serviceDur(this.value)">
           <option value="" ${!subjectText(cur) && cur !== 'Άλλο' ? 'selected' : ''}>${esc(t('subject_none'))}</option>
           ${list.map(sub=>`<option value="${sub}" ${(cur===sub && !own) || (own && sub==='Άλλο')?'selected':''}>${esc(sub==='Άλλο' ? t('subject_own') : subjectLabel(sub))}</option>`).join('')}
         </select>
@@ -2515,6 +2580,10 @@ const App = {
       <div class="form-group" style="margin-top:14px">
         <label>${t('student_notes_label')}</label>
         <textarea id="st-notes" placeholder="${t('form_notes_placeholder')}">${esc(st?.notes||'')}</textarea>
+      </div>
+      <div class="form-group" style="margin-top:14px">
+        <label for="st-price">${t('pay_price_label')}</label>
+        <input type="number" id="st-price" inputmode="decimal" min="0" max="1000" step="0.5" value="${st?.price || ''}" placeholder="${esc(t('pay_price_ph'))}">
       </div>
       </details>
     `;
@@ -4212,6 +4281,22 @@ const App = {
   _lockHintSeen(){ try{ return localStorage.getItem('rp_lock_hint') === '1'; }catch(e){ return true; } },
   dismissLockHint(){ try{ localStorage.setItem('rp_lock_hint', '1'); }catch(e){} if(state.currentScreen === 'schedule') this.renderSchedule(); },
   // Length of a session from the buttons; "other" opens the number field.
+  // A service with a length of its own (a manicure, a lash set) sets the length
+  // buttons to it. The person can still pick another.
+  _serviceDur(subject){
+    const m = Professions.serviceDuration(state.settings, subject);
+    if(!m) return;
+    const btn = Array.from(document.querySelectorAll('#st-dur-seg .seg-btn')).find(b => b.textContent.trim() === m + '′');
+    if(btn) this._setDur(m, btn);
+    else {
+      const other = Array.from(document.querySelectorAll('#st-dur-seg .seg-btn')).pop();
+      const inp = document.getElementById('st-dur-other');
+      if(inp) inp.value = m;
+      if(other) this._setDur(null, other);
+      document.getElementById('st-dur').value = m;
+    }
+    Toast.show(tf('prof_service_dur', { min: m }), 'info', 2500);
+  },
   _setDur(v, btn){
     document.querySelectorAll('#st-dur-seg .seg-btn').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); });
     btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true');
@@ -4277,6 +4362,11 @@ const App = {
       group: document.getElementById('st-group')?.value?.trim()||'',
       pairedWith: document.getElementById('st-paired')?.value||null,
       notes: document.getElementById('st-notes')?.value?.trim()||'',
+      cadence: (() => { const n = Number(document.getElementById('st-cadence')?.value); return n === 2 || n === 4 ? n : undefined; })(),
+      cadenceFrom: (() => { const n = Number(document.getElementById('st-cadence')?.value); if(n !== 2 && n !== 4) return undefined;
+        const was = state.editingStudentId && state.students.find(s => s.id === state.editingStudentId);
+        return (was && Cadence.of(was) === n && was.cadenceFrom) || this.todayISO(); })(),
+      price: (() => { const v = Number(String(document.getElementById('st-price')?.value || '').replace(',', '.')); return v > 0 ? Math.min(1000, v) : undefined; })(),
       spacing: document.getElementById('st-spacing')?.value || undefined,
       mergeMode: document.getElementById('st-mergemode')?.value||'off',
       forceMerge: document.getElementById('st-mergemode')?.value==='always',
@@ -5169,6 +5259,8 @@ const App = {
       </div>
       ${state.savings && state.savings.week && (!state.savings.week.after || !state.savings.week.after.key || state.savings.week.after.key === this.scheduleKey()) ? this._savingsCardHtml(state.savings.week, 'week') : ''}
       ${this.renderUnplaced(result.unplaced)}
+      ${Notify.bannerHtml()}
+      ${placed > 0 ? `<div style="padding:0 16px 10px"><button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.exportWeekCalendar()">${ico('calendar', 14)} ${esc(t('cal_add_week'))}</button></div>` : ''}
       ${placed > 0 && !this._lockHintSeen() ? `<div class="card-sm" style="margin:0 16px 12px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2)">
         ${ico('lock', 16)}<span style="flex:1">${esc(t('lock_hint'))}</span>
         <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.dismissLockHint()">${esc(t('lock_hint_ok'))}</button></div>` : ''}
@@ -6652,6 +6744,7 @@ const App = {
         </button>
       </div>
 
+      ${Feedback.buttonHtml()}
       <details id="set-more" class="fold fold-plain" style="margin:8px 16px 0" ontoggle="state.settingsMoreOpen=this.open" ${state.settingsMoreOpen ? 'open' : ''}>
         <summary>${t('settings_more')}</summary>
       <div style="margin:0 -16px">
@@ -6660,6 +6753,31 @@ const App = {
         <div class="form-group" style="margin:0">
           <select id="set-profession" onchange="App.setProfession(this.value)">
             ${getProfessions().map(p=>`<option value="${p.value}" ${(st.profession||'other')===p.value?'selected':''}>${p.label}</option>`).join('')}
+          </select>
+          <div class="settings-sub" style="margin-top:6px">${esc(Professions.summary(st.profession||'other'))}</div>
+          <button type="button" class="btn btn-secondary btn-full" style="margin-top:8px" onclick="App.offerProfessionPreset(state.settings.profession||'other')">${esc(t('prof_suggested_btn'))}</button>
+        </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label for="set-durs">${t('prof_durations_label')}</label>
+          <input type="text" id="set-durs" inputmode="numeric" value="${esc((st.durationChoices||[]).join(', '))}" placeholder="${esc(Professions.preset(st.profession).durations.join(', '))}">
+          <div class="settings-sub" style="margin-top:4px">${t('prof_durations_hint')}</div>
+        </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label for="set-remind">${t('remind_before_label')}</label>
+          <select id="set-remind">
+            ${[15,30,60,120,1440].map(n=>`<option value="${n}" ${App.remindMin()===n?'selected':''}>${t('remind_before_'+n)}</option>`).join('')}
+          </select>
+          <div class="settings-sub" style="margin-top:4px">${t('remind_before_hint')}</div>
+        </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label for="set-change-msg">${t('settings_notify_label')}</label>
+          <textarea id="set-change-msg" rows="4" placeholder="${esc(t('notify_msg_default'))}">${esc(st.changeMessage||'')}</textarea>
+          <div class="settings-sub" style="margin-top:4px">${t('settings_notify_hint')}</div>
+        </div>
+        <div class="form-group" style="margin:12px 0 0">
+          <label for="set-perweek">${t('prof_perweek_label')}</label>
+          <select id="set-perweek">
+            ${[1,2,3,4,5,6,7].map(n=>`<option value="${n}" ${Professions.defaultPerWeek(st)===n?'selected':''}>${n}×</option>`).join('')}
           </select>
         </div>
       </div>
@@ -6731,7 +6849,7 @@ const App = {
         <div class="form-group" style="margin:12px 0 0">
           <label>${t('settings_maxday_label')}</label>
           <select id="set-maxday">
-            ${[0,3,4,5,6,8].map(n=>`<option value="${n}" ${(st.maxPerDay||0)===n?'selected':''}>${n?n:t('settings_maxday_none')}</option>`).join('')}
+            ${[0,2,3,4,5,6,8].map(n=>`<option value="${n}" ${(st.maxPerDay||0)===n?'selected':''}>${n?n:t('settings_maxday_none')}</option>`).join('')}
           </select>
           <div class="settings-sub">${t('settings_maxday_hint')}</div>
         </div>
@@ -6912,6 +7030,20 @@ const App = {
     Storage.saveSettings(state.settings);
     this.updateNavLabels();
     this.renderSettings();
+    this.offerProfessionPreset(p);
+  },
+
+  // The profession's suggested hours, lengths and rules, only on a yes. The
+  // person's clients are not touched; every value stays changeable.
+  offerProfessionPreset(p){
+    const name = (getProfessions().find(x => x.value === p) || {}).label || p;
+    this.confirm(tf('prof_apply_title', { prof: name }), tf('prof_apply_text', { summary: Professions.summary(p) }), () => {
+      Professions.apply(state.settings, p);
+      Storage.saveSettings(state.settings);
+      this.updateNavLabels();
+      this.renderSettings();
+      Toast.show(tf('prof_applied', { prof: name }), 'success', 5000);
+    }, t('prof_apply_ok'), false);
   },
 
   setLanguage(lang){
@@ -6994,6 +7126,10 @@ const App = {
     s.hereApiKey = s.hereApiKey || '';
     s.lunchBreak = Number(document.getElementById('set-lunch')?.value)||0;
     s.maxPerDay = Number(document.getElementById('set-maxday')?.value)||0;
+    { const el = document.getElementById('set-durs'); if(el){ const v = Professions.parseDurations(el.value); if(v) s.durationChoices = v; else delete s.durationChoices; } }
+    { const el = document.getElementById('set-remind'); if(el) s.remindMin = Number(el.value) || 15; }
+    { const el = document.getElementById('set-change-msg'); if(el){ const v = el.value.trim(); if(v) s.changeMessage = v.slice(0, 600); else delete s.changeMessage; } }
+    { const el = document.getElementById('set-perweek'); if(el) s.defaultPerWeek = Number(el.value) || Professions.preset(s.profession).perWeek; }
     { const sp = document.getElementById('set-spacing'); if(sp) s.avoidConsecutiveDays = sp.value === 'strict' ? 'strict' : sp.value !== '0'; }
 
     // If home address changed, use the coord already resolved by autocomplete/
@@ -7756,7 +7892,7 @@ const App = {
       ? (state.jobs||[]).find(j=>j.id===id)
       : state.students.find(s=>s.id===id);
     const intl = this.normalizePhone(who && who.phone, state.settings.countryCode);
-    state.sendTarget = { raw: (who && who.phone) || '', intl };
+    state.sendTarget = { raw: (who && who.phone) || '', intl, sid: kind === 'job' ? null : id };
     document.getElementById('send-title').textContent = t('send_title');
     document.getElementById('send-hint').textContent = intl ? t('send_hint') : t('send_no_phone');
     const ta = document.getElementById('send-text');
@@ -7793,6 +7929,7 @@ const App = {
     }
     const url = how==='whatsapp' ? this.waLink(tgt.intl, text) : this.smsLink(tgt.raw, text);
     if(!url){ Toast.show(t('send_no_phone'),'error'); return; }
+    if(tgt.sid) Notify.markTold(tgt.sid);
     this.closeSendSheet();
     try{
       if(how==='whatsapp') window.open(url, '_blank');
@@ -7936,8 +8073,11 @@ const App = {
     state.settings.workMode = this._obMode || 'clients';
     const work = state.settings.workMode === 'clients' ? '' : (document.getElementById('ob-work')?.value?.trim() || '');
     if(work){ state.settings.workplaceAddress = work; if(!addr) addr = work; }
-    state.settings.profession = this._obProf || 'other';
-    state.settings.defaultLessonDuration = this._obDur || 60;
+    // A fresh profile starts from what the profession usually looks like:
+    // hours, lengths, margin, rules. All of it is shown in Settings and
+    // changeable there.
+    const hadHours = Object.keys(state.settings.dayHours || {}).length > 0;
+    Professions.apply(state.settings, this._obProf || 'other', { keepHours: hadHours });
     // Working hours to start from. Without any, every client's availability
     // came out empty and the first client could not be saved at all.
     // A wide day is the safe default: it only allows, it never forbids.
