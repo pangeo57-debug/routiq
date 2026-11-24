@@ -92,28 +92,60 @@ Object.assign(Scheduler, {
     const OUT = 10000;
 
     // ---- cost of one day, with the penalties ---------------------------------
+    // One step of the day: lesson j after `prev`, the clock at `t`. Late for
+    // every window: start at the last moment that would have fitted and pay
+    // the difference as time warp (the clock goes back, so one late lesson
+    // does not push the rest of the day). Early: wait, at the app's price.
     let wTW = 1, wCap = 50;
-    const evalDay = (k, route) => {
-      const dd = D[k];
-      let km = 0, warp = 0, idle = 0, prev = 0, t = dd.start, first = true;
-      for(const j of route){
-        km += dd.K[prev][j];
-        const ws = dd.wins[j], dur = L[j].dur;
-        let earliest = first ? Math.max(dd.start, ws.length ? ws[0][0] : dd.start) : t + dd.T[prev][j];
-        let s = ws.length ? S.earliestLegal(ws, dd.breaks, earliest, dur) : null;
-        if(s === null || s + dur > dd.end){
-          // Late: start at the last moment that would have fitted, and pay the difference.
-          let latest = -1;
-          ws.forEach((w, i) => { latest = Math.max(latest, Math.min(w[1] + S.windowFlex(ws, i), dd.end) - dur); });
-          if(latest < 0) latest = dd.end - dur;
-          warp += Math.max(1, earliest - latest);
-          s = latest;
-        } else if(!first) idle += s - earliest;
-        t = s + dur; prev = j; first = false;
-      }
-      if(route.length) km += dd.K[prev][0];
-      const over = cap ? Math.max(0, route.length - cap) : 0;
+    const step = (dd, st, j) => {
+      st.km += dd.K[st.prev][j];
+      const ws = dd.wins[j], dur = L[j].dur;
+      const earliest = st.first ? Math.max(dd.start, ws.length ? ws[0][0] : dd.start) : st.t + dd.T[st.prev][j];
+      let s = ws.length ? S.earliestLegal(ws, dd.breaks, earliest, dur) : null;
+      if(s === null || s + dur > dd.end){
+        let latest = -1;
+        ws.forEach((w, i) => { latest = Math.max(latest, Math.min(w[1] + S.windowFlex(ws, i), dd.end) - dur); });
+        if(latest < 0) latest = dd.end - dur;
+        st.warp += Math.max(1, earliest - latest);
+        s = latest;
+      } else if(!st.first) st.idle += s - earliest;
+      st.t = s + dur; st.prev = j; st.first = false;
+    };
+    const price = (km, warp, idle, count) => {
+      const over = cap ? Math.max(0, count - cap) : 0;
       return { km, warp, idle, over, cost: km + idle * IDLE + wTW * warp + wCap * over };
+    };
+    // A day's cost, with its profile: after each lesson, the clock and the
+    // km, warp and waiting so far. A change is then priced from where it
+    // happens, and stops as soon as the clock meets the old day again:
+    // from there on everything is as it was (concatenation, as HGS does it,
+    // kept exact for several windows a day and blocked times).
+    const evalDay = (k, route) => {
+      const dd = D[k], m = route.length;
+      const st = { km: 0, warp: 0, idle: 0, prev: 0, t: dd.start, first: true };
+      const te = new Float64Array(m), kp = new Float64Array(m), wp = new Float64Array(m), ip = new Float64Array(m);
+      for(let q = 0; q < m; q++){ step(dd, st, route[q]); te[q] = st.t; kp[q] = st.km; wp[q] = st.warp; ip[q] = st.idle; }
+      if(m) st.km += dd.K[st.prev][0];
+      const c = price(st.km, st.warp, st.idle, m);
+      c.te = te; c.kp = kp; c.wp = wp; c.ip = ip;
+      return c;
+    };
+    // The cost of `route` with its first `pre` lessons kept, then `extra`
+    // lessons, then the route again from index `from`.
+    const splice = (k, c, route, pre, extra, from) => {
+      const dd = D[k], m = route.length;
+      const st = pre ? { km: c.kp[pre - 1], warp: c.wp[pre - 1], idle: c.ip[pre - 1], prev: route[pre - 1], t: c.te[pre - 1], first: false }
+                     : { km: 0, warp: 0, idle: 0, prev: 0, t: dd.start, first: true };
+      for(const j of extra) step(dd, st, j);
+      const count = pre + extra.length + (m - from);
+      for(let q = from; q < m; q++){
+        step(dd, st, route[q]);
+        // Met the old day again: the same lesson ends at the same moment, so
+        // everything after it is as it was; add the old day's rest and stop.
+        if(st.t === c.te[q]) return price(st.km + (c.km - c.kp[q]), st.warp + (c.warp - c.wp[q]), st.idle + (c.idle - c.ip[q]), count).cost;
+      }
+      if(count) st.km += dd.K[st.prev][0];
+      return price(st.km, st.warp, st.idle, count).cost;
     };
     const evalWeek = (ind) => {
       let cost = 0, km = 0, feas = true;
@@ -128,16 +160,14 @@ Object.assign(Scheduler, {
     const clash = (route, j) => route.some(x => L[x].occ.some(o => L[j].occ.includes(o)));
     const twice = (route) => { const seen = new Set(); for(const x of route) for(const o of L[x].occ){ if(seen.has(o)) return true; seen.add(o); } return false; };
 
-    // Best place for lesson j in day k: [delta, position].
-    const bestIn = (ind, k, j) => {
-      const route = ind.r[k];
-      if(!canGo[j][k] || clash(route, j)) return [Infinity, -1];
-      const base = ind.c[k].cost;
+    // Best place for lessons `js` (one, or a run of two) in day k: [delta, position].
+    const bestIn = (ind, k, js) => {
+      const route = ind.r[k], c = ind.c[k];
+      for(const j of js) if(!canGo[j][k] || clash(route, j)) return [Infinity, -1];
       let best = Infinity, at = -1;
       for(let p = 0; p <= route.length; p++){
-        const trial = route.slice(0, p).concat(j, route.slice(p));
-        const c = evalDay(k, trial).cost - base;
-        if(c < best){ best = c; at = p; }
+        const d = splice(k, c, route, p, js, p) - c.cost;
+        if(d < best){ best = d; at = p; }
       }
       return [best, at];
     };
@@ -149,7 +179,7 @@ Object.assign(Scheduler, {
       while(left.length){
         let pick = -1, pickK = -1, pickP = -1, pickR = -Infinity;
         for(const j of left){
-          const opts = D.map((_, k) => [...bestIn(ind, k, j), k]).filter(o => o[0] < Infinity).sort((a, b) => a[0] - b[0]);
+          const opts = D.map((_, k) => [...bestIn(ind, k, [j]), k]).filter(o => o[0] < Infinity).sort((a, b) => a[0] - b[0]);
           if(!opts.length) continue;
           const regret = (opts[1] ? opts[1][0] : opts[0][0] + 1e6) - opts[0][0];
           if(regret > pickR){ pickR = regret; pick = j; pickK = opts[0][2]; pickP = opts[0][1]; }
@@ -162,8 +192,12 @@ Object.assign(Scheduler, {
       evalWeek(ind);
       return true;
     };
+    const setDay = (ind, k, route) => { ind.r[k] = route; ind.c[k] = evalDay(k, route); };
 
-    // ---- education: relocations and swaps until nothing improves -----------
+    // ---- education ---------------------------------------------------------
+    // Until nothing improves: each lesson (and each run of two) moved to its
+    // best place on any day; swaps between days; 2-opt within a day; tails
+    // exchanged between two days (2-opt*); in or out of the week.
     const educate = (ind) => {
       evalWeek(ind);
       let improved = true, rounds = 0;
@@ -174,36 +208,39 @@ Object.assign(Scheduler, {
         for(const j of order){
           const k0 = ind.r.findIndex(route => route.includes(j));
           if(k0 < 0){
-            // Outside: in, at its best place anywhere, if that beats waiting outside.
             let best = OUT, bk = -1, bp = -1;
-            for(let k = 0; k < D.length; k++){ const [delta, p] = bestIn(ind, k, j); if(delta < best - 1e-9){ best = delta; bk = k; bp = p; } }
-            if(bk >= 0){ ind.r[bk].splice(bp, 0, j); ind.c[bk] = evalDay(bk, ind.r[bk]); ind.u = ind.u.filter(x => x !== j); improved = true; }
+            for(let k = 0; k < D.length; k++){ const [delta, p] = bestIn(ind, k, [j]); if(delta < best - 1e-9){ best = delta; bk = k; bp = p; } }
+            if(bk >= 0){ const r = ind.r[bk].slice(); r.splice(bp, 0, j); setDay(ind, bk, r); ind.u = ind.u.filter(x => x !== j); improved = true; }
             continue;
           }
-          const without = ind.r[k0].filter(x => x !== j);
-          const gain = ind.c[k0].cost - evalDay(k0, without).cost;
-          // Taking it out pays OUT and saves `gain` (its km and any penalty it caused).
-          if(OUT - gain < -1e-9){
-            ind.r[k0] = without; ind.c[k0] = evalDay(k0, without); ind.u.push(j); improved = true;
-            continue;
-          }
-          let best = 0, bk = -1, bp = -1;
-          for(let k = 0; k < D.length; k++){
-            if(k === k0){
-              for(let p = 0; p <= without.length; p++){
-                const trial = without.slice(0, p).concat(j, without.slice(p));
-                const delta = evalDay(k, trial).cost - ind.c[k].cost;
-                if(delta < best - 1e-9){ best = delta; bk = k; bp = p; }
-              }
-              continue;
+          const route0 = ind.r[k0], p0 = route0.indexOf(j);
+          // Alone (1) or with the next lesson of its day (2): the run moves together.
+          for(const len of [1, 2]){
+            if(p0 + len > route0.length) continue;
+            const run = route0.slice(p0, p0 + len);
+            const gain = ind.c[k0].cost - splice(k0, ind.c[k0], route0, p0, [], p0 + len);
+            if(len === 1 && OUT - gain < -1e-9){
+              setDay(ind, k0, route0.filter(x => x !== j)); ind.u.push(j); improved = true; break;
             }
-            const [delta, p] = bestIn(ind, k, j);
-            if(delta - gain < best - 1e-9){ best = delta - gain; bk = k; bp = p; }
-          }
-          if(bk >= 0){
-            ind.r[k0] = without; ind.c[k0] = evalDay(k0, without);
-            ind.r[bk].splice(bp, 0, j); ind.c[bk] = evalDay(bk, ind.r[bk]);
-            improved = true;
+            const without = route0.slice(0, p0).concat(route0.slice(p0 + len));
+            const cw = evalDay(k0, without);
+            let best = 0, bk = -1, bp = -1;
+            for(let k = 0; k < D.length; k++){
+              if(k === k0){
+                for(let p = 0; p <= without.length; p++){
+                  const d = splice(k, cw, without, p, run, p) - ind.c[k].cost;
+                  if(d < best - 1e-9){ best = d; bk = k; bp = p; }
+                }
+                continue;
+              }
+              const [delta, p] = bestIn(ind, k, run);
+              if(delta - gain < best - 1e-9){ best = delta - gain; bk = k; bp = p; }
+            }
+            if(bk >= 0){
+              if(bk === k0){ const r = without.slice(); r.splice(bp, 0, ...run); setDay(ind, k0, r); }
+              else { setDay(ind, k0, without); const r = ind.r[bk].slice(); r.splice(bp, 0, ...run); setDay(ind, bk, r); }
+              improved = true; break;
+            }
           }
         }
         // Swaps of two lessons between two days, each into the other's place.
@@ -220,11 +257,34 @@ Object.assign(Scheduler, {
             }
           }
         }
+        // 2-opt within a day: a stretch of the day in reverse order.
+        for(let k = 0; k < D.length; k++){
+          const r = ind.r[k];
+          for(let x = 0; x < r.length - 1; x++) for(let y = x + 1; y < r.length; y++){
+            const t = r.slice(0, x).concat(r.slice(x, y + 1).reverse(), r.slice(y + 1));
+            const ct = evalDay(k, t);
+            if(ct.cost < ind.c[k].cost - 1e-9){ ind.r[k] = t; ind.c[k] = ct; improved = true; break; }
+          }
+        }
+        // 2-opt*: the ends of two days exchanged.
+        for(let a = 0; a < D.length; a++) for(let b = a + 1; b < D.length; b++){
+          const ra = ind.r[a], rb = ind.r[b];
+          let done = false;
+          for(let x = 0; x <= ra.length && !done; x++) for(let y = 0; y <= rb.length && !done; y++){
+            if(x === ra.length && y === rb.length) continue;
+            const na = ra.slice(0, x).concat(rb.slice(y)), nb = rb.slice(0, y).concat(ra.slice(x));
+            if(na.some(j => !canGo[j][a]) || nb.some(j => !canGo[j][b]) || twice(na) || twice(nb)) continue;
+            const ca = evalDay(a, na), cb = evalDay(b, nb);
+            if(ca.cost + cb.cost < ind.c[a].cost + ind.c[b].cost - 1e-9){
+              ind.r[a] = na; ind.r[b] = nb; ind.c[a] = ca; ind.c[b] = cb; improved = true; done = true;
+            }
+          }
+        }
       }
       return evalWeek(ind);
     };
 
-    // ---- the population ------------------------------------------------------
+    // ---- the population: legal weeks and weeks that break a rule, apart ------
     const fromSchedule = (sch) => {
       const ind = { r: D.map(() => []), u: [] };
       D.forEach((dd, k) => {
@@ -246,29 +306,40 @@ Object.assign(Scheduler, {
       return evalWeek(ind);
     };
     const dist = (a, b) => { const x = daysOf(a), y = daysOf(b); let s = 0; for(let j = 1; j <= n; j++) if(x[j] !== y[j]) s++; return s / n; };
-    const MU = 20, LAMBDA = 30, CLOSE = 4, ELITE = 4;
-    const pop = [];
-    let bestFeas = null;
+    const MU = 15, LAMBDA = 25, CLOSE = 4, ELITE = 4, STUCK = 150;
+    const popF = [], popI = [];
+    let bestFeas = null, lastBetter = 0, iter = 0;
     const consider = (ind) => {
       if(!ind.feas) return;
       const out = (ind.u || []).length;
-      if(!bestFeas || out < bestFeas.out || (out === bestFeas.out && ind.real < bestFeas.real - 1e-9))
-        bestFeas = { r: ind.r.map(x => x.slice()), real: ind.real, out };
+      if(!bestFeas || out < bestFeas.out || (out === bestFeas.out && ind.real < bestFeas.real - 1e-9)){
+        bestFeas = { r: ind.r.map(x => x.slice()), real: ind.real, out }; lastBetter = iter;
+      }
+    };
+    const addTo = (ind) => { const pop = ind.feas ? popF : popI; if(!pop.some(p => dist(p, ind) < 1e-9)) pop.push(ind); if(pop.length >= MU + LAMBDA) survivors(pop); };
+    // A child that breaks a rule is, half the time, educated again at ten
+    // times the price: often it becomes a legal week (Vidal's repair).
+    const repair = (ind) => {
+      const w0 = wTW, c0 = wCap; wTW *= 10; wCap *= 10;
+      educate(ind); wTW = w0; wCap = c0; evalWeek(ind);
     };
     const seed = fromSchedule(schedule);
     if(!seed) return false;
-    educate(seed); consider(seed); pop.push(seed);
-    // The screen keeps answering, and the bar moves, while this runs.
+    educate(seed); consider(seed); (seed.feas ? popF : popI).push(seed);
     const breathe = () => { if(progress) try{ progress(Math.min(1, (Date.now() - t0) / budgetMs)); }catch(e){} return new Promise(r => setTimeout(r, 0)); };
-    while(pop.length < MU && Date.now() - t0 < budgetMs * 0.3 && !(stopped && stopped())){
-      const ind = randomOne(); if(!ind) break;
-      educate(ind); consider(ind); pop.push(ind);
-      await breathe();
-    }
-    const survivors = () => {
+    const fill = async (until) => {
+      while(popF.length + popI.length < MU && Date.now() - t0 < until && !(stopped && stopped())){
+        const ind = randomOne(); if(!ind) break;
+        educate(ind); if(!ind.feas && Math.random() < 0.5) repair(ind);
+        consider(ind); (ind.feas ? popF : popI).push(ind);
+        await breathe();
+      }
+    };
+    await fill(t0 + budgetMs * 0.3);
+    function survivors(pop){
       while(pop.length > MU){
         // Biased fitness: rank by cost plus rank by distance to the closest few.
-        const nd = pop.map((a, i) => { const ds = pop.map((b, k) => k === i ? Infinity : dist(a, b)).sort((x, y) => x - y); return ds.slice(0, CLOSE).reduce((s, v) => s + v, 0) / CLOSE; });
+        const nd = pop.map((a, i) => { const ds = pop.map((b, k) => k === i ? Infinity : dist(a, b)).sort((x, y) => x - y); return ds.slice(0, CLOSE).reduce((s, v) => s + v, 0) / Math.max(1, Math.min(CLOSE, pop.length - 1)); });
         const byCost = pop.map((_, i) => i).sort((a, b) => pop[a].cost - pop[b].cost);
         const byDiv = pop.map((_, i) => i).sort((a, b) => nd[b] - nd[a]);
         const rc = new Array(pop.length), rd = new Array(pop.length);
@@ -277,9 +348,10 @@ Object.assign(Scheduler, {
         let worst = 0; for(let i = 1; i < pop.length; i++) if(fit[i] > fit[worst]) worst = i;
         pop.splice(worst, 1);
       }
-    };
-    const tournament = () => { const a = pop[Math.floor(Math.random() * pop.length)], b = pop[Math.floor(Math.random() * pop.length)]; return a.cost <= b.cost ? a : b; };
-    let made = 0, feasMade = 0, iter = 0;
+    }
+    const all = () => popF.concat(popI);
+    const tournament = () => { const p = all(); const a = p[Math.floor(Math.random() * p.length)], b = p[Math.floor(Math.random() * p.length)]; return a.cost <= b.cost ? a : b; };
+    let made = 0, feasMade = 0;
     while(Date.now() - t0 < budgetMs && !(stopped && stopped())){
       const A = tournament(), Bp = tournament();
       const keep = new Set(D.map((_, k) => k).filter(() => Math.random() < 0.5));
@@ -292,15 +364,25 @@ Object.assign(Scheduler, {
       insertAll(child, missing);
       educate(child);
       made++; if(child.feas) feasMade++;
+      if(!child.feas && Math.random() < 0.5) repair(child);
+      iter++;
       consider(child);
-      if(!pop.some(p => dist(p, child) < 1e-9)) pop.push(child);
-      if(pop.length >= MU + LAMBDA) survivors();
+      addTo(child);
       // Keep about a fifth of the children legal by adjusting the prices.
-      if(++iter % 20 === 0){
+      if(iter % 20 === 0){
         const share = feasMade / Math.max(1, made);
         if(share < 0.15) wTW = Math.min(1000, wTW * 1.5); else if(share > 0.25) wTW = Math.max(0.05, wTW / 1.3);
         made = feasMade = 0;
-        pop.forEach(evalWeek);
+        all().forEach(evalWeek);
+        // A legal week that the new prices call illegal, or the reverse, changes side.
+        for(const x of popF.filter(x => !x.feas)){ popF.splice(popF.indexOf(x), 1); popI.push(x); }
+        for(const x of popI.filter(x => x.feas)){ popI.splice(popI.indexOf(x), 1); popF.push(x); }
+      }
+      // Stuck for long: keep the best few, start the rest afresh.
+      if(iter - lastBetter > STUCK){
+        popF.sort((a, b) => a.cost - b.cost); popF.splice(ELITE); popI.length = 0;
+        lastBetter = iter;
+        await fill(Date.now() + Math.max(0, (t0 + budgetMs - Date.now()) * 0.3));
       }
       await breathe();
     }
