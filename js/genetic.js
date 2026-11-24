@@ -90,6 +90,25 @@ Object.assign(Scheduler, {
     // above any saving in km, so the search fits as many as it can first,
     // then makes the week short. Weeks where not everyone fits are common.
     const OUT = 10000;
+    // Granular search for big weeks (60+ appointments), as HGS does: each
+    // lesson is tried only next to its GRAN nearest, nearness being the drive
+    // plus the gap between their hours (two clients across town but both free
+    // at 17:00 are near; next door but one at 9 and one at 20 are not).
+    const GRAN = 20, granular = n >= 60;
+    const near = granular ? L.map((x, i) => {
+      if(!i) return null;
+      const span = (j) => { let a = Infinity, b = -Infinity; for(const dd of D) for(const w of dd.wins[j]){ a = Math.min(a, w[0]); b = Math.max(b, w[1]); } return [a, b]; };
+      const si = span(i), order = [];
+      for(let j = 1; j <= n; j++){
+        if(j === i) continue;
+        const sj = span(j);
+        const gap = Math.max(0, sj[0] - si[1], si[0] - sj[1]);
+        order.push([Math.min(D[0].T[i][j], D[0].T[j][i]) + gap, j]);
+      }
+      order.sort((a, b) => a[0] - b[0]);
+      return new Set(order.slice(0, GRAN).map(o => o[1]));
+    }) : null;
+    const nearPos = (route, j, p) => !granular || p === 0 || p === route.length || near[j].has(route[p - 1]) || near[j].has(route[p]);
 
     // ---- cost of one day, with the penalties ---------------------------------
     // One step of the day: lesson j after `prev`, the clock at `t`. Late for
@@ -111,9 +130,10 @@ Object.assign(Scheduler, {
       } else if(!st.first) st.idle += s - earliest;
       st.t = s + dur; st.prev = j; st.first = false;
     };
+    const costOf = (km, warp, idle, count) => km + idle * IDLE + wTW * warp + wCap * (cap ? Math.max(0, count - cap) : 0);
     const price = (km, warp, idle, count) => {
       const over = cap ? Math.max(0, count - cap) : 0;
-      return { km, warp, idle, over, cost: km + idle * IDLE + wTW * warp + wCap * over };
+      return { km, warp, idle, over, cost: costOf(km, warp, idle, count) };
     };
     // A day's cost, with its profile: after each lesson, the clock and the
     // km, warp and waiting so far. A change is then priced from where it
@@ -130,23 +150,28 @@ Object.assign(Scheduler, {
       c.te = te; c.kp = kp; c.wp = wp; c.ip = ip;
       return c;
     };
-    // The cost of `route` with its first `pre` lessons kept, then `extra`
-    // lessons, then the route again from index `from`.
-    const splice = (k, c, route, pre, extra, from) => {
-      const dd = D[k], m = route.length;
-      const st = pre ? { km: c.kp[pre - 1], warp: c.wp[pre - 1], idle: c.ip[pre - 1], prev: route[pre - 1], t: c.te[pre - 1], first: false }
-                     : { km: 0, warp: 0, idle: 0, prev: 0, t: dd.start, first: true };
-      for(const j of extra) step(dd, st, j);
-      const count = pre + extra.length + (m - from);
+    // The cost of `route` with its first `pre` lessons kept, then the lessons
+    // seg[lo..hi) (backwards if `rev`), then the route again from `from`. No
+    // array is made: the state is one reused object, the segment is read in
+    // place. Stops as soon as the clock meets the old day again (see evalDay).
+    const SS = { km: 0, warp: 0, idle: 0, prev: 0, t: 0, first: true };
+    const spliceSeg = (k, c, route, pre, seg, lo, hi, rev, from) => {
+      const dd = D[k], m = route.length, st = SS;
+      if(pre){ st.km = c.kp[pre - 1]; st.warp = c.wp[pre - 1]; st.idle = c.ip[pre - 1]; st.prev = route[pre - 1]; st.t = c.te[pre - 1]; st.first = false; }
+      else { st.km = 0; st.warp = 0; st.idle = 0; st.prev = 0; st.t = dd.start; st.first = true; }
+      if(rev) for(let q = hi - 1; q >= lo; q--) step(dd, st, seg[q]);
+      else for(let q = lo; q < hi; q++) step(dd, st, seg[q]);
+      const count = pre + (hi - lo) + (m - from);
       for(let q = from; q < m; q++){
         step(dd, st, route[q]);
         // Met the old day again: the same lesson ends at the same moment, so
         // everything after it is as it was; add the old day's rest and stop.
-        if(st.t === c.te[q]) return price(st.km + (c.km - c.kp[q]), st.warp + (c.warp - c.wp[q]), st.idle + (c.idle - c.ip[q]), count).cost;
+        if(st.t === c.te[q]) return costOf(st.km + (c.km - c.kp[q]), st.warp + (c.warp - c.wp[q]), st.idle + (c.idle - c.ip[q]), count);
       }
       if(count) st.km += dd.K[st.prev][0];
-      return price(st.km, st.warp, st.idle, count).cost;
+      return costOf(st.km, st.warp, st.idle, count);
     };
+    const splice = (k, c, route, pre, extra, from) => spliceSeg(k, c, route, pre, extra, 0, extra.length, false, from);
     const evalWeek = (ind) => {
       let cost = 0, km = 0, feas = true;
       ind.u = ind.u || [];
@@ -161,11 +186,12 @@ Object.assign(Scheduler, {
     const twice = (route) => { const seen = new Set(); for(const x of route) for(const o of L[x].occ){ if(seen.has(o)) return true; seen.add(o); } return false; };
 
     // Best place for lessons `js` (one, or a run of two) in day k: [delta, position].
-    const bestIn = (ind, k, js) => {
+    const bestIn = (ind, k, js, gran) => {
       const route = ind.r[k], c = ind.c[k];
       for(const j of js) if(!canGo[j][k] || clash(route, j)) return [Infinity, -1];
       let best = Infinity, at = -1;
       for(let p = 0; p <= route.length; p++){
+        if(gran && !nearPos(route, js[0], p)) continue;
         const d = splice(k, c, route, p, js, p) - c.cost;
         if(d < best){ best = d; at = p; }
       }
@@ -228,12 +254,13 @@ Object.assign(Scheduler, {
             for(let k = 0; k < D.length; k++){
               if(k === k0){
                 for(let p = 0; p <= without.length; p++){
+                  if(!nearPos(without, run[0], p)) continue;
                   const d = splice(k, cw, without, p, run, p) - ind.c[k].cost;
                   if(d < best - 1e-9){ best = d; bk = k; bp = p; }
                 }
                 continue;
               }
-              const [delta, p] = bestIn(ind, k, run);
+              const [delta, p] = bestIn(ind, k, run, true);
               if(delta - gain < best - 1e-9){ best = delta - gain; bk = k; bp = p; }
             }
             if(bk >= 0){
@@ -243,40 +270,54 @@ Object.assign(Scheduler, {
             }
           }
         }
-        // Swaps of two lessons between two days, each into the other's place.
+        // Swaps of two lessons between two days, each into the other's place:
+        // each day priced from its profile with the other lesson read in place.
+        const clashBut = (route, skip, j) => { for(let q = 0; q < route.length; q++){ if(q === skip) continue; const x = route[q]; for(const o of L[x].occ) if(L[j].occ.includes(o)) return true; } return false; };
         for(let a = 0; a < D.length; a++) for(let b = a + 1; b < D.length; b++){
           for(let p = 0; p < ind.r[a].length; p++) for(let q = 0; q < ind.r[b].length; q++){
-            const ja = ind.r[a][p], jb = ind.r[b][q];
-            if(!canGo[ja][b] || !canGo[jb][a]) continue;
-            const ra = ind.r[a].slice(), rb = ind.r[b].slice();
-            ra[p] = jb; rb[q] = ja;
-            if(twice(ra) || twice(rb)) continue;
-            const ca = evalDay(a, ra), cb = evalDay(b, rb);
-            if(ca.cost + cb.cost < ind.c[a].cost + ind.c[b].cost - 1e-9){
-              ind.r[a] = ra; ind.r[b] = rb; ind.c[a] = ca; ind.c[b] = cb; improved = true;
+            const ra = ind.r[a], rb = ind.r[b], ja = ra[p], jb = rb[q];
+            if(!canGo[ja][b] || !canGo[jb][a] || (granular && !near[ja].has(jb))) continue;
+            if(clashBut(ra, p, jb) || clashBut(rb, q, ja)) continue;
+            const na = spliceSeg(a, ind.c[a], ra, p, rb, q, q + 1, false, p + 1);
+            const nb = spliceSeg(b, ind.c[b], rb, q, ra, p, p + 1, false, q + 1);
+            if(na + nb < ind.c[a].cost + ind.c[b].cost - 1e-9){
+              const xa = ra.slice(), xb = rb.slice(); xa[p] = jb; xb[q] = ja;
+              setDay(ind, a, xa); setDay(ind, b, xb); improved = true;
             }
           }
         }
-        // 2-opt within a day: a stretch of the day in reverse order.
+        // 2-opt within a day: a stretch of the day in reverse order, read
+        // backwards in place.
         for(let k = 0; k < D.length; k++){
           const r = ind.r[k];
-          for(let x = 0; x < r.length - 1; x++) for(let y = x + 1; y < r.length; y++){
-            const t = r.slice(0, x).concat(r.slice(x, y + 1).reverse(), r.slice(y + 1));
-            const ct = evalDay(k, t);
-            if(ct.cost < ind.c[k].cost - 1e-9){ ind.r[k] = t; ind.c[k] = ct; improved = true; break; }
+          let done = false;
+          for(let x = 0; x < r.length - 1 && !done; x++) for(let y = x + 1; y < r.length && !done; y++){
+            if(spliceSeg(k, ind.c[k], r, x, r, x, y + 1, true, y + 1) < ind.c[k].cost - 1e-9){
+              setDay(ind, k, r.slice(0, x).concat(r.slice(x, y + 1).reverse(), r.slice(y + 1))); improved = true; done = true;
+            }
           }
         }
-        // 2-opt*: the ends of two days exchanged.
+        // 2-opt*: the ends of two days exchanged; each new day is its own
+        // start (from the profile) and the other day's end read in place.
+        const tailOk = (dayK, head, hlen, tail, tfrom) => {
+          for(let q = tfrom; q < tail.length; q++){
+            const j = tail[q];
+            if(!canGo[j][dayK]) return false;
+            for(let h = 0; h < hlen; h++) for(const o of L[head[h]].occ) if(L[j].occ.includes(o)) return false;
+          }
+          return true;
+        };
         for(let a = 0; a < D.length; a++) for(let b = a + 1; b < D.length; b++){
           const ra = ind.r[a], rb = ind.r[b];
           let done = false;
           for(let x = 0; x <= ra.length && !done; x++) for(let y = 0; y <= rb.length && !done; y++){
             if(x === ra.length && y === rb.length) continue;
-            const na = ra.slice(0, x).concat(rb.slice(y)), nb = rb.slice(0, y).concat(ra.slice(x));
-            if(na.some(j => !canGo[j][a]) || nb.some(j => !canGo[j][b]) || twice(na) || twice(nb)) continue;
-            const ca = evalDay(a, na), cb = evalDay(b, nb);
-            if(ca.cost + cb.cost < ind.c[a].cost + ind.c[b].cost - 1e-9){
-              ind.r[a] = na; ind.r[b] = nb; ind.c[a] = ca; ind.c[b] = cb; improved = true; done = true;
+            if(!tailOk(a, ra, x, rb, y) || !tailOk(b, rb, y, ra, x)) continue;
+            const na = spliceSeg(a, ind.c[a], ra, x, rb, y, rb.length, false, ra.length);
+            const nb = spliceSeg(b, ind.c[b], rb, y, ra, x, ra.length, false, rb.length);
+            if(na + nb < ind.c[a].cost + ind.c[b].cost - 1e-9){
+              const xa = ra.slice(0, x).concat(rb.slice(y)), xb = rb.slice(0, y).concat(ra.slice(x));
+              setDay(ind, a, xa); setDay(ind, b, xb); improved = true; done = true;
             }
           }
         }
