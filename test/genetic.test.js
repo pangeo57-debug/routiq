@@ -83,4 +83,12 @@ describe('the genetic week search', () => {
     assert.ok(S.countTotal(week) >= S.countTotal(before), 'no lesson lost');
     assert.ok(!S.isBetterStart(before, week, cfg), 'never worse than what it was given');
   });
+  test('a small week stops when its best has not improved for a while, a long budget unspent', async () => {
+    const { S, sts, cfg, app } = world();
+    const r = await S.optimizeWeek({ students: sts, settings: cfg, coords: app.state.coords, attempts: 1, timeScale: 0.25, geneticMs: 0 });
+    const week = JSON.parse(JSON.stringify(r.schedule));
+    await S.geneticWeek(week, sts, cfg, 20000);
+    assert.ok(S._geneticLog.usedMs < 20000, 'stopped early: ' + S._geneticLog.usedMs);
+    assert.equal(S.verifySchedule(week, sts, cfg).length, 0);
+  });
 });

@@ -359,12 +359,12 @@ Object.assign(Scheduler, {
     const dist = (a, b) => { const x = daysOf(a), y = daysOf(b); let s = 0; for(let j = 1; j <= n; j++) if(x[j] !== y[j]) s++; return s / n; };
     const MU = 15, LAMBDA = 25, CLOSE = 4, ELITE = 4, STUCK = 150;
     const popF = [], popI = [];
-    let bestFeas = null, lastBetter = 0, iter = 0;
+    let bestFeas = null, lastBetter = 0, iter = 0, lastBetterMs = 0;
     const consider = (ind) => {
       if(!ind.feas) return;
       const out = (ind.u || []).length;
       if(!bestFeas || out < bestFeas.out || (out === bestFeas.out && ind.real < bestFeas.real - 1e-9)){
-        bestFeas = { r: ind.r.map(x => x.slice()), real: ind.real, out }; lastBetter = iter;
+        bestFeas = { r: ind.r.map(x => x.slice()), real: ind.real, out }; lastBetter = iter; lastBetterMs = Date.now() - t0;
       }
     };
     const addTo = (ind) => { const pop = ind.feas ? popF : popI; if(!pop.some(p => dist(p, ind) < 1e-9)) pop.push(ind); if(pop.length >= MU + LAMBDA) survivors(pop); };
@@ -403,7 +403,13 @@ Object.assign(Scheduler, {
     const all = () => popF.concat(popI);
     const tournament = () => { const p = all(); const a = p[Math.floor(Math.random() * p.length)], b = p[Math.floor(Math.random() * p.length)]; return a.cost <= b.cost ? a : b; };
     let made = 0, feasMade = 0;
-    while(Date.now() - t0 < budgetMs && !(stopped && stopped())){
+    // Stop early when the best week has not improved for a third of the
+    // budget (at least 4 s): on the Athens weeks the best was always found
+    // within the first 7 s of 15, and the rest was waiting. Only for weeks of
+    // under 60 lessons: on p09 (100) it cut the search short, +2.06% against +1.2%.
+    const IDLE_STOP = Math.max(4000, budgetMs / 3);
+    const stale = () => n < 60 && bestFeas && Date.now() - t0 - lastBetterMs > IDLE_STOP;
+    while(Date.now() - t0 < budgetMs && !(stopped && stopped()) && !stale()){
       const A = tournament(), Bp = tournament();
       const keep = new Set(D.map((_, k) => k).filter(() => Math.random() < 0.5));
       const child = { r: D.map((_, k) => keep.has(k) ? A.r[k].slice() : []) };
@@ -437,6 +443,8 @@ Object.assign(Scheduler, {
       }
       await breathe();
     }
+    // What the run did, for the benchmarks: when its best week was found.
+    S._geneticLog = { budgetMs, usedMs: Date.now() - t0, lastBetterMs, iter, lastBetter, popF: popF.length, popI: popI.length };
     if(!bestFeas) return false;
     // ---- back into a real week: laid out by the app's own rules ----------------
     const out = {};
