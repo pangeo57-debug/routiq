@@ -65,16 +65,21 @@ Object.assign(Scheduler, {
     const D = days.map(d => {
       const dh = settings.dayHours[d];
       const start = S.toMin(dh.start), end = S.toMin(dh.end) + S.endFlex();
-      const mid = Math.round((start + end) / 2);
-      const T = [], K = [];
-      for(let a = 0; a <= n; a++){
-        const ta = new Float64Array(n + 1), ka = new Float64Array(n + 1);
-        for(let b = 0; b <= n; b++){
-          if(a === b || (a > 0 && b > 0 && L[a].id === L[b].id)){ ta[b] = 0; ka[b] = 0; continue; }
-          ta[b] = a && b ? S.legMin(margin, L[a].id, L[a].addr, L[b].id, L[b].addr, d, mid) : 0;
-          ka[b] = S.travelEstKm(L[a].id, L[a].addr, L[b].id, L[b].addr, d, mid);
+      // Both traffic bands, as the rest of the app has them: a drive that
+      // leaves in the rush hour is charged the peak matrix, any other the
+      // off-peak one (T[band][from][to], band 1 = rush hour).
+      const T = [[], []], K = [[], []];
+      for(let bd = 0; bd < 2; bd++){
+        const at = bd ? S.PEAK_FROM : S.PEAK_TO;
+        for(let a = 0; a <= n; a++){
+          const ta = new Float64Array(n + 1), ka = new Float64Array(n + 1);
+          for(let b = 0; b <= n; b++){
+            if(a === b || (a > 0 && b > 0 && L[a].id === L[b].id)){ ta[b] = 0; ka[b] = 0; continue; }
+            ta[b] = a && b ? S.legMin(margin, L[a].id, L[a].addr, L[b].id, L[b].addr, d, at) : 0;
+            ka[b] = S.travelEstKm(L[a].id, L[a].addr, L[b].id, L[b].addr, d, at);
+          }
+          T[bd].push(ta); K[bd].push(ka);
         }
-        T.push(ta); K.push(ka);
       }
       const wins = L.map((x, i) => {
         if(!i) return null;
@@ -103,7 +108,7 @@ Object.assign(Scheduler, {
         if(j === i) continue;
         const sj = span(j);
         const gap = Math.max(0, sj[0] - si[1], si[0] - sj[1]);
-        order.push([Math.min(D[0].T[i][j], D[0].T[j][i]) + gap, j]);
+        order.push([Math.min(D[0].T[0][i][j], D[0].T[0][j][i]) + gap, j]);
       }
       order.sort((a, b) => a[0] - b[0]);
       return new Set(order.slice(0, GRAN).map(o => o[1]));
@@ -115,11 +120,16 @@ Object.assign(Scheduler, {
     // every window: start at the last moment that would have fitted and pay
     // the difference as time warp (the clock goes back, so one late lesson
     // does not push the rest of the day). Early: wait, at the app's price.
+    const PF = S.PEAK_FROM, PT = S.PEAK_TO, bandAt = (t) => t >= PF && t < PT ? 1 : 0;
     let wTW = 1, wCap = 50;
     const step = (dd, st, j) => {
-      st.km += dd.K[st.prev][j];
       const ws = dd.wins[j], dur = L[j].dur;
-      const earliest = st.first ? Math.max(dd.start, ws.length ? ws[0][0] : dd.start) : st.t + dd.T[st.prev][j];
+      // The drive leaves when the last lesson ends (the first, when the day's
+      // first window opens): that moment picks the traffic band.
+      const first0 = Math.max(dd.start, ws.length ? ws[0][0] : dd.start);
+      const bd = (st.first ? first0 : st.t) >= PF && (st.first ? first0 : st.t) < PT ? 1 : 0;
+      st.km += dd.K[bd][st.prev][j];
+      const earliest = st.first ? first0 : st.t + dd.T[bd][st.prev][j];
       let s = ws.length ? S.earliestLegal(ws, dd.breaks, earliest, dur) : null;
       if(s === null || s + dur > dd.end){
         let latest = -1;
@@ -145,7 +155,7 @@ Object.assign(Scheduler, {
       const st = { km: 0, warp: 0, idle: 0, prev: 0, t: dd.start, first: true };
       const te = new Float64Array(m), kp = new Float64Array(m), wp = new Float64Array(m), ip = new Float64Array(m);
       for(let q = 0; q < m; q++){ step(dd, st, route[q]); te[q] = st.t; kp[q] = st.km; wp[q] = st.warp; ip[q] = st.idle; }
-      if(m) st.km += dd.K[st.prev][0];
+      if(m) st.km += dd.K[bandAt(st.t)][st.prev][0];
       const c = price(st.km, st.warp, st.idle, m);
       c.te = te; c.kp = kp; c.wp = wp; c.ip = ip;
       return c;
@@ -168,7 +178,7 @@ Object.assign(Scheduler, {
         // everything after it is as it was; add the old day's rest and stop.
         if(st.t === c.te[q]) return costOf(st.km + (c.km - c.kp[q]), st.warp + (c.warp - c.wp[q]), st.idle + (c.idle - c.ip[q]), count);
       }
-      if(count) st.km += dd.K[st.prev][0];
+      if(count) st.km += dd.K[bandAt(st.t)][st.prev][0];
       return costOf(st.km, st.warp, st.idle, count);
     };
     const splice = (k, c, route, pre, extra, from) => spliceSeg(k, c, route, pre, extra, 0, extra.length, false, from);

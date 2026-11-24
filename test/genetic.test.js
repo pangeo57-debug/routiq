@@ -68,4 +68,19 @@ describe('the genetic week search', () => {
     const merged = (x) => x.filter(sl => sl.studentId === 's2').map(sl => S.toMin(sl.end) - S.toMin(sl.start)).sort().join();
     assert.equal(merged(slots), merged(Object.values(before).flat()), 'the merged block keeps its length');
   });
+  test('with a slow rush hour its week stays legal, complete and not longer', async () => {
+    const { S, sts, cfg, app } = world();
+    const ids = ['home', ...sts.map(x => x.id)], c = app.state.coords;
+    const d = (a, b) => Math.hypot((c[a].lat - c[b].lat) * 111.32, (c[a].lon - c[b].lon) * 87.7);
+    const mat = (f) => ({ coordIds: ids,
+      durations: ids.map(a => ids.map(b => Math.round(d(a, b) * 2 * f * 60))),
+      distances: ids.map(a => ids.map(b => Math.round(d(a, b) * 1000))) });
+    app.setState({ travelMatrixPeak: mat(3), travelMatrixOffPeak: mat(1), travelMatrix: null });
+    const r = await S.optimizeWeek({ students: sts, settings: cfg, coords: c, attempts: 1, timeScale: 0.25, geneticMs: 0 });
+    const before = JSON.parse(JSON.stringify(r.schedule)), week = JSON.parse(JSON.stringify(r.schedule));
+    await S.geneticWeek(week, sts, cfg, 3000);
+    assert.equal(S.verifySchedule(week, sts, cfg).length, 0, 'no rule broken');
+    assert.ok(S.countTotal(week) >= S.countTotal(before), 'no lesson lost');
+    assert.ok(!S.isBetterStart(before, week, cfg), 'never worse than what it was given');
+  });
 });
