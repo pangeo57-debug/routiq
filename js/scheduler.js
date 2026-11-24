@@ -2128,6 +2128,9 @@ const Scheduler = {
   //
   // Returns { slots, out } — slots laid out and legal, out the clients left
   // unplaced — or null if it could not produce a legal day at all.
+  // Days of up to this many stops are solved exactly (branch and bound) after
+  // the search; the node limit keeps a pathological day from running long.
+  EXACT_MAX: 12, EXACT_NODES: 3000000,
   async solveDay(clients, cfg, day, opts){
     const o = opts || {};
     const n = clients.length;
@@ -2424,12 +2427,43 @@ const Scheduler = {
     if(best) reinsert();
     if(!best) return null;
 
+    // Small days are solved exactly. With up to EXACT_MAX stops, branch and
+    // bound over every visit order, bounded by the best found above: a branch
+    // is cut once it costs more, is late anywhere, or leaves someone who can
+    // no longer be reached in time. Finished, the day is proven optimal (the
+    // same cost every run); a day too hard for the node limit keeps the
+    // search's answer.
+    let exact = false;
+    if(n <= this.EXACT_MAX && !never.length && best.ord.length === n && !(best.e && best.e.late) && !o.noExact){
+      let bestCost = evalAll(best.ord).cost, bestOrd = Array.from(best.ord), nodes = 0, complete = true;
+      const used = new Uint8Array(n), cur = new Int32Array(n);
+      const dfs = (depth) => {
+        if(++nodes > this.EXACT_NODES){ complete = false; return; }
+        if(depth === n){
+          const c = st.km + back() + st.idle * IDLE;
+          if(c < bestCost - 1e-9){ bestCost = c; bestOrd = Array.from(cur); }
+          return;
+        }
+        if(depth > 0) for(let i = 0; i < n; i++) if(!used[i] && st.end + tLo[(st.prev + 1) * N1 + i + 1] > LS[i]) return;
+        for(let i = 0; i < n && complete; i++){
+          if(used[i]) continue;
+          const sp = st.prev, se = st.end, sk = st.km, si = st.idle, sl = st.late;
+          step(i);
+          if(st.late === 0 && st.km + st.idle * IDLE < bestCost - 1e-9){ used[i] = 1; cur[depth] = i; dfs(depth + 1); used[i] = 0; }
+          st.prev = sp; st.end = se; st.km = sk; st.idle = si; st.late = sl;
+        }
+      };
+      load(0); dfs(0);
+      exact = complete;
+      best = { ord: bestOrd, cost: bestCost };
+    }
+
     // Lay it out with relayoutDay and check it as every other plan is checked.
     const slots = this.relayoutDay(best.ord.map(i => this._lessonSlot(clients[i], dur[i])), day, clients, cfg);
     if(!slots) return null;
     if(!o.noVerify && this.verifySchedule({ [day]: slots }, clients, cfg).length) return null;
     const inBest = new Set(best.ord);
-    return { slots, out: clients.filter((_, i) => !inBest.has(i)), iterations: iter, ms: Date.now() - t0 };
+    return { slots, out: clients.filter((_, i) => !inBest.has(i)), iterations: iter, ms: Date.now() - t0, exact };
   },
 
   // The one-day frame every day computation shares: the jobs as clients and a

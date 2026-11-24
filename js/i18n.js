@@ -1280,3 +1280,9 @@ Object.assign(I18N.de, {
   df_filled: '{name} um {time}, nur an diesem Tag', df_msg_move: 'Hallo {name}! Ein Termin ist frei geworden: kannst du {date} um {time} statt {day} {was}?',
   df_msg_extra: 'Hallo {name}! Ein Termin ist frei geworden: möchtest du einen Extratermin ({session}) {date} um {time}?',
 });
+
+// Filling a freed stretch with two appointments.
+Object.assign(I18N.el, { df_pair_fills: 'Γεμίζει όλο το κενό: {n} ραντεβού', df_ask_next: 'Ρώτα και τον/την {name}', df_ask_btn: 'Μήνυμα' });
+Object.assign(I18N.en, { df_pair_fills: 'Fills the whole gap: {n} appointments', df_ask_next: 'Ask {name} too', df_ask_btn: 'Message' });
+Object.assign(I18N.fr, { df_pair_fills: 'Comble tout le créneau : {n} rendez-vous', df_ask_next: 'Demandez aussi à {name}', df_ask_btn: 'Message' });
+Object.assign(I18N.de, { df_pair_fills: 'Füllt die ganze Lücke: {n} Termine', df_ask_next: 'Frag auch {name}', df_ask_btn: 'Nachricht' });

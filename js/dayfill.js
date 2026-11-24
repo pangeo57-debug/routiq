@@ -122,12 +122,43 @@ const DayFill = {
         score: (start === at ? 0 : 1) * 10 + Math.max(0, kmToday + (from ? from.km : 0)) + (near ? 5 : 0) + (from && !from.edge && !from.alone ? 3 : 0) });
     }
     out.sort((a, b) => a.score - b.score);
-    return { gap: { start: Scheduler.toTime(g0), end: Scheduler.toTime(g1) }, options: out.slice(0, 6) };
+    // A stretch long enough for two: the best pairs too. Every ordered pair
+    // of the best few is tried (exact for two places), the first as early as
+    // it can, the second after the drive from the first; both must fit and
+    // the next lesson of the day stays on time.
+    const pairs = [];
+    const fit = (st, notBefore, endBy, dur) => {
+      for(const [ws, we] of Scheduler.availWindows(st, day)){
+        const s = Math.ceil(Math.max(ws, notBefore, dayStart) / grid) * grid;
+        if(s + dur <= Math.min(we, endBy, dayEnd) && !(Scheduler.isBlocked && Scheduler.isBlocked(s, s + dur, day, cfg))) return s;
+      }
+      return null;
+    };
+    const top = out.slice(0, 8);
+    for(const a of top) for(const b of top){
+      if(a === b || a.dur + b.dur > g1 - g0) continue;
+      const A = { studentId: a.st.id, address: a.st.address }, B = { studentId: b.st.id, address: b.st.address };
+      const sa = fit(a.st, g0 + (prev ? this._min(margin, prev, A, day, g0) : 0), g1, a.dur);
+      if(sa == null) continue;
+      const tail = next ? this._min(margin, B, next, day, g1) : 0;
+      const sb = fit(b.st, sa + a.dur + this._min(margin, A, B, day, sa + a.dur), g1 - tail, b.dur);
+      if(sb == null) continue;
+      const kmToday = this._km(prev || home, A, day, sa) + this._km(A, B, day, sa + a.dur) + this._km(B, next || home, day, sb + b.dur) - kmNow;
+      const one = (o, s) => ({ ...o, start: Scheduler.toTime(s), end: Scheduler.toTime(s + o.dur), onTime: s === at });
+      pairs.push({ pair: [one(a, sa), one(b, sb)], st: a.st, start: Scheduler.toTime(sa), end: Scheduler.toTime(sb + b.dur),
+        dur: a.dur + b.dur, onTime: sa === at, kmToday, from: null, extra: false, near: a.near || b.near,
+        score: (sa === at ? 0 : 1) * 10 + Math.max(0, kmToday + (a.from ? a.from.km : 0) + (b.from ? b.from.km : 0)) + (a.near || b.near ? 5 : 0) - 8 });
+    }
+    pairs.sort((x, y) => x.score - y.score);
+    // Up to six single ones and up to three pairs, best first.
+    const options = out.slice(0, 6).concat(pairs.slice(0, 3)).sort((x, y) => x.score - y.score);
+    return { gap: { start: Scheduler.toTime(g0), end: Scheduler.toTime(g1) }, options };
   },
 
   // Put a client into the freed stretch, for this date only. Brought from
   // another day this week, that day's lesson is cancelled for that date.
   apply(date, opt){
+    if(opt.pair){ for(const o of opt.pair) this.apply(date, o); return; }
     const ch = this.of(date);
     ch.add.push({ sid: opt.st.id, start: opt.start, end: opt.end, from: opt.from ? `${opt.from.date}|${opt.from.start}` : null });
     this._put(date, ch);
@@ -143,6 +174,7 @@ const DayFill = {
 
   // What each option means, in words.
   pros(o){
+    if(o.pair) return [tf('df_pair_fills', { n: o.pair.length })].concat(o.pair.flatMap(x => this.pros({ ...x, kmToday: 0 }).filter(t => !/^.*km.*σήμερα|today/.test(t))), o.kmToday < -0.2 ? [tf('df_km_less_today', { km: (-o.kmToday).toFixed(1) })] : []);
     const p = [];
     if(o.onTime) p.push(t('df_on_time'));
     if(o.kmToday < -0.2) p.push(tf('df_km_less_today', { km: (-o.kmToday).toFixed(1) }));
@@ -152,6 +184,7 @@ const DayFill = {
     return p;
   },
   cons(o){
+    if(o.pair) return (o.kmToday > 0.2 ? [tf('df_km_more_today', { km: o.kmToday.toFixed(1) })] : []).concat(o.pair.flatMap(x => this.cons({ ...x, kmToday: 0 })));
     const c = [];
     if(!o.onTime) c.push(tf('df_other_time', { time: o.start }));
     if(o.kmToday > 0.2) c.push(tf('df_km_more_today', { km: o.kmToday.toFixed(1) }));
@@ -183,8 +216,8 @@ const DayFill = {
       <div class="confirm-text" style="margin-bottom:10px">${esc(r.options.length ? t('df_fill_hint') : t('df_fill_none'))}</div>
       ${r.options.map((o, i) => `<div class="card-sm" style="margin:0 0 10px">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
-          <b>${esc(o.st.name || '')}</b><span style="font-weight:700">${esc(o.start)}–${esc(o.end)}</span></div>
-        <div style="font-size:12px;color:var(--text3);margin:2px 0 6px">${esc(o.from ? tf('df_from', { day: DAYS_FULL[o.from.day] || '', time: o.from.start }) : t('df_extra_label'))}</div>
+          <b>${esc(o.pair ? o.pair.map(x => x.st.name || '').join(' + ') : (o.st.name || ''))}</b><span style="font-weight:700">${esc(o.start)}–${esc(o.end)}</span></div>
+        <div style="font-size:12px;color:var(--text3);margin:2px 0 6px">${esc(o.pair ? o.pair.map(x => `${x.start} ${x.st.name || ''}: ` + (x.from ? tf('df_from', { day: DAYS_FULL[x.from.day] || '', time: x.from.start }) : t('df_extra_label'))).join(' · ') : (o.from ? tf('df_from', { day: DAYS_FULL[o.from.day] || '', time: o.from.start }) : t('df_extra_label')))}</div>
         ${li(this.pros(o).map(x => '✓ ' + x), 'var(--green)')}${li(this.cons(o).map(x => '⚠ ' + x), 'var(--orange,#c2410c)')}
         <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="DayFill.choose('${esc(date)}',${i})">${esc(t('df_choose'))}</button>
       </div>`).join('')}
@@ -200,7 +233,14 @@ const DayFill = {
     this.apply(date, o);
     document.getElementById('df-overlay')?.remove();
     try{ App.renderHome(); }catch(e){}
-    // The client has to say yes: the message opens ready.
+    const each = o.pair || [o];
+    // Each client has to say yes: the message opens ready, the second one a tap later.
+    this.ask(date, each[0]);
+    const undo = () => { for(const x of each) this.unapply(date, x.st.id); try{ App.renderHome(); }catch(e){} };
+    if(each[1]) Toast.show(tf('df_ask_next', { name: each[1].st.name || '' }), 'info', 12000, { label: t('df_ask_btn'), run: () => this.ask(date, each[1]) });
+    else Toast.show(tf('df_filled', { name: o.st.name || '', time: o.start }), 'success', 7000, { label: t('swipe_undo'), run: undo });
+  },
+  ask(date, o){
     const first = String(o.st.name || '').trim().split(/\s+/)[0] || '';
     const text = o.from
       ? tf('df_msg_move', { name: first, date: App.prettyDate ? App.prettyDate(date) : date, time: o.start, day: DAYS_FULL[o.from.day] || '', was: o.from.start })
@@ -214,6 +254,5 @@ const DayFill = {
       const b = document.getElementById(btnId); if(b){ b.disabled = !on; b.style.opacity = on ? '' : '.45'; }
     }
     document.getElementById('send-overlay')?.classList.add('open');
-    Toast.show(tf('df_filled', { name: o.st.name || '', time: o.start }), 'success', 7000, { label: t('swipe_undo'), run: () => { this.unapply(date, o.st.id); try{ App.renderHome(); }catch(e){} } });
   },
 };
