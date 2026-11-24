@@ -6814,7 +6814,7 @@ describe('the quick plan', () => {
   const src = require('./harness').appSource();
   test('is the default; the thorough setting or "search deeper" runs the long one', () => {
     const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
-    assert.match(body, /const deep = state\.settings\.scheduleQuality==='thorough' \|\| !!state\._deepOnce/);
+    assert.match(body, /const deep = !!state\._deepOnce/);
     assert.match(body, /deep \? \{\} : [^\n]*\{ timeScale: 0\.25, p1: \{ backtrackMs: 3000, repairMs: 1500 \} \}/);
     assert.match(body, /state\.settings\.demo \? \{ timeScale: 0\.1/, 'the example plans faster still');
     assert.match(body, /state\._deepOnce = true; App\.runAndNotify\(\)/);

@@ -1242,12 +1242,13 @@ const App = {
     // The quick plan is the default: one short first placement and a quarter
     // of the search time. Measured on the owner's week, 188 s became about
     // 43 s for a week no worse (three seeds each); nearly half of the long
-    // run went on repeating the first placement six times. The thorough
-    // setting, or "search deeper" after a quick plan that left someone out,
-    // runs the long one.
-    const deep = state.settings.scheduleQuality==='thorough' || !!state._deepOnce;
+    // run went on repeating the first placement six times. There is no
+    // thorough setting: on real weeks it found the same km in 3.5x the time.
+    // Only "search deeper", after a quick plan that left someone out, runs
+    // the long one.
+    const deep = !!state._deepOnce;
     state._deepOnce = false;
-    const attemptCount = deep ? (state.settings.scheduleQuality==='thorough' ? 8 : 6) : 1;
+    const attemptCount = deep ? 6 : 1;
     schedProgress(15,t('phase1b_title'),tf('phase1b_sub',{n:attemptCount}));
     await new Promise(r=>setTimeout(r,40));
     let r;
@@ -6889,16 +6890,6 @@ const App = {
           <option value="dark" ${state.settings.theme==='dark'?'selected':''}>${t('theme_dark')}</option>
         </select>
       </div>
-
-      <div class="section-title">${t('settings_quality_title')}</div>
-      <div class="card">
-        <select id="set-quality" onchange="App.setScheduleQuality(this.value)">
-          <option value="quick" ${(state.settings.scheduleQuality||'quick')==='quick'?'selected':''}>${t('settings_quality_quick')}</option>
-          <option value="thorough" ${state.settings.scheduleQuality==='thorough'?'selected':''}>${t('settings_quality_thorough')}</option>
-        </select>
-        <div class="settings-sub" style="margin-top:4px">${t('settings_quality_hint')}</div>
-      </div>
-
 
       <div class="section-title">${t('sync_title')}</div>
       <div class="card">
