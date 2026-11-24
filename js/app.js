@@ -1794,7 +1794,16 @@ const App = {
   recordSavings(scope, key, rec){
     if(!state.savings) state.savings = { week: null, days: {} };
     const r = { ...rec, at: new Date().toISOString() };
-    if(scope === 'week') state.savings.week = r;
+    if(scope === 'week'){
+      state.savings.week = r;
+      // One entry per calendar week it was planned in, so planning the same
+      // week again replaces its entry and the month's total never counts it twice.
+      const sv = this.savingsOf(r);
+      if(sv && sv.same){
+        const h = state.savings.history = state.savings.history || {};
+        h[this.isoWeekOf(r.at)] = { at: r.at, km: Math.max(0, sv.km), minutes: Math.max(0, sv.minutes), litres: Math.max(0, sv.litres), eur: Math.max(0, sv.eur), co2: Math.max(0, sv.co2) };
+      }
+    }
     else state.savings.days[key] = r;
     Storage.saveSavings(state.savings);
     try{ Usage.ping(scope === 'week' ? 'week' : 'day', this.savingsOf(r)); Usage.maybeAsk(); }catch(e){}
@@ -1802,6 +1811,22 @@ const App = {
   },
   // Saving = before minus after. Kilometres only when both sides have the same
   // stops: fitting more in is said separately, never turned into kilometres.
+  isoWeekOf(iso){
+    const d = new Date(iso), t0 = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()), w = new Date(t0);
+    w.setUTCDate(w.getUTCDate() + 4 - (w.getUTCDay() || 7));
+    return w.getUTCFullYear() + '-W' + String(Math.ceil(((w - Date.UTC(w.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7)).padStart(2, '0');
+  },
+  // What the weeks planned this calendar month saved, summed.
+  monthSavings(now = new Date()){
+    const h = (state.savings && state.savings.history) || {};
+    const out = { weeks: 0, km: 0, minutes: 0, eur: 0, co2: 0 };
+    for(const k of Object.keys(h)){
+      const d = new Date(h[k].at);
+      if(d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) continue;
+      out.weeks++; out.km += h[k].km; out.minutes += h[k].minutes; out.eur += h[k].eur; out.co2 += h[k].co2;
+    }
+    return out;
+  },
   savingsOf(rec){
     if(!rec || !rec.before || !rec.after) return null;
     const b = rec.before, a = rec.after, fuel = state.settings.fuelConsumption || 7;
@@ -1855,12 +1880,17 @@ const App = {
         year = `<div class="ba-year">${esc(tf('ba_year', { w, km: Math.round(s.km * w), h: Math.round(s.minutes * w / 60), eur: Math.round(s.eur * w), co2: Math.round(s.co2 * w) }))}</div>`;
       }
     }
+    let month = '';
+    if(scope === 'week'){
+      const m = this.monthSavings();
+      if(m.weeks >= 1 && m.km > 0.05) month = `<div class="ba-year">${esc(tf('ba_month', { n: m.weeks, km: Math.round(m.km), h: (m.minutes / 60).toFixed(1), eur: Math.round(m.eur) }))}</div>`;
+    }
     return `
       <div class="ba-card" style="margin:0 16px 12px;padding:12px 14px;border-radius:14px;background:var(--bg2);border:1px solid var(--border);font-size:13px">
         <div style="font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">${esc(t('ba_title'))}</div>
         ${table}
         <div style="margin-top:6px;padding-top:8px;border-top:1px solid var(--border);color:var(--green);font-weight:700">${esc(verdict)}</div>
-        ${year}
+        ${month}${year}
       </div>`;
   },
 

@@ -32,7 +32,7 @@ const Storage = {
   loadJobs(){ const j = this.get(this.KEYS.jobs); return Array.isArray(j) ? j : [] },
   saveJobs(j){ return this.set(this.KEYS.jobs, j) },
   // Before/after records: { week: {...}, days: { 'YYYY-MM-DD|kind': {...} } }.
-  loadSavings(){ const v = this.get(this.KEYS.savings); return v && typeof v === 'object' ? { week: v.week || null, days: v.days || {} } : { week: null, days: {} }; },
+  loadSavings(){ const v = this.get(this.KEYS.savings); return v && typeof v === 'object' ? { week: v.week || null, days: v.days || {}, history: v.history || {} } : { week: null, days: {}, history: {} }; },
   saveSavings(v){ return this.set(this.KEYS.savings, v) },
   clear(){ Object.values(this.KEYS).forEach(k=>localStorage.removeItem(k)) }
 };
