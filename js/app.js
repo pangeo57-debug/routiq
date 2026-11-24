@@ -6865,6 +6865,11 @@ const App = {
           <label>${t('settings_margin_label')}</label>
           <input type="number" id="set-margin" value="${st.travelMargin??3}" min="0" max="30">
         </div>
+        <div class="form-group" style="margin:10px 0 0">
+          <label>${t('settings_home_gap_label')}</label>
+          <input type="number" id="set-home-gap" value="${st.homeGapMin||0}" min="0" max="480" step="15">
+          <div class="settings-sub" style="margin-top:4px">${t('settings_home_gap_hint')}</div>
+        </div>
         <div class="form-group" style="margin:0">
           <label>${t('settings_lunch_label')}</label>
           <select id="set-lunch">
@@ -7119,6 +7124,7 @@ const App = {
       if(['petrol','diesel','lpg'].includes(ft)) s.fuelType = ft;
     }
     s.travelMargin = Number(document.getElementById('set-margin')?.value)??3;
+    { const hg = Math.round(Number(document.getElementById('set-home-gap')?.value) || 0); s.homeGapMin = hg >= 30 ? Math.min(480, hg) : 0; }
     {
       const sp = Number(document.getElementById('set-speed')?.value);
       if(sp > 0) s.avgCitySpeedKmh = sp;

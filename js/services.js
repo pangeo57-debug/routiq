@@ -20,7 +20,7 @@ const Remote = {
   _url(p){ return COMPUTE_BASE.replace(/\/$/, '') + p; },
   STUDENT_FIELDS: ['lessonsPerWeek','lessonDuration','durations','hoursPerWeek','flexMinutes','minBlock','maxBlock',
     'availability','availabilityExceptions','availabilityMode','type','mergeMode','forceMerge','maxMergeSessions'],
-  SETTING_FIELDS: ['workDays','dayHours','dateHours','blockedSlots','lunchBreak','maxPerDay','travelMargin','travelBuffer',
+  SETTING_FIELDS: ['workDays','dayHours','dateHours','blockedSlots','lunchBreak','maxPerDay','travelMargin','travelBuffer','homeGapMin',
     'travelMode','endFlexMin','avgCitySpeedKmh','osrmTimeFactor','scheduleQuality','profession','language','fuelConsumption'],
 
   /** The anonymous job, and what is needed to turn its answer back into people. */

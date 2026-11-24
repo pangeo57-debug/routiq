@@ -91,4 +91,13 @@ describe('the genetic week search', () => {
     assert.ok(S._geneticLog.usedMs < 20000, 'stopped early: ' + S._geneticLog.usedMs);
     assert.equal(S.verifySchedule(week, sts, cfg).length, 0);
   });
+  test('with "I go home in long gaps" on, its week stays legal, complete and not longer by that count', async () => {
+    const { S, sts, cfg, app } = world({ homeGapMin: 60 });
+    const r = await S.optimizeWeek({ students: sts, settings: cfg, coords: app.state.coords, attempts: 1, timeScale: 0.25, geneticMs: 0 });
+    const before = JSON.parse(JSON.stringify(r.schedule)), week = JSON.parse(JSON.stringify(r.schedule));
+    await S.geneticWeek(week, sts, cfg, 3000);
+    assert.equal(S.verifySchedule(week, sts, cfg).length, 0, 'no rule broken');
+    assert.ok(S.countTotal(week) >= S.countTotal(before), 'no lesson lost');
+    assert.ok(!S.isBetterStart(before, week, cfg), 'never worse than what it was given');
+  });
 });

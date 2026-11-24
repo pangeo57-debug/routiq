@@ -2920,6 +2920,21 @@ const Scheduler = {
   },
 
   // Driving distance for one day's stops, home out and home back.
+  // A long gap between two lessons, spent at home: when the person said they go
+  // home for gaps of at least homeGapMin minutes, and the gap holds the whole
+  // drive home and back (and the margin), the legs are prev -> home -> next.
+  // Only what is counted changes: lessons keep their times, the gap is just
+  // long enough. Returns null (drive direct) or { toHome, fromHome } minutes.
+  _homeStop(settings, prevSl, s, day){
+    const X = settings && settings.homeGapMin | 0;
+    if(!(X > 0) || !prevSl || this.samePlace(prevSl.studentId, prevSl.address, s.studentId, s.address)) return null;
+    const e = this.toMin(prevSl.end), gap = this.toMin(s.start) - e;
+    if(gap < X) return null;
+    const homeAddr = settings.homeAddress || '';
+    const a = this.travelEstMin(prevSl.studentId, prevSl.address, 'home', homeAddr, day, e);
+    const b = this.travelEstMin('home', homeAddr, s.studentId, s.address, day, e + a);
+    return gap >= a + b + (settings.travelMargin ?? 2) ? { toHome: a, fromHome: b } : null;
+  },
   dayKm(slots, day, settings){
     const homeAddr = (settings && settings.homeAddress) || '';
     if(!slots.length) return 0;
@@ -2931,7 +2946,13 @@ const Scheduler = {
     for(const s of slots){
       const sameLocation = prevSl && (prevSl.studentId===s.studentId ||
         (prevSl.groupCode && prevSl.groupCode===s.groupCode));
-      if(!sameLocation) km += this.travelEstKm(prevId, prevAddr, s.studentId, s.address, day, leaveAt);
+      if(!sameLocation){
+        const hs = prevSl && this._homeStop(settings, prevSl, s, day);
+        if(hs){
+          km += this.travelEstKm(prevId, prevAddr, 'home', homeAddr, day, leaveAt)
+              + this.travelEstKm('home', homeAddr, s.studentId, s.address, day, leaveAt + hs.toHome);
+        } else km += this.travelEstKm(prevId, prevAddr, s.studentId, s.address, day, leaveAt);
+      }
       prevId=s.studentId; prevAddr=s.address; prevSl=s; leaveAt=this.toMin(s.end);
     }
     return km + this.travelEstKm(prevId, prevAddr, 'home', homeAddr, day, leaveAt);
@@ -3076,7 +3097,8 @@ const Scheduler = {
       if(slots[i].studentId === slots[i-1].studentId) continue;  // one continuous block
       // The drive starts when the previous lesson ends — which decides whether
       // it is a rush-hour journey or a clear-road one.
-      const drive = this.travelEstMin(slots[i-1].studentId, slots[i-1].address,
+      const hs = this._homeStop(settings, slots[i-1], slots[i], day);
+      const drive = hs ? hs.toHome + hs.fromHome : this.travelEstMin(slots[i-1].studentId, slots[i-1].address,
                                       slots[i].studentId, slots[i].address, day,
                                       this.toMin(slots[i-1].end));
       const same = this.samePlace(slots[i-1].studentId, slots[i-1].address, slots[i].studentId, slots[i].address);
@@ -3132,7 +3154,10 @@ const Scheduler = {
     let leaveAt = this.toMin(slots[0].start);
     for(const s of slots){
       const same = prevSl && (prevSl.studentId === s.studentId || (prevSl.groupCode && prevSl.groupCode === s.groupCode));
-      if(!same) min += this.travelEstMin(prevId, prevAddr, s.studentId, s.address, day, leaveAt);
+      if(!same){
+        const hs = prevSl && this._homeStop(settings, prevSl, s, day);
+        min += hs ? hs.toHome + hs.fromHome : this.travelEstMin(prevId, prevAddr, s.studentId, s.address, day, leaveAt);
+      }
       prevId = s.studentId; prevAddr = s.address; prevSl = s; leaveAt = this.toMin(s.end);
     }
     return min + this.travelEstMin(prevId, prevAddr, 'home', homeAddr, day, leaveAt);

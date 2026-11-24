@@ -31,3 +31,20 @@ test('the month adds each week once: planning the same week again replaces it', 
   assert.equal(app.App.isoWeekOf('2026-01-01T10:00:00'), '2026-W01');
   assert.equal(app.App.monthSavings(new Date(2020, 0, 5)).weeks, 0, 'another month is not counted');
 });
+
+test('a long gap spent at home is counted through home, only when the setting says so and the gap holds the trip', () => {
+  const app = loadApp();
+  const ids = ['home', 'a', 'b'];
+  const mat = { coordIds: ids, durations: [[0, 600, 600], [600, 0, 300], [600, 300, 0]], distances: [[0, 6000, 6000], [6000, 0, 2000], [6000, 2000, 0]] };
+  const sts = [student('a', { address: 'Α' }), student('b', { address: 'Β' })];
+  const cfg = (g) => settings({ travelMargin: 0, homeGapMin: g, homeAddress: 'Home' });
+  app.setState({ students: sts, settings: cfg(0), coords: { home: { lat: 38, lon: 21 }, a: { lat: 38.01, lon: 21 }, b: { lat: 38.02, lon: 21 } },
+    travelMatrixPeak: mat, travelMatrixOffPeak: mat, travelMatrix: mat });
+  const S = app.Scheduler;
+  const day = [slot('a', '09:00', '10:00', { address: 'Α' }), slot('b', '13:00', '14:00', { address: 'Β' })];
+  assert.equal(S.dayKm(day, 1, cfg(0)), 6 + 2 + 6, 'off: the direct drive');
+  assert.equal(S.dayKm(day, 1, cfg(90)), 6 + 6 + 6 + 6, 'a 3 h gap, 90 or more: through home');
+  assert.equal(S.dayKm(day, 1, cfg(240)), 6 + 2 + 6, 'a gap shorter than the setting: direct');
+  const tight = [slot('a', '09:00', '10:00', { address: 'Α' }), slot('b', '10:15', '11:15', { address: 'Β' })];
+  assert.equal(S.dayKm(tight, 1, cfg(15)), 6 + 2 + 6, 'a gap that cannot hold the trip home: direct');
+});

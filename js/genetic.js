@@ -68,7 +68,7 @@ Object.assign(Scheduler, {
       // Both traffic bands, as the rest of the app has them: a drive that
       // leaves in the rush hour is charged the peak matrix, any other the
       // off-peak one (T[band][from][to], band 1 = rush hour).
-      const T = [[], []], K = [[], []];
+      const T = [[], []], K = [[], []], TH = [[], []], TF = [[], []];   // TH: drive to home, TF: from home
       for(let bd = 0; bd < 2; bd++){
         const at = bd ? S.PEAK_FROM : S.PEAK_TO;
         for(let a = 0; a <= n; a++){
@@ -79,6 +79,8 @@ Object.assign(Scheduler, {
             ka[b] = S.travelEstKm(L[a].id, L[a].addr, L[b].id, L[b].addr, d, at);
           }
           T[bd].push(ta); K[bd].push(ka);
+          TH[bd].push(a ? S.travelEstMin(L[a].id, L[a].addr, 'home', L[0].addr, d, at) : 0);
+          TF[bd].push(a ? S.travelEstMin('home', L[0].addr, L[a].id, L[a].addr, d, at) : 0);
         }
       }
       const wins = L.map((x, i) => {
@@ -88,7 +90,7 @@ Object.assign(Scheduler, {
         // end-of-day flex is added by earliestFit itself.
         return clipped.filter((w, j) => w[1] + S.windowFlex(clipped, j) - w[0] >= x.dur);
       });
-      return { d, start, end, T, K, wins, breaks: S.breaksOn(d, settings) };
+      return { d, start, end, T, K, TH, TF, wins, breaks: S.breaksOn(d, settings) };
     });
     const canGo = L.map((x, i) => i ? D.map(dd => dd.wins[i].length > 0) : null);
     // A lesson the week has no room for waits outside (ind.u) at a price far
@@ -120,6 +122,7 @@ Object.assign(Scheduler, {
     // every window: start at the last moment that would have fitted and pay
     // the difference as time warp (the clock goes back, so one late lesson
     // does not push the rest of the day). Early: wait, at the app's price.
+    const HOMEGAP = settings.homeGapMin | 0;
     const PF = S.PEAK_FROM, PT = S.PEAK_TO, bandAt = (t) => t >= PF && t < PT ? 1 : 0;
     let wTW = 1, wCap = 50;
     const step = (dd, st, j) => {
@@ -128,7 +131,7 @@ Object.assign(Scheduler, {
       // first window opens): that moment picks the traffic band.
       const first0 = Math.max(dd.start, ws.length ? ws[0][0] : dd.start);
       const bd = (st.first ? first0 : st.t) >= PF && (st.first ? first0 : st.t) < PT ? 1 : 0;
-      st.km += dd.K[bd][st.prev][j];
+      let kmLeg = dd.K[bd][st.prev][j];
       const earliest = st.first ? first0 : st.t + dd.T[bd][st.prev][j];
       let s = ws.length ? S.earliestLegal(ws, dd.breaks, earliest, dur) : null;
       if(s === null || s + dur > dd.end){
@@ -137,7 +140,18 @@ Object.assign(Scheduler, {
         if(latest < 0) latest = dd.end - dur;
         st.warp += Math.max(1, earliest - latest);
         s = latest;
-      } else if(!st.first) st.idle += s - earliest;
+      } else if(!st.first){
+        // A long gap spent at home (setting homeGapMin): prev -> home -> j.
+        const gap = s - st.t;
+        if(HOMEGAP > 0 && gap >= HOMEGAP && dd.T[bd][st.prev][j] > 0){
+          const a = dd.TH[bd][st.prev], b = dd.TF[bandAt(st.t + a)][j];
+          if(gap >= a + b + margin){
+            kmLeg = dd.K[bd][st.prev][0] + dd.K[bandAt(st.t + a)][0][j];
+            st.idle += gap - a - b - margin;
+          } else st.idle += s - earliest;
+        } else st.idle += s - earliest;
+      }
+      st.km += kmLeg;
       st.t = s + dur; st.prev = j; st.first = false;
     };
     const costOf = (km, warp, idle, count) => km + idle * IDLE + wTW * warp + wCap * (cap ? Math.max(0, count - cap) : 0);
