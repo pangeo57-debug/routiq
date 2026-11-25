@@ -5621,8 +5621,10 @@ const App = {
     // It also checked nothing about blocked times or travel.
     let introduced = [];
     try{
-      const before = new Set(Scheduler.verifySchedule(state.schedule, state.students, state.settings));
-      introduced = Scheduler.verifySchedule(trial, state.students, state.settings)
+      // With fixed hours at another place as stops, so a swap that leaves no
+      // time to get to the tutoring centre is refused like any other clash.
+      const before = new Set(Scheduler.verifyWithFixed(state.schedule, state.students, state.settings));
+      introduced = Scheduler.verifyWithFixed(trial, state.students, state.settings)
         .filter(issue => !before.has(issue));
     }catch(e){ introduced = []; }
     if(introduced.length){
@@ -5666,6 +5668,8 @@ const App = {
         Toast.show(tf('toast_move_no_room',{name:student.name, day:DAYS_FULL[targetDay]}),'error');
       return;
     }
+    const snapshot = JSON.parse(JSON.stringify(state.schedule));
+    let before = null; try{ before = new Set(Scheduler.verifyWithFixed(state.schedule, state.students, state.settings)); }catch(e){}
     const srcArrIdx = state.schedule[srcDay].findIndex(s=>s.studentId===srcSlot.studentId && s.start===srcSlot.start);
     if(srcArrIdx>=0) state.schedule[srcDay].splice(srcArrIdx,1);
     if(!state.schedule[targetDay]) state.schedule[targetDay]=[];
@@ -5675,6 +5679,12 @@ const App = {
     // Gather both days, the moved lesson staying where the user put it.
     Scheduler.gatherDays(state.schedule, state.students, state.settings,
       [srcDay, targetDay], new Set([student.id]));
+    // No time left to reach fixed hours at another place: put it back and say why.
+    if(before){
+      let added = [];
+      try{ added = Scheduler.verifyWithFixed(state.schedule, state.students, state.settings).filter(x => !before.has(x)); }catch(e){}
+      if(added.length){ state.schedule = snapshot; Toast.show(tf('toast_swap_blocked',{reason:added[0]}),'error',6000); return; }
+    }
     Storage.saveSchedule(state.schedule);
     this.renderSchedule();
     this.renderHome();

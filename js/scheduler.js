@@ -662,6 +662,12 @@ const Scheduler = {
     const rest = { ...settings, blockedSlots: (settings.blockedSlots || []).filter(b => !blocks.includes(b)) };
     return { students: list, schedule: sch, settings: rest, ids };
   },
+  // The rules check with fixed hours at another place in the week as stops:
+  // a lesson moved by hand must still let the person get there on time.
+  verifyWithFixed(schedule, students, settings){
+    const f = this.fixedSplit(students, schedule, settings);
+    return this.verifySchedule(f.schedule, f.students, f.settings);
+  },
   fixedJoin(schedule){
     const out = {};
     for(const d of Object.keys(schedule || {})) out[d] = (schedule[d] || []).filter(sl => !String(sl.studentId).startsWith('blk:'));

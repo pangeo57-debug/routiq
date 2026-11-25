@@ -39,3 +39,13 @@ test('a week planned around it keeps the stretch free, reaches it in time, and c
     assert.ok(S.dayKm(lessons, 1, cfg) > plain, 'the km include going to the centre and back');
   }
 });
+
+test('a hand-made week that leaves no time to reach the place is flagged; with time it is not', () => {
+  const { S, sts, cfg } = world();
+  const slot = (id, a, b) => ({ studentId: id, studentName: id, address: 'Οδός ' + id.slice(1), start: a, end: b, duration: 60, mergedCount: 1, merged: false });
+  const tight = { 1: [slot('f1', '18:01', '19:01')] };   // starts a minute after the centre closes
+  const easy = { 1: [slot('f1', '19:00', '20:00')] };
+  assert.equal(S.verifySchedule(tight, sts, cfg).length, 0, 'the plain rules see nothing wrong');
+  assert.ok(S.verifyWithFixed(tight, sts, cfg).length > 0, 'with the centre as a stop, the drive there does not fit');
+  assert.deepEqual(S.verifyWithFixed(easy, sts, cfg), []);
+});
