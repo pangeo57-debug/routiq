@@ -417,13 +417,7 @@ Object.assign(Scheduler, {
     const all = () => popF.concat(popI);
     const tournament = () => { const p = all(); const a = p[Math.floor(Math.random() * p.length)], b = p[Math.floor(Math.random() * p.length)]; return a.cost <= b.cost ? a : b; };
     let made = 0, feasMade = 0;
-    // Stop early when the best week has not improved for a third of the
-    // budget (at least 4 s): on the Athens weeks the best was always found
-    // within the first 7 s of 15, and the rest was waiting. Only for weeks of
-    // under 60 lessons: on p09 (100) it cut the search short, +2.06% against +1.2%.
-    const IDLE_STOP = Math.max(4000, budgetMs / 3);
-    const stale = () => n < 60 && bestFeas && Date.now() - t0 - lastBetterMs > IDLE_STOP;
-    while(Date.now() - t0 < budgetMs && !(stopped && stopped()) && !stale()){
+    while(Date.now() - t0 < budgetMs && !(stopped && stopped())){
       const A = tournament(), Bp = tournament();
       const keep = new Set(D.map((_, k) => k).filter(() => Math.random() < 0.5));
       const child = { r: D.map((_, k) => keep.has(k) ? A.r[k].slice() : []) };
