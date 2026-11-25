@@ -5969,7 +5969,7 @@ const Scheduler = {
 // app falls back to Nominatim and OSRM, which need no key at all. It is less
 // accurate, not broken, so a missing or unreachable proxy degrades the app
 // rather than stopping it.
-const API_BASE = '';
+const API_BASE = 'https://routepal-api.gmjvbyb6wp-e72.workers.dev';
 
 /** Is HERE reachable at all — through the user's own key or through the proxy? */
 function hereAvailable(){ return lookupMode() !== 'free'; }

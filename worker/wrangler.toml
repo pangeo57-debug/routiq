@@ -12,15 +12,15 @@ CONTACT_UA = "RoutePal/1.0 (+https://github.com/pangeo57-debug/routiq)"
 # Rate-limit counters. Short-lived keys only.
 [[kv_namespaces]]
 binding = "RATE"
-id = "PUT_YOUR_KV_ID_HERE"
-preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
+id = "218eb62c49c1414a9caf8d1f3957c306"
+preview_id = "7af59b59eb9640aaaa8cc62d230633df"
 
 # Geocoding answers. Addresses do not move, so these are cached for a month —
 # it keeps us well inside Nominatim's usage policy and off HERE's meter.
 [[kv_namespaces]]
 binding = "CACHE"
-id = "PUT_YOUR_KV_ID_HERE"
-preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
+id = "b7d03bd8b4a2424f832ffe7bab54cb24"
+preview_id = "068022b72ae84261adbd9f9b2ccaafdf"
 
 # The HERE key is a SECRET, never a var:
 #   npx wrangler secret put HERE_API_KEY
@@ -32,7 +32,7 @@ preview_id = "PUT_YOUR_PREVIEW_KV_ID_HERE"
 [[d1_databases]]
 binding = "DB"
 database_name = "routepal-sync"
-database_id = "PUT_YOUR_D1_ID_HERE"
+database_id = "d4a24b50-8706-4e12-99c3-f7dcd4819e69"
 
 # Retention. Twelve months untouched and a space is deleted — see PRIVACY.md.
 # Runs daily and deletes in bounded batches, so a backlog drains over days

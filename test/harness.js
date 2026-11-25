@@ -145,9 +145,10 @@ function loadApp(opts = {}) {
     'curLang','normalizeSearchText','getProfessions','getLabels','subjectLabel',
     'getHereKey','schedProgress','_schedFrame','Toast',
     'API_BASE','lookupMode','hereAvailable','apiUrl','Sync','QuickNote','Usage','Remote','SchedWake','ClientCommand','CalendarImport','AiAssist','subjectText','Professions','PROFESSION_PRESETS','Notify','Payments','Cadence','Feedback','ErrorLog','VoiceCommand','DayFill'];
-  // opts.apiBase: run as if a proxy were configured (it is empty in the file).
+  // opts.apiBase: run as if a proxy were configured (tests reset it to empty otherwise).
   let code = extractScript();
-  if (opts.apiBase) code = code.replace("const API_BASE = '';", `const API_BASE = ${JSON.stringify(opts.apiBase)};`);
+  // The file may point at the deployed Worker; tests start from "no proxy" either way.
+  code = code.replace(/const API_BASE = '[^']*';/, `const API_BASE = ${JSON.stringify(opts.apiBase || '')};`);
   if (opts.computeBase) code = code.replace("const COMPUTE_BASE = '';", `const COMPUTE_BASE = ${JSON.stringify(opts.computeBase)};`);
   const src = code +
     '\n;this.__exports = {' +
