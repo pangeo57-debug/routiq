@@ -707,8 +707,10 @@ const Scheduler = {
     // Weeks of under 40 lessons skip ALNS and refineWeek: measured on three
     // Athens weeks and the owner's (31-36 lessons, two seeds each) they gave
     // the same km to the decimal and took about a third of the time. Bigger
-    // weeks keep both: on p09 (100) leaving them out cost +1 to +1.5%.
-    const small = lessons < 40;
+    // weeks keep both: on p09 (100) leaving them out cost +1 to +1.5%. A tight
+    // week (someone still left out after the first placement: few hours, many
+    // fixed blocks) runs them whatever its size, as a safety net.
+    let lean = lessons < 40;
     let result, sch;
     if(input.skipPhase1 && input.warm){
       // A second round: search again from the best week found so far.
@@ -741,7 +743,8 @@ const Scheduler = {
     };
     if(stop()) return done(true);
     P(55, 'phase3_title', 'phase3_sub_short');
-    if(!small) await guard((x) => this.alnsOptimize(x, students, settings, coords, B(25000), (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
+    try{ if(lean && this._missingLessons(sch, students).length) lean = false; }catch(e){ lean = false; }
+    if(!lean) await guard((x) => this.alnsOptimize(x, students, settings, coords, B(25000), (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
     if(stop()) return done(true);
     P(82, 'phase4b_title', 'phase4b_sub'); await tick();
     await guard((x) => this.saRepair(x, students, settings, result));
@@ -777,7 +780,7 @@ const Scheduler = {
     await guard((x) => { const f = this.fillGaps(x, students, settings); if(f.moved.length) this.compactDays(x, students, settings); });
     await guard((x) => this.relocateForTime(x, students, settings));
     if(stop()) return done(true);
-    if(!small) try{
+    if(!lean) try{
       P(94, 'phase_refine_title', 'phase_refine_sub');
       await guard((x) => this.refineWeek(x, students, settings, B(20000), (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
     }catch(e){}
