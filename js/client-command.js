@@ -378,3 +378,129 @@ const ClientCommand = {
   },
 };
 
+
+// ============================================================
+// VOICE COMMANDS — "πού πάω μετά", "ακύρωσε ο Κώστας", "τι έχω αύριο"
+// ============================================================
+// Said into the + button's microphone (or typed), understood here on the
+// phone by rules: nothing is sent anywhere. The result has the shape a
+// server parser would give later (intent, entities, a sentence to show), so
+// one can replace the other. Nothing that changes the week happens without a
+// tap: cancelling and marking done ask first; the rest only shows or opens.
+// No new client is ever made from here.
+const VoiceCommand = {
+  _has(n, list){ return list.some(re => re.test(n)); },
+  _when(n){ return /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))(αυριο|tomorrow)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u.test(n) ? 1 : 0; },
+  // The client named anywhere in the sentence, by ClientCommand's own rules.
+  _client(raw, students){
+    const toks = ClientCommand._words(raw).norm;
+    for(let i = 0; i < toks.length; i++){
+      const w = ClientCommand.findClient(toks.slice(i), students || []);
+      if(w && w.ambiguous) return { ambiguous: w.ambiguous };
+      if(w) return w.st;
+    }
+    return null;
+  },
+  _time(raw){ const m = String(raw).match(/(\d{1,2})[:.](\d{2})/) || String(raw).match(/(?:^|\s)(?:στις|at)\s+(\d{1,2})(?!\d)/i);
+    if(!m) return null; let h = Number(m[1]); const mi = m[2] ? Number(m[2]) : 0; if(h >= 1 && h <= 9 && !m[2]) h += 12;
+    return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0'); },
+  parse(text, students){
+    const raw = String(text || '').trim(), n = normalizeSearchText(raw);
+    if(!raw) return null;
+    const out = (intent, ent, needs, summary) => ({ intent, confidence: intent === 'UNKNOWN' ? 0 : 0.8, requires_confirmation: !!needs,
+      entities: { target_id: null, target_name: null, date: null, time: null, status: null, map_query: null, trigger_reschedule: false, ...ent },
+      human_summary: summary || '' });
+    const day = this._when(n);
+    if(this._has(n, [/(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))που παω(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))που πηγαινω(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))επομεν(ο|η|ος|ου)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d])).*(σταση|ραντεβου|μαθημα)?/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))πλοηγησ/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))where (do i go|next)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))next stop(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))navigat/u]))
+      return out('NEXT_STOP', {}, false, t('vc_next'));
+    if(this._has(n, [/(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))κοντα(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))δειξε(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))στο χαρτη(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))near(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))on the map(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u])){
+      const me = /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))κοντα μου(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))|(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))near me(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))|(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))θεση μου(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u.test(n);
+      const q = me ? '' : ((raw.match(/(?:κοντά|κοντα|near)\s+(?:σε|στην|στη|στον|στο|στα|στις|στους|to|the)?\s*(.+)$/i) || [])[1] || '').trim();
+      return out('MAP_SEARCH', { map_query: me ? '@me' : q }, false, me ? t('vc_near_me') : tf('vc_near', { q }));
+    }
+    if(this._has(n, [/(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))τι εχω(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))ποσα .*μενουν(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))ποσ(α|οι|ες) εχω(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))προγραμμα (σημερα|αυριο)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))what do i have(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))how many (left|today)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u]))
+      return out('SCHEDULE_OVERVIEW', { date: day ? 'tomorrow' : 'today' }, false, t(day ? 'vc_overview_tomorrow' : 'vc_overview_today'));
+    const fill = this._has(n, [/(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))ποιος μπορει να (μπει|ερθει)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))βρες .*(θεση|κενο|αναπληρ)/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))αναπληρωσ/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))fill (the )?(gap|slot)(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u]);
+    if(fill) return out('RESCHEDULE_OR_FILL', { trigger_reschedule: true }, true, t('vc_fill'));
+    const cancel = this._has(n, [/(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))ακυρ/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))δεν (θα )?ερχεται(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))cancel/u]);
+    const done = this._has(n, [/(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))ολοκληρ/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))εγινε(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))τελειωσε(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))done(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u, /(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))completed(?:(?<![\p{L}\d])(?=[\p{L}\d])|(?<=[\p{L}\d])(?![\p{L}\d]))/u]);
+    if(cancel || done){
+      const st = this._client(raw, students);
+      if(st && st.ambiguous) return out('UNKNOWN', {}, false, tf('vc_which', { names: st.ambiguous.map(x => x.name).join(', ') }));
+      if(!st) return null;   // not about a client: leave it to the client commands and errands
+      return out('MARK_STATUS', { target_id: st.id, target_name: st.name, status: cancel ? 'cancelled' : 'completed', time: this._time(raw), date: day ? 'tomorrow' : 'today' },
+        true, tf(cancel ? 'vc_cancel' : 'vc_done', { name: st.name }));
+    }
+    return null;
+  },
+
+  // Carry it out on the screen, as the person would have by hand.
+  run(cmd){
+    if(!cmd) return false;
+    const date = cmd.entities.date === 'tomorrow' ? QuickNote._addDays(App.todayISO(), 1) : App.todayISO();
+    const agenda = App._todayAgenda(date).filter(x => x.time);
+    const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
+    if(cmd.intent === 'NEXT_STOP'){
+      const nx = agenda.find(x => !x.done && Scheduler.toMin(x.end || x.time) > nowMin) || agenda.find(x => !x.done);
+      if(!nx){ Toast.show(t('vc_no_next'), 'info'); return true; }
+      Toast.show(tf('vc_going', { name: nx.title, time: nx.time }), 'success');
+      App.openLegInMaps(null, { id: nx.id, address: nx.address || '' });
+      return true;
+    }
+    if(cmd.intent === 'SCHEDULE_OVERVIEW'){
+      const left = agenda.filter(x => !x.done && (date !== App.todayISO() || Scheduler.toMin(x.end || x.time) > nowMin));
+      this._sheet(cmd.human_summary, left.length ? left.map(x => ({ line: `${x.time} · ${x.title}`, sub: x.address || '' })) : [{ line: t('vc_nothing_left') }]);
+      return true;
+    }
+    if(cmd.intent === 'MARK_STATUS'){
+      const mine = agenda.filter(x => x.kind === 'lesson' && x.id === cmd.entities.target_id && !x.done);
+      const it = (cmd.entities.time && mine.find(x => x.time === cmd.entities.time)) || mine[0];
+      if(!it){ Toast.show(tf('vc_not_today', { name: cmd.entities.target_name }), 'info', 6000); return true; }
+      if(cmd.entities.status === 'cancelled') DayFill.askCancel(date, it.id, it.time);
+      else App.confirm(cmd.human_summary, `${it.time} · ${it.title}`, () => { Payments.toggleDone(date, it.id, it.time); App.renderHome(); }, t('vc_yes'), false);
+      return true;
+    }
+    if(cmd.intent === 'RESCHEDULE_OR_FILL'){
+      const c = DayFill.of(date).cancel[0];
+      if(!c){ Toast.show(t('vc_no_freed'), 'info', 6000); return true; }
+      DayFill.openFill(date, c.start);
+      return true;
+    }
+    if(cmd.intent === 'MAP_SEARCH'){
+      const q = cmd.entities.map_query;
+      const show = (rows) => this._sheet(cmd.human_summary, rows.length ? rows : [{ line: t('vc_none_found') }]);
+      const asRow = (st, km) => ({ line: st.name + (km != null ? ` · ${km.toFixed(1)} km` : ''), sub: st.address || '', go: { id: st.id, address: st.address || '' } });
+      if(q === '@me'){
+        const geo = typeof navigator !== 'undefined' && navigator.geolocation;
+        if(!geo){ Toast.show(t('gps_unavailable'), 'error'); return true; }
+        geo.getCurrentPosition(p => {
+          const me = { lat: p.coords.latitude, lon: p.coords.longitude };
+          show((state.students || []).filter(s => Scheduler.validCoord(state.coords[s.id]))
+            .map(s => ({ s, km: Scheduler.haversineKm(me, state.coords[s.id]) })).sort((a, b) => a.km - b.km).slice(0, 6).map(x => asRow(x.s, x.km)));
+        }, () => Toast.show(t('gps_denied'), 'error', 6000), { timeout: 10000, maximumAge: 300000 });
+        return true;
+      }
+      const words = normalizeSearchText(q).split(/\s+/).filter(w => w.length >= 3).map(w => ClientCommand._stem(w));
+      const hit = (state.students || []).filter(s => { const a = normalizeSearchText(s.address || ''); return words.length && words.every(w => a.includes(w)); });
+      show(hit.map(s => asRow(s, null)));
+      return true;
+    }
+    if(cmd.intent === 'UNKNOWN' && cmd.human_summary){ Toast.show(cmd.human_summary, 'info', 6000); return true; }
+    return false;
+  },
+  _sheet(title, rows){
+    document.getElementById('vc-overlay')?.remove();
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay open'; ov.id = 'vc-overlay';
+    this._rows = rows;
+    ov.innerHTML = `<div class="confirm-box" style="max-width:440px;max-height:85vh;overflow-y:auto">
+      <div class="confirm-title">${esc(title)}</div>
+      ${rows.map((r, i) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)">
+        <span style="flex:1"><b>${esc(r.line)}</b>${r.sub ? `<br><span style="font-size:12px;color:var(--text3)">${esc(r.sub)}</span>` : ''}</span>
+        ${r.go ? `<button class="btn btn-primary" style="padding:8px 12px" onclick="VoiceCommand._go(${i})">${esc(t('home_go'))}</button>` : ''}</div>`).join('')}
+      <div class="confirm-actions" style="margin-top:8px"><button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('vc-overlay').remove()">${esc(t('notify_close'))}</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+  },
+  _go(i){ const r = this._rows && this._rows[i]; if(r && r.go){ document.getElementById('vc-overlay')?.remove(); App.openLegInMaps(null, r.go); } },
+};

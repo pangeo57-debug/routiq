@@ -240,7 +240,7 @@ const App = {
   // ── What is new ────────────────────────────────────────────────────────
   // Once per release, to someone already using the app: a short list of what
   // changed, from a toast they can open or ignore. Settings has it too.
-  NEWS_ID: '2026-11-25',
+  NEWS_ID: '2026-11-25b',
   maybeShowNews(){
     let seen = null; try{ seen = localStorage.getItem('rp_news_seen'); }catch(e){}
     if(seen === this.NEWS_ID) return;
@@ -1809,6 +1809,9 @@ const App = {
       this.clientCommandSmart(text).then(h => { if(h){ if(box) box.value = ''; this.renderHome(); } else this._quickAddErrand(text, box, boxId); });
       return;
     }
+    // A command first ("πού πάω μετά", "ακύρωσε ο Κώστας", "τι έχω αύριο"):
+    // it only shows, opens, or asks before it changes anything.
+    try{ const vc = VoiceCommand.parse(text, state.students); if(vc && VoiceCommand.run(vc)){ if(box) box.value = ''; this.fabSheetClose && this.fabSheetClose(); return; } }catch(e){ console.warn('voice command failed', e); }
     if(this.clientCommand(text)){ if(box) box.value = ''; this.renderHome(); return; }
     if(AiAssist.available() && AiAssist.looksLikeClient(text)) AiAssist.maybeAsk();
     this._quickAddErrand(text, box, boxId);
