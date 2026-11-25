@@ -1789,6 +1789,58 @@ const App = {
     if(boxId) try{ this.homePlan(); }catch(e){}
   },
 
+  // ── Addresses that look wrong ───────────────────────────────────────────
+  // One mistyped address can cost more km than all the planning saves: a
+  // street with no town was placed 28 km away and the week went from 118 to
+  // 150 km. Three signs, by straight-line distance on the device:
+  //  · far: far from home AND from every other client, and well beyond the rest;
+  //  · vague: no town and no postcode in the address, so the map guessed;
+  //  · at home: placed exactly on the home's point though the address is another.
+  // "It is right" hides it until the point changes.
+  ADDR_OK_KEY: 'rp_addr_ok',
+  _addrOk(){ try{ return JSON.parse(localStorage.getItem(this.ADDR_OK_KEY) || '{}') || {}; }catch(e){ return {}; } },
+  addressWarnings(){
+    const C = state.coords || {}, home = C.home, ok = this._addrOk(), out = [];
+    const sts = (state.students || []).filter(s => C[s.id] && Scheduler.validCoord(C[s.id]));
+    const km = (a, b) => Scheduler.haversineKm(a, b);
+    const fromHome = home ? sts.map(s => km(home, C[s.id])).sort((a, b) => a - b) : [];
+    const median = fromHome.length ? fromHome[Math.floor(fromHome.length / 2)] : 0;
+    const homeKey = normalizeSearchText(state.settings.homeAddress || '');
+    for(const s of sts){
+      const c = C[s.id], key = s.id + '|' + c.lat.toFixed(5) + ',' + c.lon.toFixed(5);
+      if(ok[key]) continue;
+      const addr = String(s.address || '').trim();
+      let why = null, dist = 0;
+      if(home){
+        dist = km(home, c);
+        let near = Infinity;
+        for(const o of sts) if(o.id !== s.id) near = Math.min(near, km(C[o.id], c));
+        if(dist > 15 && near > 8 && dist > 2.5 * Math.max(median, 1)) why = 'far';
+        else if(Math.abs(c.lat - home.lat) < 1e-6 && Math.abs(c.lon - home.lon) < 1e-6 && addr && normalizeSearchText(addr) !== homeKey) why = 'athome';
+      }
+      if(!why && addr && c.src !== 'pin' && !addr.includes(',') && !/\d{3}\s?\d{2}/.test(addr)) why = 'vague';
+      if(why) out.push({ st: s, why, km: dist, key });
+    }
+    return out;
+  },
+  addressBannerHtml(){
+    const w = this.addressWarnings();
+    if(!w.length) return '';
+    return `<div class="card-sm" style="margin:0 16px 12px;border-color:var(--orange,#e8a33d)">
+      <div style="font-weight:700;margin-bottom:6px">${ico('pin', 16)} ${esc(t('addr_check_title'))}</div>
+      ${w.map(x => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-top:1px solid var(--border)">
+        <span style="flex:1">${esc(tf({ far: 'addr_far', vague: 'addr_vague', athome: 'addr_athome' }[x.why], { name: x.st.name || '', km: Math.round(x.km), addr: x.st.address || '' }))}</span>
+        <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.nav('students');App.openStudentDrawer('${x.st.id}')">${esc(t('addr_fix'))}</button>
+        <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.addressIsRight('${x.key}')">${esc(t('addr_ok'))}</button>
+      </div>`).join('')}</div>`;
+  },
+  addressIsRight(key){
+    const ok = this._addrOk(); ok[key] = 1;
+    try{ localStorage.setItem(this.ADDR_OK_KEY, JSON.stringify(ok)); }catch(e){}
+    try{ this.renderSchedule(); }catch(e){}
+    try{ if(state.currentScreen === 'students') this.renderStudents(); }catch(e){}
+  },
+
   // ── Before / after ──────────────────────────────────────────────────────
   // Kept on the device: the latest week, and one record per planned date.
   recordSavings(scope, key, rec){
@@ -5287,6 +5339,7 @@ const App = {
       ${state.savings && state.savings.week && (!state.savings.week.after || !state.savings.week.after.key || state.savings.week.after.key === this.scheduleKey()) ? this._savingsCardHtml(state.savings.week, 'week') : ''}
       ${this.renderUnplaced(result.unplaced)}
       ${Notify.bannerHtml()}
+      ${this.addressBannerHtml()}
       ${placed > 0 ? `<div style="padding:0 16px 10px"><button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.exportWeekCalendar()">${ico('calendar', 14)} ${esc(t('cal_add_week'))}</button></div>` : ''}
       ${placed > 0 && !this._lockHintSeen() ? `<div class="card-sm" style="margin:0 16px 12px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2)">
         ${ico('lock', 16)}<span style="flex:1">${esc(t('lock_hint'))}</span>
