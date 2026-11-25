@@ -119,7 +119,9 @@ const App = {
     // Near the person: their home, else their workplace, else Patras. A
     // tight bias (15 km) keeps the shop round the corner above the one with
     // the same name across the country; far places still appear if typed.
-    const near=[state.coords?.home, state.coords?.workplace].find(c=>Scheduler.validCoord(c));
+    // Where the person is right now comes first (asked once, when they start
+    // typing an address), then home, then workplace.
+    const near=[this._hereCoord, state.coords?.home, state.coords?.workplace].find(c=>Scheduler.validCoord(c));
     const home=near||{lat:38.2466,lon:21.7346};
     const sessionToken=this._googlePlacesSession(boxId);
     const request={
@@ -1726,13 +1728,11 @@ const App = {
           <button class="btn btn-primary" id="home-plan" onclick="App.homePlan()">${ico('nav')} ${esc(t('day_plan_btn'))}</button>
         </div>`}
         ${main ? `<div class="home-cards">${card(main, true)}${after.map(x => card(x, false)).join('')}</div>` : ''}
-        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 2px">
-          <span>${isToday ? t('home_today_label') : esc(t('day_tomorrow'))} · ${esc(this.prettyDate(date))}</span>
-          <span style="display:flex;gap:6px">
-            ${timed.length && typeof Notification !== 'undefined' && Notification.permission === 'default' ? `<button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.enableReminders()">${ico('bell', 14)} ${esc(t('remind_enable'))}</button>` : ''}
-            ${timed.length ? `<button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.exportCalendar()">${ico('calendar', 14)} ${esc(t('cal_add'))}</button>` : ''}
-            <button class="chip chip-gray" style="border:none;cursor:pointer" onclick="App.exportWeekCalendar()">${ico('calendar', 14)} ${esc(t('cal_add_week'))}</button>
-          </span>
+        <div class="section-title" style="padding:0 2px">${isToday ? t('home_today_label') : esc(t('day_tomorrow'))} · ${esc(this.prettyDate(date))}</div>
+        <div class="home-cal-row">
+          ${timed.length && typeof Notification !== 'undefined' && Notification.permission === 'default' ? `<button class="btn btn-secondary" onclick="App.enableReminders()">${ico('bell', 16)} ${esc(t('remind_enable'))}</button>` : ''}
+          ${timed.length ? `<button class="btn btn-secondary" onclick="App.exportCalendar()">${ico('calendar', 16)} ${esc(t('cal_add'))}</button>` : ''}
+          <button class="btn btn-secondary" onclick="App.exportWeekCalendar()">${ico('calendar', 16)} ${esc(t('cal_add_week'))}</button>
         </div>
         <div class="home-timeline">
           ${DayFill.of(date).cancel.map(c => { const st = (state.students || []).find(s => s.id === c.sid) || {};
@@ -2422,7 +2422,6 @@ const App = {
             <div class="student-name">${esc(st.name)} ${this._farFromHomeWarning(st.id)} ${this._locationNote(st.id)}</div>
             <div class="student-sub">${subjectText(st.subject) ? esc(subjectText(st.subject)) + ' · ' : ''}${Scheduler.hasMixedDurations(st) ? st.durations.map(d => d + '′').join(' + ') : st.lessonsPerWeek + t('student_per_week_suffix')}${Cadence.label(st) ? ' · ' + esc(Cadence.label(st)) : ''} · <span class="wallet-placed${placed>=st.lessonsPerWeek?'':' short'}">${placed}/${st.lessonsPerWeek} ${t('student_placed_suffix')}</span></div>
             ${times.length ? `<div class="wallet-times">${times.slice(0, 5).map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
-            ${Payments.badgeHtml(st)}
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron-${st.id}" style="flex-shrink:0;color:var(--text3);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
@@ -2430,7 +2429,6 @@ const App = {
           <div class="student-detail-row"><span class="student-detail-label">${t('student_address_label')}</span><span style="font-size:12px;text-align:right;max-width:200px">${esc(st.address)}${state.coords[st.id]?` <span style="color:var(--green);font-size:10px" title="${t('student_geocoded_title')} ✓">${ico('pin', 11)}</span>`:`<span style="color:var(--text3);font-size:10px" title="${t('student_not_geocoded_title')}"> ○</span>`} ${this._farFromHomeWarning(st.id)}</span></div>
           ${st.phone?`<div class="student-detail-row"><span class="student-detail-label">${t('student_phone_label')}</span><span style="font-size:12px">${esc(st.phone)}</span></div>`:''}
           <div class="student-detail-row"><span class="student-detail-label">${t('student_duration_label')}</span><span>${st.lessonDuration} ${t('student_minutes_suffix')}</span></div>
-          <div class="student-detail-row"><span class="student-detail-label">${t('pay_row')}</span><span style="display:flex;align-items:center;gap:8px">${esc(Payments.owedText(st) || t('pay_nothing_short'))}${Payments.price(st) ? ` <span style="color:var(--text3)">(${Payments.price(st)} €)</span>` : ''}<button class="chip chip-gray" style="border:none;cursor:pointer" onclick="event.stopPropagation();Payments.openPay('${st.id}')">${esc(t('pay_btn'))}</button></span></div>
           <div class="student-detail-row"><span class="student-detail-label">${t('student_type_label')}</span><span class="chip ${st.type==='group'?'chip-purple':'chip-blue'}">${st.type==='group'?t('student_type_group_prefix')+': '+esc(st.group):t('student_type_solo')}</span></div>
           ${st.pairedWith ? (()=>{
             const partner = state.students.find(s=>s.id===st.pairedWith);
@@ -2521,13 +2519,14 @@ const App = {
       <div id="st-addr-block" style="display:${state.settings.workplaceAddress && (st ? st.atWorkplace : state.settings.workMode !== 'both') ? 'none' : ''}">
       <div class="form-group" style="position:relative">
         <label>${t('student_address_label')}</label>
-        <div style="display:flex;gap:6px">
+        <div style="position:relative"><div style="display:flex;gap:6px">
           <input type="text" id="st-addr" placeholder="${t('form_address_placeholder')}" value="${esc(st?.address||'')}" autocomplete="off" style="flex:1"
             oninput="App.onAddrInput(this.value)" onkeydown="App.onAddrKey(event)" onblur="setTimeout(()=>App.hideAddrSuggest(),200)">
           <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" aria-label="${t('form_pick_on_map')}" onclick="App.openMapPicker('st-addr')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </button>
         </div>
+        <div id="addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
           <button type="button" class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.hereNow('st-addr')">${ico('pin', 13)} ${esc(t('gps_here'))}</button>
           <button type="button" class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.findInGoogleMaps('st-addr','st-name')">${ico('search', 13)} ${esc(t('gmaps_find'))}</button>
@@ -2537,7 +2536,6 @@ const App = {
           <div id="st-loc-map" style="height:170px;border-radius:10px;overflow:hidden;background:var(--bg3);position:relative;isolation:isolate"></div>
           <div class="settings-sub" style="margin-top:4px">${t('form_location_map_hint')}</div>
         </div>
-        <div id="addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
       </div>
       </div>
       <div class="form-group">
@@ -2948,7 +2946,18 @@ const App = {
     window.open(web, '_blank', 'noopener');
   },
 
+  // The phone's position, to put the nearest places first. Asked once per
+  // session; a refusal is remembered and nothing else changes.
+  _askHere(){
+    if(this._hereAsked) return;
+    this._hereAsked = true;
+    const geo = typeof navigator !== 'undefined' && navigator.geolocation;
+    if(!geo) return;
+    try{ geo.getCurrentPosition(p => { this._hereCoord = { lat: p.coords.latitude, lon: p.coords.longitude }; },
+      () => {}, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }); }catch(e){}
+  },
   onAddrInput(val, boxId='addr-suggest'){
+    this._askHere();
     const link = this.parseMapsLink(val);
     if(link === 'short'){
       const b0 = document.getElementById(boxId);
@@ -6760,7 +6769,7 @@ const App = {
           <label>${t('settings_home_address')}
             <span id="set-home-geo-status">${this._homeGeoStatusHtml()}</span>
           </label>
-          <div style="display:flex;gap:6px">
+          <div style="position:relative"><div style="display:flex;gap:6px">
             <input type="text" id="set-home" value="${esc(st.homeAddress||'')}" placeholder="${t('settings_home_placeholder')}" autocomplete="off" style="flex:1"
               oninput="App.onAddrInput(this.value,'set-home-suggest')" onkeydown="App.onAddrKey(event,'set-home-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('set-home-suggest'),200)">
             <button type="button" class="btn-icon" title="${esc(t('gps_here'))}" onclick="App.hereNow('set-home')">
@@ -6770,7 +6779,7 @@ const App = {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
             </button>
           </div>
-          <div id="set-home-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+          <div id="set-home-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div>
           <button type="button" class="chip chip-gray" id="set-map-btn" aria-pressed="false" style="border:none;cursor:pointer;margin-top:8px;min-height:32px"
             onclick="App.toggleHomeMap()">${ico('map', 14)} ${esc(t('form_map_show'))}</button>
           <div id="set-home-wrap" style="display:none">

@@ -39,13 +39,30 @@ const Payments = {
     const s = this.owedText(st);
     return s ? `<div class="wallet-owed" style="font-size:12px;font-weight:700;color:var(--orange,#c2410c);margin-top:4px">${esc(s)}</div>` : '';
   },
-  // All clients together, above the list.
+  // Payments live in their own place, not on the client cards: one bar above
+  // the list (what is owed in all, or just "Payments"), which opens the list.
   totalHtml(){
+    if(!(state.students || []).length) return '';
     let n = 0, eur = 0;
     for(const st of state.students || []){ const o = this.owed(st.id); n += o; eur += o * this.price(st); }
-    if(!n) return '';
-    return `<div class="card-sm" style="margin:0 16px 10px;display:flex;align-items:center;gap:8px;font-size:14px">
-      ${ico('flag', 14)}<span style="flex:1">${esc(tf('pay_total', { n }))}${eur ? ` · <b>${eur.toFixed(eur % 1 ? 2 : 0)} €</b>` : ''}</span></div>`;
+    return `<button class="card-sm" style="margin:0 16px 10px;display:flex;align-items:center;gap:8px;font-size:14px;width:calc(100% - 32px);text-align:left;cursor:pointer;font-family:inherit;color:inherit" onclick="Payments.openList()">
+      ${ico('flag', 14)}<span style="flex:1">${n ? esc(tf('pay_total', { n })) + (eur ? ` · <b>${eur.toFixed(eur % 1 ? 2 : 0)} €</b>` : '') : esc(t('pay_section'))}</span><span aria-hidden="true">›</span></button>`;
+  },
+  // Every client, those who owe first, each with what they owe and a button to record a payment.
+  openList(){
+    document.getElementById('pay-list-overlay')?.remove();
+    const rows = (state.students || []).map(st => ({ st, n: this.owed(st.id) })).sort((a, b) => b.n - a.n || String(a.st.name).localeCompare(String(b.st.name)));
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay open'; ov.id = 'pay-list-overlay';
+    ov.innerHTML = `<div class="confirm-box" style="max-width:440px;max-height:85vh;overflow-y:auto">
+      <div class="confirm-title">${esc(t('pay_section'))}</div>
+      ${rows.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--border)">
+        <span style="flex:1"><b>${esc(r.st.name || '')}</b><br><span style="font-size:13px;color:${r.n ? 'var(--text)' : 'var(--text3)'}">${esc(this.owedText(r.st) || t('pay_nothing_short'))}</span></span>
+        <button class="btn btn-secondary" style="padding:8px 12px" onclick="document.getElementById('pay-list-overlay').remove();Payments.openPay('${esc(r.st.id)}')">${esc(t('pay_save'))}</button>
+      </div>`).join('')}
+      <div class="confirm-actions" style="margin-top:8px"><button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('pay-list-overlay').remove()">${esc(t('notify_close'))}</button></div>
+    </div>`;
+    document.body.appendChild(ov);
   },
 
   // Record a payment: how many appointments it covers (all owed, by default).

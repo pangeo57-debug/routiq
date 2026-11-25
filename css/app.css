@@ -739,3 +739,11 @@ body.sched-on .toast-container{bottom:calc(var(--nav-h) + 20px + var(--sched-h, 
 /* An open dialog sits above the progress panel and the messages: their
    buttons must never be covered by a calculation running underneath. */
 .confirm-overlay.open{z-index:10010}
+
+/* Home: the calendar buttons under the day's title, full width, never past the edge. */
+.home-cal-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.home-cal-row .btn{flex:1 1 140px;min-height:44px;font-size:14px;font-weight:600;white-space:normal;line-height:1.2;
+  border:1.5px solid var(--green);color:var(--green);display:inline-flex;align-items:center;justify-content:center;gap:6px}
+/* A confirm button whose label is long wraps inside the box. */
+.confirm-actions{flex-wrap:wrap}
+.confirm-actions .btn{white-space:normal;min-width:0;overflow-wrap:anywhere;line-height:1.25;text-align:center;padding:10px 12px}
