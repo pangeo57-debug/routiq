@@ -1497,8 +1497,10 @@ const App = {
       state._schedulerError = null;
       return;
     }
-    const total = state.students.reduce((a,s)=>a+s.lessonsPerWeek,0);
-    const placed = total - r.unplaced.reduce((a,u)=>a+(u.needed-u.placed),0);
+    // Counted on the week as it is now, the same way each client's card counts
+    // it (a merged block is its lessons, a pair's lesson is each one's). The
+    // first placement's own list came out lower than the cards.
+    const { placed, total } = this.placedCounts();
     const att = r._attempts || 1;
     const attLabel = att > 1 ? tf('toast_attempts_suffix',{n:att}) : '';
     // Say which of the two happened. Silently keeping the old schedule would
@@ -4744,12 +4746,26 @@ const App = {
       if(c){ state.coords[s.id]=c; Storage.saveCoords(state.coords); }
       await new Promise(r=>setTimeout(r,1100));
     }
-    Toast.show(`${t('toast_geocoded_count')}: ${Object.keys(state.coords).filter(k=>k!=='home'&&k!=='workplace').length}/${state.students.length} geocoded`,'ok');
+    // Clients only: the count used to include home, the day's jobs and the
+    // fixed places, and read 25 of 19.
+    const found = state.students.filter(s => Scheduler.validCoord(state.coords[s.id])).length;
+    Toast.show(tf('toast_on_map', { n: found, total: state.students.length }), found === state.students.length ? 'success' : 'info');
     this.renderStudents();
   },
 
   // Rebuild the unplaced-students diagnostic list from current state
   // (used when schedulerResult was lost, e.g. after a page reload)
+  // Lessons in the week, and lessons wanted, as the client cards count them.
+  placedCounts(){
+    const by = {};
+    Object.values(state.schedule || {}).flat().forEach(e => {
+      if(e.isGroup){ (e.groupMemberIds || [e.studentId, e.pairedStudentId].filter(Boolean)).forEach(id => { by[id] = (by[id] || 0) + 1; }); }
+      else by[e.studentId] = (by[e.studentId] || 0) + (e.mergedCount || 1);
+    });
+    let placed = 0, total = 0;
+    for(const st of state.students || []){ const n = st.lessonsPerWeek || 0; total += n; placed += Math.min(n, by[st.id] || 0); }
+    return { placed, total };
+  },
   computeUnplacedLive(){
     const placedByStudent = {};
     Object.values(state.schedule).flat().forEach(e=>{

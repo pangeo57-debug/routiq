@@ -29,3 +29,12 @@ test('a change that the week no longer holds asks for a new plan; one it still h
   app.state.students[0] = late;
   assert.equal(app.App._weekNeedsPlan(late, before, []), true, 'her hours moved past her lesson');
 });
+
+test('placed counts as the cards do: a merged block is its lessons, a pair lesson counts for each', () => {
+  const app = loadApp();
+  const a = student('a', { lessonsPerWeek: 2 }), b = student('b', { lessonsPerWeek: 1 }), c = student('c', { lessonsPerWeek: 1 });
+  app.setState({ students: [a, b, c], settings: settings(), schedule: {
+    1: [{ studentId: 'a', start: '15:00', end: '17:00', merged: true, mergedCount: 2 }],
+    2: [{ studentId: 'b', isGroup: true, groupMemberIds: ['b', 'c'], start: '17:00', end: '18:00' }] } });
+  assert.deepEqual(app.App.placedCounts(), { placed: 4, total: 4 });
+});
