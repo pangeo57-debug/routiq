@@ -4582,6 +4582,11 @@ const App = {
       if(prevSt.formattedAddress) st.formattedAddress = prevSt.formattedAddress;
     }
     const oldPaired = prevSt ? prevSt.pairedWith : null;
+    // What the week already got wrong before this change, so only what the
+    // change itself breaks asks for a new plan.
+    let issuesBefore = null, missingBefore = [];
+    if(prevSt){ try{ issuesBefore = new Set(Scheduler.verifyWithFixed(state.schedule, state.students, state.settings).map(x => x.split(prevSt.name).join('#')));
+      missingBefore = Scheduler._missingLessons(state.schedule, state.students); }catch(e){ issuesBefore = null; } }
     if(state.editingStudentId){
       const idx = state.students.findIndex(s=>s.id===state.editingStudentId);
       if(idx>=0) state.students[idx]=st;
@@ -4599,13 +4604,19 @@ const App = {
       if(partner) partner.pairedWith = st.id;
     }
 
-    // Clear old coords for this student (address may have changed)
-    delete state.coords[st.id];
-    state.travelMatrix = null;
-    state.travelMatrixPeak = null;
-    state.travelMatrixOffPeak = null;
     // Use coord already resolved by autocomplete selection, or re-geocode
     const pendingCoord = atWork ? null : this._addrPendingCoord;
+    // The same address and no new point: the place stays as it was (a pin the
+    // person set, or Google's), and so do the road times. Before, every save
+    // threw the point away, and a client whose point was not also on the
+    // record was left with none at all until the next lookup.
+    const samePlace = !!(prevSt && prevSt.address === st.address && !pendingCoord && state.coords[st.id] && !atWork);
+    if(!samePlace){
+      delete state.coords[st.id];
+      state.travelMatrix = null;
+      state.travelMatrixPeak = null;
+      state.travelMatrixOffPeak = null;
+    }
     this._addrPendingCoord = null;
     Storage.saveStudents(state.students);
     if(atWork){
@@ -4627,7 +4638,7 @@ const App = {
       Storage.saveCoords(state.coords);
       if(state.currentScreen==='route') this.renderRoute();
       else if(state.currentScreen==='students' && state._mapExpanded) this.initStudentsMap();
-    } else if(addr && !(Number.isFinite(Number(st.lat)) && Number.isFinite(Number(st.lng)))) {
+    } else if(addr && !samePlace && !(Number.isFinite(Number(st.lat)) && Number.isFinite(Number(st.lng)))) {
       Router.geocode(addr).then(c=>{
         if(c){
           state.coords[st.id]=c; Storage.saveCoords(state.coords);
@@ -4638,12 +4649,47 @@ const App = {
         }
       }).catch(()=>{});
     }
-    // A new client with a known position goes into the week as it stands;
-    // anything else marks the plan stale — never an automatic recalculation.
-    state._scheduleStale = !prevSt && pendingCoord ? !this.placeNewClient(st) : true;
+    if(prevSt && !samePlace && Number.isFinite(Number(st.lat)) && Number.isFinite(Number(st.lng)) && !state.coords[st.id]){
+      state.coords[st.id] = { lat: Number(st.lat), lon: Number(st.lng) }; Storage.saveCoords(state.coords);
+    }
+    // A new client with a known position goes into the week as it stands.
+    // An edited one: name, address and subject change at once in the week,
+    // on Home and in the maps; the week is marked for a new plan only when it
+    // no longer holds (times, a lesson missing, no time to get there) —
+    // never an automatic recalculation.
+    if(prevSt){
+      this._clientChanged(st);
+      state._scheduleStale = !!state._scheduleStale || this._weekNeedsPlan(st, issuesBefore, missingBefore);
+    } else state._scheduleStale = pendingCoord ? !this.placeNewClient(st) : true;
     this.closeStudentDrawer();
     this.renderStudents();
     this.renderHome();
+  },
+
+  // What a lesson in the week shows of its client follows the client.
+  _clientChanged(st){
+    const byId = Object.fromEntries((state.students || []).map(s => [s.id, s]));
+    let touched = false;
+    for(const d of Object.keys(state.schedule || {})){
+      for(const sl of state.schedule[d] || []){
+        const members = Array.isArray(sl.groupMemberIds) ? sl.groupMemberIds : null;
+        if(sl.studentId !== st.id && !(members && members.includes(st.id))) continue;
+        if(members && members.length > 1) sl.studentName = members.map(id => (byId[id] || {}).name || '').filter(Boolean).join(' & ');
+        else sl.studentName = st.name;
+        if(sl.studentId === st.id){ sl.address = st.address; if(!members || members.length < 2) sl.subject = st.subject; }
+        touched = true;
+        if(state.routeResults) delete state.routeResults[d];
+      }
+    }
+    if(touched) Storage.saveSchedule(state.schedule);
+  },
+  // Does the week still hold for this client after a change?
+  _weekNeedsPlan(st, before, missingBefore){
+    try{
+      if(Scheduler._missingLessons(state.schedule, state.students).includes(st.id) && !(missingBefore || []).includes(st.id)) return true;
+      const issues = Scheduler.verifyWithFixed(state.schedule, state.students, state.settings).map(x => x.split(st.name).join('#'));
+      return before ? issues.some(x => !before.has(x)) : issues.length > 0;
+    }catch(e){ return true; }
   },
 
   deleteStudent(id){
