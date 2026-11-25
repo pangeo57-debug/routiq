@@ -230,6 +230,7 @@ const App = {
     state.routeDay = state.scheduleDay;
 
     try { this.updateNavLabels(); } catch(e){}
+    try { this.syncScheduleFromClients(); } catch(e){ console.warn('name sync failed', e); }
     try { this.renderHome(); } catch(e){ console.error('renderHome failed',e); }
     try { this.registerSW(); } catch(e){}
     setTimeout(() => { this.refreshGoogleCoords().catch(() => {}); }, 3000);
@@ -4668,8 +4669,19 @@ const App = {
     this.renderHome();
   },
 
+  // Every lesson in the week shows its client as the client is now. Run when
+  // the app opens and after an import, so a week saved before a rename (or
+  // by an older version) is put right without a new plan.
+  syncScheduleFromClients(){
+    let changed = false;
+    const before = JSON.stringify(state.schedule || {});
+    for(const st of state.students || []) this._clientChanged(st, true);
+    changed = JSON.stringify(state.schedule || {}) !== before;
+    if(changed) Storage.saveSchedule(state.schedule);
+    return changed;
+  },
   // What a lesson in the week shows of its client follows the client.
-  _clientChanged(st){
+  _clientChanged(st, quiet){
     const byId = Object.fromEntries((state.students || []).map(s => [s.id, s]));
     let touched = false;
     for(const d of Object.keys(state.schedule || {})){
@@ -4683,7 +4695,7 @@ const App = {
         if(state.routeResults) delete state.routeResults[d];
       }
     }
-    if(touched) Storage.saveSchedule(state.schedule);
+    if(touched && !quiet) Storage.saveSchedule(state.schedule);
   },
   // Does the week still hold for this client after a change?
   _weekNeedsPlan(st, before, missingBefore){
@@ -7714,6 +7726,7 @@ const App = {
           Storage.saveSettings(state.settings);
           Storage.saveCoords(state.coords);
           Storage.saveSchedule(state.schedule);
+          try{ this.syncScheduleFromClients(); }catch(e){}
           // Restore exactly what was in the backup — recalculating here would
           // silently throw away the imported schedule and replace it with a
           // fresh one nobody asked for.

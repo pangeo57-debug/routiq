@@ -38,3 +38,14 @@ test('placed counts as the cards do: a merged block is its lessons, a pair lesso
     2: [{ studentId: 'b', isGroup: true, groupMemberIds: ['b', 'c'], start: '17:00', end: '18:00' }] } });
   assert.deepEqual(app.App.placedCounts(), { placed: 4, total: 4 });
 });
+
+test('a week saved before a rename shows the new name and address once the app opens', () => {
+  const app = loadApp();
+  const a = student('a', { name: 'Έλσα', address: 'Αχαϊκής Συμπολιτείας 59' });
+  app.setState({ students: [a], settings: settings(),
+    schedule: { 2: [{ studentId: 'a', studentName: 'Είδα τζούνιορ', address: 'Ανθούπολη', start: '17:41', end: '19:11' }] } });
+  assert.equal(app.App.syncScheduleFromClients(), true);
+  assert.equal(app.state.schedule[2][0].studentName, 'Έλσα');
+  assert.equal(app.state.schedule[2][0].address, 'Αχαϊκής Συμπολιτείας 59');
+  assert.equal(app.App.syncScheduleFromClients(), false, 'nothing more to change');
+});
