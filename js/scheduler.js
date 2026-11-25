@@ -635,6 +635,47 @@ const Scheduler = {
     }
     return { students: list, schedule: sch, alias, dropped };
   },
+  // ── Fixed hours at another place ────────────────────────────────────────
+  // A blocked stretch with an address (a tutoring centre on Monday 15-18) is
+  // not just time off: the person has to get there, and leaves from there.
+  // For planning it runs as an appointment of its own, pinned to that day
+  // and time (as a locked lesson is), under the id 'blk:<block id>' whose
+  // position is kept in coords; afterwards it is taken out of the week again
+  // (fixedJoin) and stays a blocked stretch. Measuring a day puts it back in
+  // (_withFixed), so km and driving include the trip there and back.
+  located(b){ return !!(b && b.address && b.id && Number.isFinite(Number(b.lat)) && Number.isFinite(Number(b.lon))); },
+  fixedSplit(students, schedule, settings){
+    const blocks = (settings.blockedSlots || []).filter(b => this.located(b) && (settings.workDays || []).includes(b.day));
+    if(!blocks.length) return { students, schedule, settings, ids: [] };
+    const list = students.slice(), sch = {}, ids = [];
+    for(const d of Object.keys(schedule || {})) sch[d] = (schedule[d] || []).filter(sl => !String(sl.studentId).startsWith('blk:'));
+    for(const b of blocks){
+      const id = 'blk:' + b.id, s = this.toMin(b.start), e = this.toMin(b.end), name = b.reason || b.address;
+      ids.push(id);
+      list.push({ id, name, address: b.address, type: 'solo', group: '', pairedWith: null, lessonsPerWeek: 1, hoursPerWeek: 1,
+        lessonDuration: e - s, availabilityExceptions: [], availabilityMode: 'manual', fixedBlock: true,
+        availability: { [b.day]: { on: true, start: b.start, end: b.end, windows: [[s, e]] } } });
+      (sch[b.day] = sch[b.day] || []).push({ studentId: id, studentName: name, address: b.address, start: b.start, end: b.end,
+        duration: e - s, mergedCount: 1, merged: false, fixedBlock: true });
+      sch[b.day].sort((x, y) => this.toMin(x.start) - this.toMin(y.start));
+    }
+    const rest = { ...settings, blockedSlots: (settings.blockedSlots || []).filter(b => !blocks.includes(b)) };
+    return { students: list, schedule: sch, settings: rest, ids };
+  },
+  fixedJoin(schedule){
+    const out = {};
+    for(const d of Object.keys(schedule || {})) out[d] = (schedule[d] || []).filter(sl => !String(sl.studentId).startsWith('blk:'));
+    return out;
+  },
+  _withFixed(slots, day, settings){
+    const blocks = ((settings && settings.blockedSlots) || []).filter(b => b.day === Number(day) && this.located(b));
+    if(!blocks.length) return slots;
+    const have = new Set(slots.map(sl => sl.studentId));
+    const add = blocks.filter(b => !have.has('blk:' + b.id))
+      .map(b => ({ studentId: 'blk:' + b.id, address: b.address, start: b.start, end: b.end }));
+    if(!add.length || !slots.length) return slots;
+    return slots.concat(add).sort((x, y) => this.toMin(x.start) - this.toMin(y.start));
+  },
   lockJoin(schedule, alias){
     const out = {};
     for(const d of Object.keys(schedule || {}))
@@ -2944,6 +2985,7 @@ const Scheduler = {
     return gap >= a + b + (settings.travelMargin ?? 2) ? { toHome: a, fromHome: b } : null;
   },
   dayKm(slots, day, settings){
+    slots = this._withFixed(slots, day, settings);
     const homeAddr = (settings && settings.homeAddress) || '';
     if(!slots.length) return 0;
     let km = 0, prevId='home', prevAddr=homeAddr, prevSl=null;
@@ -3099,6 +3141,7 @@ const Scheduler = {
 
   // Dead time in one day: minutes spent neither teaching nor driving.
   dayIdle(slots, day, settings){
+    slots = this._withFixed(slots, day, settings);
     const margin = (settings.travelMargin ?? 2);
     let idle = 0;
     for(let i=1;i<slots.length;i++){
@@ -3157,6 +3200,7 @@ const Scheduler = {
   // travel data and the same rules, so the difference is the planning alone.
   dayDriveMin(slots, day, settings){
     if(!slots.length) return 0;
+    slots = this._withFixed(slots, day, settings);
     const homeAddr = (settings && settings.homeAddress) || '';
     let min = 0, prevId = 'home', prevAddr = homeAddr, prevSl = null;
     let leaveAt = this.toMin(slots[0].start);

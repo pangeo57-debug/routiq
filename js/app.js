@@ -1210,7 +1210,9 @@ const App = {
     try{
       const hereKey = getHereKey();
       const allStudentIds = state.students.map(s=>s.id);
-      const allIds = ['home', ...allStudentIds];
+      // Fixed hours at another place are stops too: their roads are wanted.
+      const fixedIds = (state.settings.blockedSlots || []).filter(b => Scheduler.located(b)).map(b => 'blk:' + b.id);
+      const allIds = ['home', ...allStudentIds, ...fixedIds.filter((x, i, a) => a.indexOf(x) === i)];
       const matCoords = allIds.map(id=>state.coords[id]).filter(Boolean);
       const validIds = allIds.filter(id=>state.coords[id]);
       if(matCoords.length >= 2){
@@ -1265,7 +1267,9 @@ const App = {
     // one of them. Without workers it runs once here, as it always did.
     try{
       // Locked lessons run as clients of their own, fixed in time (lockSplit).
-      const lk = Scheduler.lockSplit(state.students, scheduleBackup, state.settings);
+      // Fixed hours at another place run as pinned appointments (fixedSplit).
+      const fxs = Scheduler.fixedSplit(state.students, scheduleBackup, state.settings);
+      const lk = Scheduler.lockSplit(fxs.students, fxs.schedule, fxs.settings);
       const hasLocks = Object.keys(lk.alias).length > 0;
       const unalias = () => { for(const v of Object.keys(lk.alias)) delete state.coords[v]; state.idAlias = null; };
       if(hasLocks){
@@ -1273,8 +1277,8 @@ const App = {
         state.idAlias = lk.alias;
       }
       let warm = null;
-      try{ warm = Scheduler.warmStart(lk.schedule, lk.students, state.settings); }catch(e){}
-      const input = { students: lk.students, settings: state.settings, coords: state.coords, attempts: attemptCount, warm,
+      try{ warm = Scheduler.warmStart(lk.schedule, lk.students, fxs.settings); }catch(e){}
+      const input = { students: lk.students, settings: fxs.settings, coords: state.coords, attempts: attemptCount, warm,
         // the example week is small and is there to be seen quickly
         ...(deep ? {} : state.settings.demo ? { timeScale: 0.1, p1: { backtrackMs: 1500, repairMs: 700 } } : { timeScale: 0.25, p1: { backtrackMs: 3000, repairMs: 1500 } }) };
       const P = (p, a, b, c) => schedProgress(p, t(a), c ? tf(b, c) : t(b));
@@ -1305,6 +1309,7 @@ const App = {
       unalias();
       if(state._schedulingCancelled || isStale()) return cancelledCleanup();
       if(hasLocks) out = { ...out, schedule: Scheduler.lockJoin(out.schedule, lk.alias) };
+      if(fxs.ids.length) out = { ...out, schedule: Scheduler.fixedJoin(out.schedule) };
       // Flexible time may have been split in the winning run: carry that over.
       for(const st of state.students){
         const w = (out.students || []).find(x => x.id === st.id);
@@ -1391,13 +1396,14 @@ const App = {
       // costs less.
       try{
         schedProgress(98, t('phase_refine_title'), t('phase_refine_sub'));
-        const lk = Scheduler.lockSplit(state.students, state.schedule, state.settings);
+        const fxs = Scheduler.fixedSplit(state.students, state.schedule, state.settings);
+        const lk = Scheduler.lockSplit(fxs.students, fxs.schedule, fxs.settings);
         const al = Object.keys(lk.alias);
         for(const [v, real] of Object.entries(lk.alias)) if(state.coords[real]) state.coords[v] = state.coords[real];
         if(al.length) state.idAlias = lk.alias;
         try{
-          await Scheduler.polishDays(lk.schedule, lk.students, state.settings, 400);
-          state.schedule = al.length ? Scheduler.lockJoin(lk.schedule, lk.alias) : lk.schedule;
+          await Scheduler.polishDays(lk.schedule, lk.students, fxs.settings, 400);
+          state.schedule = Scheduler.fixedJoin(al.length ? Scheduler.lockJoin(lk.schedule, lk.alias) : lk.schedule);
         }finally{
           for(const v of al) delete state.coords[v];
           if(al.length) state.idAlias = null;
@@ -2984,6 +2990,7 @@ const App = {
       return;
     }
     if(boxId==='addr-suggest') this._addrPendingCoord = null;
+    else if(boxId==='bl-addr-suggest') this._blockAddrPendingCoord = null;
     else if(boxId==='jb-addr-suggest') this._jobAddrPendingCoord = null;
     else if(boxId==='set-home-suggest') this._homeAddrPendingCoord = null;
     else if(boxId==='ob-work-suggest') this._obWorkCoord = null;
@@ -3445,7 +3452,7 @@ const App = {
     // code order (_formatAddressOrdered) — saved as-is, not truncated to the
     // first 3 comma-parts like before, which would have silently dropped the
     // postal code off the end.
-    const typedIn = { 'ob-addr-suggest':'ob-addr', 'ob-work-suggest':'ob-work', 'set-home-suggest':'set-home', 'jb-addr-suggest':'jb-addr' }[boxId] || 'st-addr';
+    const typedIn = { 'ob-addr-suggest':'ob-addr', 'ob-work-suggest':'ob-work', 'set-home-suggest':'set-home', 'jb-addr-suggest':'jb-addr', 'bl-addr-suggest':'bl-addr' }[boxId] || 'st-addr';
     const typed = document.getElementById(typedIn)?.value || '';
     let short = this._keepTypedNumber(name.trim(), typed);
     if(res && res._src === 'google'){
@@ -3475,6 +3482,10 @@ const App = {
       // scroll position/keyboard focus aren't disturbed).
       this.commitHomeLocation(coord, short);
       Toast.show(t('toast_home_location_saved'), 'success');
+    } else if(boxId==='bl-addr-suggest'){
+      const inp = document.getElementById('bl-addr');
+      if(inp) inp.value = short;
+      this._blockAddrPendingCoord = coord;
     } else if(boxId==='jb-addr-suggest'){
       const inp = document.getElementById('jb-addr');
       if(inp) inp.value = short;
@@ -6754,7 +6765,7 @@ const App = {
           <div class="blocked-slot">
             <div class="blocked-slot-info">
               <div class="blocked-slot-time">${b.start} – ${b.end}</div>
-              <div class="blocked-slot-day">${DAYS_FULL[b.day]}</div>
+              <div class="blocked-slot-day">${DAYS_FULL[b.day]}${b.reason ? ' · ' + esc(b.reason) : ''}${b.address ? ` · ${ico('pin', 11)} ${esc(b.address)}` : ''}</div>
             </div>
             <button class="btn-icon" onclick="App.deleteBlock(${i})">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -7300,10 +7311,10 @@ const App = {
   openBlockDrawer(){
     document.getElementById('drawer-block-body').innerHTML = `
       <div class="form-group">
-        <label>${t('block_day_label')}</label>
-        <select id="bl-day">
-          ${[1,2,3,4,5,6,7].map(d=>`<option value="${d}">${DAYS_FULL[d]}</option>`).join('')}
-        </select>
+        <label>${t('block_days_label')}</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${[1,2,3,4,5,6,7].map(d=>`<label class="chip chip-gray" style="cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:4px"><input type="checkbox" id="bl-day-${d}" ${d===1?'checked':''}> ${DAYS[d]}</label>`).join('')}
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group" style="margin:0">
@@ -7319,7 +7330,17 @@ const App = {
         <label>${t('block_reason_label')}</label>
         <input type="text" id="bl-reason" placeholder="${t('block_reason_placeholder')}">
       </div>
+      <div class="form-group">
+        <label>${t('block_place_label')}</label>
+        <div style="position:relative">
+          <input type="text" id="bl-addr" placeholder="${t('block_place_ph')}" autocomplete="off" style="width:100%"
+            oninput="App.onAddrInput(this.value,'bl-addr-suggest')" onkeydown="App.onAddrKey(event,'bl-addr-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('bl-addr-suggest'),200)">
+          <div id="bl-addr-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+        </div>
+        <div class="settings-sub" style="margin-top:4px">${t('block_place_hint')}</div>
+      </div>
     `;
+    this._blockAddrPendingCoord = null;
     document.getElementById('drawer-block-overlay').classList.add('open');
   },
 
@@ -7327,16 +7348,32 @@ const App = {
     document.getElementById('drawer-block-overlay').classList.remove('open');
   },
 
-  saveBlock(){
-    const day   = Number(document.getElementById('bl-day')?.value)||1;
+  async saveBlock(){
+    const days  = [1,2,3,4,5,6,7].filter(d => document.getElementById('bl-day-' + d)?.checked);
     const start = document.getElementById('bl-start')?.value||'12:00';
     const end   = document.getElementById('bl-end')?.value||'14:00';
     const reason= document.getElementById('bl-reason')?.value?.trim()||'';
+    const address = document.getElementById('bl-addr')?.value?.trim()||'';
+    if(!days.length){ Toast.show(t('block_pick_day'),'error'); return; }
     if(Scheduler.toMin(end)<=Scheduler.toMin(start)){
       Toast.show(t('toast_end_after_start'),'error'); return
     }
+    // A place: the picked suggestion's point, else the address looked up.
+    let c = address ? this._blockAddrPendingCoord : null;
+    if(address && !c){ try{ c = await Router.geocode(address); }catch(e){ c = null; } }
+    if(address && !(c && Scheduler.validCoord(c))){ Toast.show(t('block_place_unknown'),'error'); return; }
     state.settings.blockedSlots = state.settings.blockedSlots||[];
-    state.settings.blockedSlots.push({day,start,end,reason});
+    const stamp = Date.now().toString(36);
+    for(const day of days){
+      const b = { day, start, end, reason };
+      if(address){
+        b.id = stamp + day; b.address = address; b.lat = c.lat; b.lon = c.lon;
+        state.coords['blk:' + b.id] = { lat: c.lat, lon: c.lon };
+      }
+      state.settings.blockedSlots.push(b);
+    }
+    if(address) Storage.saveCoords(state.coords);
+    this._blockAddrPendingCoord = null;
     Storage.saveSettings(state.settings);
     state._scheduleStale = true;
     this.closeBlockDrawer();
@@ -7346,7 +7383,8 @@ const App = {
   },
 
   deleteBlock(idx){
-    state.settings.blockedSlots.splice(idx,1);
+    const gone = state.settings.blockedSlots.splice(idx,1)[0];
+    if(gone && gone.id && state.coords['blk:' + gone.id]){ delete state.coords['blk:' + gone.id]; Storage.saveCoords(state.coords); }
     Storage.saveSettings(state.settings);
     state._scheduleStale = true;
     this.renderSettings();

@@ -6638,7 +6638,8 @@ describe('locked appointments stay where they are', () => {
   test('the plan button goes through lockSplit and puts the lessons back', () => {
     const src = require('./harness').appSource();
     const body = src.slice(src.indexOf('  async runAndNotify(){'), src.indexOf('    // Verify constraints'));
-    assert.match(body, /Scheduler\.lockSplit\(state\.students, scheduleBackup, state\.settings\)/);
+    assert.match(body, /Scheduler\.fixedSplit\(state\.students, scheduleBackup, state\.settings\)/);
+    assert.match(body, /Scheduler\.lockSplit\(fxs\.students, fxs\.schedule, fxs\.settings\)/);
     assert.match(body, /Scheduler\.lockJoin\(out\.schedule, lk\.alias\)/);
     assert.match(body, /students: lk\.students/);
   });
