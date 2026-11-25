@@ -704,6 +704,11 @@ const Scheduler = {
     const B = (ms) => Math.round(ms * scale * (input.timeScale > 0 && input.timeScale < 1 ? input.timeScale : 1));
     // The same factor for the budgets that do not grow with the week.
     const Q = (ms) => Math.round(ms * (input.timeScale > 0 && input.timeScale < 1 ? input.timeScale : 1));
+    // Weeks of under 40 lessons skip ALNS and refineWeek: measured on three
+    // Athens weeks and the owner's (31-36 lessons, two seeds each) they gave
+    // the same km to the decimal and took about a third of the time. Bigger
+    // weeks keep both: on p09 (100) leaving them out cost +1 to +1.5%.
+    const small = lessons < 40;
     let result, sch;
     if(input.skipPhase1 && input.warm){
       // A second round: search again from the best week found so far.
@@ -736,7 +741,7 @@ const Scheduler = {
     };
     if(stop()) return done(true);
     P(55, 'phase3_title', 'phase3_sub_short');
-    await guard((x) => this.alnsOptimize(x, students, settings, coords, B(25000), (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
+    if(!small) await guard((x) => this.alnsOptimize(x, students, settings, coords, B(25000), (frac) => P(55 + Math.min(1, frac) * 27, 'phase3_title', 'phase3_sub_short')));
     if(stop()) return done(true);
     P(82, 'phase4b_title', 'phase4b_sub'); await tick();
     await guard((x) => this.saRepair(x, students, settings, result));
@@ -772,7 +777,7 @@ const Scheduler = {
     await guard((x) => { const f = this.fillGaps(x, students, settings); if(f.moved.length) this.compactDays(x, students, settings); });
     await guard((x) => this.relocateForTime(x, students, settings));
     if(stop()) return done(true);
-    try{
+    if(!small) try{
       P(94, 'phase_refine_title', 'phase_refine_sub');
       await guard((x) => this.refineWeek(x, students, settings, B(20000), (i) => P(94 + i, 'phase_refine_title', 'phase_refine_sub')));
     }catch(e){}
