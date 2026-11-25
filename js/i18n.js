@@ -1143,7 +1143,7 @@ Object.assign(I18N.el, {
   notify_hint: 'Το μήνυμα ανοίγει έτοιμο στο WhatsApp ή στα SMS σου. Με το ✓ σημειώνεις όσους ενημέρωσες αλλιώς.',
   notify_close: 'Κλείσιμο', notify_all: 'Όλοι ενημερώθηκαν', notify_all_done: 'Σημειώθηκε: όλοι ξέρουν τις νέες ώρες', notify_mark: 'Ενημερώθηκε',
   notify_nothing: 'Κανείς δεν χρειάζεται ενημέρωση', notify_none_now: 'κανένα ραντεβού αυτή τη βδομάδα', notify_before: '(Μέχρι τώρα: {old})',
-  notify_msg_default: 'Γεια σου {name}! Αλλάζει λίγο το πρόγραμμά μας:\n{new}\n{old}\nΣου κάνει;',
+  form_parent_phone: 'Τηλέφωνο γονέα', form_send_to: 'Μηνύματα για τις ώρες προς', send_to_auto: 'Αυτόματα (γονέα, αν υπάρχει)', send_to_student: 'Μόνο τον ίδιο', send_to_parent: 'Μόνο τον γονέα', send_to_both: 'Και στους δύο', notify_role_student: 'Ο ίδιος', notify_role_parent: 'Γονέας', notify_next: 'Στείλε: {name} · {who} ({k}/{n})', notify_msg_parent: 'Καλησπέρα! Αλλάζει λίγο το πρόγραμμα για {name}:\n{new}\n{old}\nΣας βολεύει;', notify_msg_default: 'Γεια σου {name}! Αλλάζει λίγο το πρόγραμμά μας:\n{new}\n{old}\nΣου κάνει;',
   settings_notify_label: 'Μήνυμα όταν αλλάζουν οι ώρες', settings_notify_hint: 'Κενό: το προτεινόμενο. Μπαίνουν αυτόματα: {name} όνομα, {new} νέες ώρες, {old} παλιές ώρες, {me} το όνομά σου.',
 });
 Object.assign(I18N.en, {
@@ -1151,7 +1151,7 @@ Object.assign(I18N.en, {
   notify_hint: 'The message opens ready in your WhatsApp or SMS. Tick ✓ for anyone you told another way.',
   notify_close: 'Close', notify_all: 'Everyone knows', notify_all_done: 'Noted: everyone knows the new times', notify_mark: 'Told',
   notify_nothing: 'Nobody needs telling', notify_none_now: 'no appointment this week', notify_before: '(Until now: {old})',
-  notify_msg_default: 'Hi {name}! Our schedule changes a little:\n{new}\n{old}\nDoes that work for you?',
+  form_parent_phone: 'Parent’s phone', form_send_to: 'Messages about times go to', send_to_auto: 'Automatic (the parent, if any)', send_to_student: 'The client only', send_to_parent: 'The parent only', send_to_both: 'Both', notify_role_student: 'Client', notify_role_parent: 'Parent', notify_next: 'Send: {name} · {who} ({k}/{n})', notify_msg_parent: 'Hello! A small change in the schedule for {name}:\n{new}\n{old}\nDoes that suit you?', notify_msg_default: 'Hi {name}! Our schedule changes a little:\n{new}\n{old}\nDoes that work for you?',
   settings_notify_label: 'Message when times change', settings_notify_hint: 'Empty: the suggested one. Filled in for you: {name} name, {new} new times, {old} old times, {me} your name.',
 });
 Object.assign(I18N.fr, {
@@ -1159,7 +1159,7 @@ Object.assign(I18N.fr, {
   notify_hint: 'Le message s’ouvre prêt dans WhatsApp ou vos SMS. Cochez ✓ pour ceux prévenus autrement.',
   notify_close: 'Fermer', notify_all: 'Tout le monde est prévenu', notify_all_done: 'Noté : tout le monde connaît les nouveaux horaires', notify_mark: 'Prévenu',
   notify_nothing: 'Personne à prévenir', notify_none_now: 'aucun rendez-vous cette semaine', notify_before: '(Jusqu’ici : {old})',
-  notify_msg_default: 'Bonjour {name} ! Notre planning change un peu :\n{new}\n{old}\nCela vous convient ?',
+  form_parent_phone: 'Téléphone d’un parent', form_send_to: 'Messages sur les horaires à', send_to_auto: 'Automatique (le parent, s’il y en a un)', send_to_student: 'La personne seulement', send_to_parent: 'Le parent seulement', send_to_both: 'Les deux', notify_role_student: 'La personne', notify_role_parent: 'Parent', notify_next: 'Envoyer : {name} · {who} ({k}/{n})', notify_msg_parent: 'Bonjour ! Petit changement de planning pour {name} :\n{new}\n{old}\nCela vous convient-il ?', notify_msg_default: 'Bonjour {name} ! Notre planning change un peu :\n{new}\n{old}\nCela vous convient ?',
   settings_notify_label: 'Message quand les horaires changent', settings_notify_hint: 'Vide : celui proposé. Remplis pour vous : {name} nom, {new} nouveaux horaires, {old} anciens, {me} votre nom.',
 });
 Object.assign(I18N.de, {
@@ -1167,7 +1167,7 @@ Object.assign(I18N.de, {
   notify_hint: 'Die Nachricht öffnet sich fertig in WhatsApp oder SMS. Mit ✓ markieren Sie, wen Sie anders informiert haben.',
   notify_close: 'Schließen', notify_all: 'Alle wissen Bescheid', notify_all_done: 'Notiert: alle kennen die neuen Zeiten', notify_mark: 'Informiert',
   notify_nothing: 'Niemand muss informiert werden', notify_none_now: 'kein Termin diese Woche', notify_before: '(Bisher: {old})',
-  notify_msg_default: 'Hallo {name}! Unser Plan ändert sich etwas:\n{new}\n{old}\nPasst das für dich?',
+  form_parent_phone: 'Telefon eines Elternteils', form_send_to: 'Nachrichten zu den Zeiten an', send_to_auto: 'Automatisch (Elternteil, falls vorhanden)', send_to_student: 'Nur die Person', send_to_parent: 'Nur Elternteil', send_to_both: 'Beide', notify_role_student: 'Person', notify_role_parent: 'Elternteil', notify_next: 'Senden: {name} · {who} ({k}/{n})', notify_msg_parent: 'Hallo! Eine kleine Planänderung für {name}:\n{new}\n{old}\nPasst Ihnen das?', notify_msg_default: 'Hallo {name}! Unser Plan ändert sich etwas:\n{new}\n{old}\nPasst das für dich?',
   settings_notify_label: 'Nachricht bei geänderten Zeiten', settings_notify_hint: 'Leer: die vorgeschlagene. Automatisch eingesetzt: {name} Name, {new} neue Zeiten, {old} alte Zeiten, {me} Ihr Name.',
 });
 

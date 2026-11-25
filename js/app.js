@@ -2594,6 +2594,16 @@ const App = {
         <input type="tel" id="st-phone" placeholder="${t('form_phone_ph')}" value="${esc(st?.phone||'')}" autocomplete="tel">
       </div>
       <div class="form-group">
+        <label>${t('form_parent_phone')}</label>
+        <input type="tel" id="st-parent-phone" placeholder="${t('form_phone_ph')}" value="${esc(st?.parentPhone||'')}" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>${t('form_send_to')}</label>
+        <select id="st-send-to">
+          ${[['auto', t('send_to_auto')], ['student', t('send_to_student')], ['parent', t('send_to_parent')], ['both', t('send_to_both')]].map(([v, l]) => `<option value="${v}" ${(st?.sendTo||'auto')===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
         <label>${L.session}</label>
         ${(() => { const cur = st?.subject || '', list = getSubjects(), own = !!cur && subjectText(cur) === cur && !list.includes(cur);
           return `<select id="st-subject" onchange="document.getElementById('st-subject-own').style.display=this.value==='Άλλο'?'':'none';App._serviceDur(this.value)">
@@ -4440,6 +4450,8 @@ const App = {
       name,
       address: addr,
       phone: document.getElementById('st-phone')?.value?.trim()||'',
+      parentPhone: document.getElementById('st-parent-phone')?.value?.trim()||'',
+      sendTo: ['student','parent','both'].includes(document.getElementById('st-send-to')?.value) ? document.getElementById('st-send-to').value : 'auto',
       // the profession's word, the person's own words, or nothing
       subject: (() => { const v = document.getElementById('st-subject')?.value || ''; if(v !== 'Άλλο') return v;
         return document.getElementById('st-subject-own')?.value?.trim() || ''; })(),
@@ -7976,8 +7988,11 @@ const App = {
     const who = kind==='job'
       ? (state.jobs||[]).find(j=>j.id===id)
       : state.students.find(s=>s.id===id);
-    const intl = this.normalizePhone(who && who.phone, state.settings.countryCode);
-    state.sendTarget = { raw: (who && who.phone) || '', intl, sid: kind === 'job' ? null : id };
+    // A client's message goes to whom they chose (the parent, the student or
+    // both: this sheet takes the first; the "let them know" list does each).
+    const to = kind === 'job' ? { raw: (who && who.phone) || '' } : (Notify.recipients(who)[0] || { raw: '' });
+    const intl = this.normalizePhone(to.raw, state.settings.countryCode);
+    state.sendTarget = { raw: to.raw || '', intl, sid: kind === 'job' ? null : id };
     document.getElementById('send-title').textContent = t('send_title');
     document.getElementById('send-hint').textContent = intl ? t('send_hint') : t('send_no_phone');
     const ta = document.getElementById('send-text');
