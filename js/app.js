@@ -234,6 +234,30 @@ const App = {
     try { this.registerSW(); } catch(e){}
     setTimeout(() => { this.refreshGoogleCoords().catch(() => {}); }, 3000);
     try { this.initAnalytics(); } catch(e){}
+    setTimeout(() => { try{ this.maybeShowNews(); }catch(e){} }, 1500);
+  },
+
+  // ── What is new ────────────────────────────────────────────────────────
+  // Once per release, to someone already using the app: a short list of what
+  // changed, from a toast they can open or ignore. Settings has it too.
+  NEWS_ID: '2026-11-25',
+  maybeShowNews(){
+    let seen = null; try{ seen = localStorage.getItem('rp_news_seen'); }catch(e){}
+    if(seen === this.NEWS_ID) return;
+    try{ localStorage.setItem('rp_news_seen', this.NEWS_ID); }catch(e){}
+    if(!seen && !(state.students || []).length) return;     // a new user has nothing to compare with
+    Toast.show(t('news_toast'), 'info', 9000, { label: t('news_open'), run: () => this.openNews() });
+  },
+  openNews(){
+    document.getElementById('news-overlay')?.remove();
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay open'; ov.id = 'news-overlay';
+    ov.innerHTML = `<div class="confirm-box" style="max-width:460px;max-height:85vh;overflow-y:auto">
+      <div class="confirm-title">${esc(t('news_title'))}</div>
+      ${String(t('news_list')).split('\n').filter(Boolean).map(x => `<div style="font-size:14px;padding:6px 0;border-top:1px solid var(--border)">${esc(x)}</div>`).join('')}
+      <div class="confirm-actions" style="margin-top:8px"><button class="btn btn-primary" style="flex:1" onclick="document.getElementById('news-overlay').remove()">${esc(t('notify_close'))}</button></div>
+    </div>`;
+    document.body.appendChild(ov);
   },
 
   // Loads Cloudflare Web Analytics, but only when a token is configured — an
@@ -1769,6 +1793,7 @@ const App = {
       <div class="warning-banner" style="margin-top:12px" onclick="App.nav('schedule')">
         <span><b>${unplacedStudents.length} ${t('home_unplaced_suffix')}</b> · ${t('home_see_schedule')}</span>
       </div>` : ''}
+      ${firstRun ? '' : this.backupBannerHtml()}
       ${firstRun ? '' : this._homeStatsHtml(L, placedCount, totalLessons, weekKm)}`;
   },
 
@@ -7060,6 +7085,10 @@ const App = {
         </select>
       </div>
 
+      <div class="card-sm" style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px">
+        <span class="beta-badge">Beta</span><span style="flex:1">${esc(t('beta_note'))}</span>
+        <button class="chip chip-gray" style="border:none;cursor:pointer;min-height:36px" onclick="App.openNews()">${esc(t('news_open'))}</button>
+      </div>
       <div class="section-title">${t('sync_title')}</div>
       <div class="card">
         ${!Sync.available() ? `
@@ -7720,7 +7749,37 @@ const App = {
     a.download = `routepal-export-${new Date().toLocaleDateString('el-GR').replace(/\//g,'-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    try{ localStorage.setItem('rp_last_backup', String(Date.now())); localStorage.removeItem('rp_backup_snooze'); }catch(e){}
     Toast.show(t('toast_export_success'),'success');
+    try{ if(state.currentScreen === 'home') this.renderHome(); }catch(e){}
+  },
+
+  // ── A copy kept somewhere else ──────────────────────────────────────────
+  // Everything lives on this phone only. With clients entered and no copy in
+  // two weeks (and no device sync), Home says so once, with the button to
+  // save one; "later" asks again in a week.
+  backupDue(now = Date.now()){
+    if(!(state.students || []).length || state.settings.demo) return null;
+    try{ if(Sync.available() && this.syncState()) return null; }catch(e){}
+    let last = 0, snooze = 0;
+    try{ last = Number(localStorage.getItem('rp_last_backup')) || 0; snooze = Number(localStorage.getItem('rp_backup_snooze')) || 0; }catch(e){}
+    if(snooze > now) return null;
+    const days = last ? Math.floor((now - last) / 864e5) : null;
+    return days === null || days >= 14 ? { days } : null;
+  },
+  backupBannerHtml(){
+    const due = this.backupDue();
+    if(!due) return '';
+    return `<div class="card-sm" style="margin:12px 0 0;display:flex;flex-direction:column;gap:8px;font-size:14px">
+      <div>${ico('flag', 14)} ${esc(due.days === null ? t('backup_never') : tf('backup_old', { n: due.days }))}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="App.exportData()">${esc(t('backup_now'))}</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="App.backupLater()">${esc(t('backup_later'))}</button>
+      </div></div>`;
+  },
+  backupLater(){
+    try{ localStorage.setItem('rp_backup_snooze', String(Date.now() + 7 * 864e5)); }catch(e){}
+    this.renderHome();
   },
 
   // ---- CONFIRM ----
