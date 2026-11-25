@@ -1581,6 +1581,13 @@ const App = {
       out.push({ kind: j.kind === 'errand' ? 'errand' : 'job', id: j.id, title: j.name, sub: '', address: j.address,
                  time, end, done: !!j.done, note: j.notes || '' });
     }
+    // Fixed hours at another place (a tutoring centre): a stop of the day too,
+    // so the drive there and on from there shows, and the day's km match.
+    for(const b of (state.settings.blockedSlots || [])){
+      if(b.day !== day || !Scheduler.located(b)) continue;
+      out.push({ kind: 'fixed', id: 'blk:' + b.id, title: b.reason || t('fixed_stop'), sub: b.start + '–' + b.end + ' · ' + t('fixed_stop_sub'), address: b.address,
+                 time: b.start, end: b.end, done: false, note: '' });
+    }
     const key = (x) => (x.done ? 1e6 : 0) + (x.time ? Scheduler.toMin(x.time) : 5e5);
     return out.sort((a, b) => key(a) - key(b));
   },
@@ -1613,6 +1620,7 @@ const App = {
   // Tapping something on home opens it: a lesson its client, a job or an
   // errand its own form (on the day screen, where it is saved).
   homeOpen(kind, id){
+    if(kind === 'fixed'){ this.nav('settings'); return; }
     if(kind === 'lesson'){ this.nav('students'); this.openStudentDrawer(id); return; }
     const j = (state.jobs || []).find(x => x.id === id);
     if(!j) return;
@@ -1677,7 +1685,7 @@ const App = {
     const next = !isToday ? null : items.find(x => !x.done && x.time && Scheduler.toMin(x.end || x.time) > nowMin);
     const timed = items.filter(x => x.time && !x.done);
     const main = next || (!isToday ? timed[0] : null);
-    const kindIcon = { lesson: ico('book', 14), job: ico('tool', 14), errand: ico('bag', 14) };
+    const kindIcon = { lesson: ico('book', 14), job: ico('tool', 14), errand: ico('bag', 14), fixed: ico('lock', 14) };
     const home = { id: 'home', address: state.settings.homeAddress || '' };
     // The drive into each timed stop, from home or from the stop before it.
     const legs = {};
@@ -1704,7 +1712,7 @@ const App = {
         <div class="home-card-sub">${esc(x.address || '')}${leg ? ' · ' + leg.min + '′ ' + esc(t('ba_drive')) : ''}</div>
         ${isMain ? `<div class="home-card-actions">
           <button class="btn btn-primary" onclick="event.stopPropagation();${dirs(x)}">${ico('nav')} ${esc(t('home_go'))}</button>
-          ${x.kind !== 'lesson' ? `<button class="home-card-btn" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">✓</button>` : ''}
+          ${x.kind === 'job' || x.kind === 'errand' ? `<button class="home-card-btn" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">✓</button>` : ''}
           ${phone ? `<a class="home-card-btn" href="tel:${esc(phone)}" onclick="event.stopPropagation()" aria-label="${esc(t('student_phone_label'))}">${ico('phone')}</a>` : ''}
         </div>` : ''}
       </div>`;
@@ -1714,7 +1722,7 @@ const App = {
       const leg = legs[x.id + '@' + x.time];
       return `
       ${leg && !x.done ? `<div class="agenda-leg">${ico('car', 12)} ${leg.min}′ · ${leg.km.toFixed(1)} km</div>` : ''}
-      <div class="agenda-row${x.done ? ' done' : ''}${next && x === next ? ' next' : ''}" role="button" tabindex="0" style="cursor:pointer"${x.kind !== 'lesson' ? ` data-swipe="job:${esc(x.id)}"` : ` data-swipe="slot:${day}:${esc(x.id)}:${esc(x.time || '')}:${esc(x.end || x.time || '')}"`}
+      <div class="agenda-row${x.done ? ' done' : ''}${next && x === next ? ' next' : ''}${x.kind === 'fixed' ? ' fixed' : ''}" role="button" tabindex="0" style="cursor:pointer"${x.kind === 'fixed' ? '' : x.kind !== 'lesson' ? ` data-swipe="job:${esc(x.id)}"` : ` data-swipe="slot:${day}:${esc(x.id)}:${esc(x.time || '')}:${esc(x.end || x.time || '')}"`}
         onclick="App.homeOpen('${x.kind}','${esc(x.id)}')">
         <div class="agenda-time">${x.time ? esc(x.time) : '—'}</div>
         <div class="agenda-body">
@@ -1722,7 +1730,7 @@ const App = {
           <div class="agenda-sub">${esc([x.sub, x.address].filter(Boolean).join(' · '))}</div>
           ${x.note ? `<div class="agenda-note">${ico('edit', 11)} ${esc(x.note)}</div>` : ''}
         </div>
-        ${x.kind !== 'lesson' ? `<button class="agenda-check" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">${x.done ? '↺' : '✓'}</button>`
+        ${x.kind === 'fixed' ? '' : x.kind !== 'lesson' ? `<button class="agenda-check" aria-label="${esc(t('job_done'))}" onclick="event.stopPropagation();App.toggleJobDone('${esc(x.id)}')">${x.done ? '↺' : '✓'}</button>`
           : `${!x.done ? `<button class="agenda-check" aria-label="${esc(t('df_cancel_btn'))}" title="${esc(t('df_cancel_btn'))}" onclick="event.stopPropagation();${x.oneOff ? `DayFill.unapply('${esc(x.date)}','${esc(x.id)}');App.renderHome()` : `DayFill.askCancel('${esc(x.date)}','${esc(x.id)}','${esc(x.time || '')}')`}">✕</button>` : ''}<button class="agenda-check" aria-label="${esc(t('pay_done_btn'))}" title="${esc(t('pay_done_btn'))}" onclick="event.stopPropagation();Payments.toggleDone('${esc(x.date)}','${esc(x.id)}','${esc(x.time || '')}')">${x.done ? '↺' : '✓'}</button>`}
       </div>`;
     };

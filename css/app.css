@@ -747,3 +747,6 @@ body.sched-on .toast-container{bottom:calc(var(--nav-h) + 20px + var(--sched-h, 
 /* A confirm button whose label is long wraps inside the box. */
 .confirm-actions{flex-wrap:wrap}
 .confirm-actions .btn{white-space:normal;min-width:0;overflow-wrap:anywhere;line-height:1.25;text-align:center;padding:10px 12px}
+
+/* A fixed stretch at another place, in the day's list: there, but not a client. */
+.agenda-row.fixed{background:var(--bg3);border-style:dashed}
