@@ -2619,6 +2619,12 @@ const App = {
         <input type="text" id="st-subject-own" maxlength="40" value="${own ? esc(cur) : ''}" placeholder="${esc(t('subject_own_ph'))}" aria-label="${esc(t('subject_own'))}"
           style="margin-top:8px;display:${own || cur === 'Άλλο' ? '' : 'none'}">`; })()}
       </div>
+      <div class="form-group">
+        <label>${t('form_grade')}</label>
+        <select id="st-grade">
+          ${GRADES.map(g => `<option value="${g}" ${(st?.grade||'')===g?'selected':''}>${esc(gradeLabel(g))}</option>`).join('')}
+        </select>
+      </div>
       <div class="form-group" style="margin-top:10px">
         <label>${t('form_flex_label')}</label>
         <div style="display:flex;gap:8px;align-items:center">
@@ -4464,6 +4470,7 @@ const App = {
       parentPhone: document.getElementById('st-parent-phone')?.value?.trim()||'',
       sendTo: ['student','parent','both'].includes(document.getElementById('st-send-to')?.value) ? document.getElementById('st-send-to').value : 'auto',
       // the profession's word, the person's own words, or nothing
+      grade: document.getElementById('st-grade')?.value || '',
       subject: (() => { const v = document.getElementById('st-subject')?.value || ''; if(v !== 'Άλλο') return v;
         return document.getElementById('st-subject-own')?.value?.trim() || ''; })(),
       lessonDuration: Number(document.getElementById('st-dur')?.value)||60,
@@ -6177,27 +6184,51 @@ const App = {
   // Ask whether to look for clients who could share a session, show what was
   // found, and only act on a yes. Nothing is created without the user seeing
   // exactly who would be paired with whom.
+  // The pairs that could share a session, by the person's own criteria (same
+  // class, same subject, how far apart), each ticked or not; nothing is made
+  // until they press the button.
   findPairSuggestions(){
-    const L = getLabels();
+    const crit = Scheduler.pairCriteria(state.settings);
     let pairs = [];
-    try{
-      pairs = Scheduler.suggestPairs(state.students, state.settings, state.coords,
-        this.computeUnplacedLive().map(u=>u.student.id));
-    }catch(e){ console.error('suggestPairs failed', e); }
-
-    if(!pairs.length){
-      Toast.show(tf('toast_no_pairs',{clients:L.clients.toLowerCase()}),'info',7000);
-      return;
-    }
-    const lines = pairs.map(p=>
-      `• ${p.a.name} + ${p.b.name} — ${p.dur}${t('unit_min')}, ${tf('pair_days_count',{n:p.days.length})}` +
-      (p.km!=null ? `, ${p.km.toFixed(1)}km` : '')).join('\n');
-
-    this.confirm(
-      tf('confirm_pairs_title',{n:pairs.length}),
-      tf('confirm_pairs_text',{list:lines}),
-      ()=>this.applyPairSuggestions(pairs),
-      t('btn_apply'), false);
+    try{ pairs = Scheduler.suggestPairs(state.students, state.settings, state.coords, this.computeUnplacedLive().map(u=>u.student.id), crit); }
+    catch(e){ console.error('suggestPairs failed', e); }
+    this._pairList = pairs;
+    document.getElementById('pairs-overlay')?.remove();
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay open'; ov.id = 'pairs-overlay';
+    const chip = (on, label, call) => `<button class="chip ${on ? 'chip-green' : 'chip-gray'}" style="border:none;cursor:pointer;min-height:36px" onclick="${call}">${on ? '✓ ' : ''}${esc(label)}</button>`;
+    const who = (s) => [s.grade ? gradeLabel(s.grade) : '', s.subject ? subjectText(s.subject) : ''].filter(Boolean).join(' · ');
+    ov.innerHTML = `<div class="confirm-box" style="max-width:480px;max-height:85vh;overflow-y:auto">
+      <div class="confirm-title">${esc(t('pairs_title'))}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px">
+        ${chip(crit.grade, t('match_grade'), "App.setPairCrit('grade')")}
+        ${chip(crit.subject, t('match_subject'), "App.setPairCrit('subject')")}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;font-size:13px;color:var(--text3)">${esc(t('match_km'))}
+        ${[1, 3, 5, 10].map(k => chip(crit.maxKm === k, k + ' km', `App.setPairCrit('maxKm',${k})`)).join('')}
+      </div>
+      ${pairs.length ? pairs.map((p, i) => `<label class="card-sm" style="margin:0 0 8px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;color:var(--text);font-size:14px;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="pair-pick-${i}" checked style="margin-top:4px">
+        <span style="flex:1"><b>${esc(p.a.name || '')} + ${esc(p.b.name || '')}</b>
+          <br><span style="font-size:12px;color:var(--text3)">${esc([who(p.a) === who(p.b) ? who(p.a) : [who(p.a), who(p.b)].filter(Boolean).join(' / '), p.dur + t('unit_min'), tf('pair_days_count', { n: p.days.length }), p.km != null ? p.km.toFixed(1) + ' km' : ''].filter(Boolean).join(' · '))}</span></span>
+      </label>`).join('') : `<div class="confirm-text">${esc(tf('toast_no_pairs', { clients: getLabels().clients.toLowerCase() }))}</div>`}
+      <div class="confirm-actions" style="margin-top:6px">
+        <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('pairs-overlay').remove()">${esc(t('btn_cancel'))}</button>
+        ${pairs.length ? `<button class="btn btn-primary" style="flex:1" onclick="App.applyPickedPairs()">${esc(t('pairs_make'))}</button>` : ''}
+      </div></div>`;
+    document.body.appendChild(ov);
+  },
+  setPairCrit(key, val){
+    const c = Scheduler.pairCriteria(state.settings);
+    if(key === 'maxKm') c.maxKm = val; else c[key] = !c[key];
+    state.settings.pairCriteria = c;
+    Storage.saveSettings(state.settings);
+    this.findPairSuggestions();
+  },
+  applyPickedPairs(){
+    const picked = (this._pairList || []).filter((p, i) => document.getElementById('pair-pick-' + i)?.checked);
+    document.getElementById('pairs-overlay')?.remove();
+    if(picked.length) this.applyPairSuggestions(picked);
   },
 
   // Create the pairs and recalculate. Everything the user set stays: each

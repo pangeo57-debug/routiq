@@ -63,7 +63,7 @@ const DayFill = {
    * end of the day); a candidate must get there from the one before, and on
    * to the one after, so the rest of the day stays on time.
    */
-  options(date, cancelledStart){
+  options(date, cancelledStart, match){
     const day = Scheduler.weekdayOf(date), cfg = state.settings, margin = cfg.travelMargin ?? 2;
     const grid = Scheduler.timeGrid ? Scheduler.timeGrid(cfg) : 5;
     const home = { id: 'home', address: cfg.homeAddress || '' };
@@ -78,9 +78,14 @@ const DayFill = {
     const kmNow = this._km(prev || home, next || home, day, at);
     // Not anyone already on that day, nor whoever just cancelled it.
     const busy = new Set(lessons.map(sl => sl.studentId).concat(this.of(date).cancel.map(c => c.sid)));
+    // Whoever cancelled: the one a replacement is matched to (same class,
+    // same subject), when the person asks for that.
+    const gone = (state.students || []).find(s => s.id === (this.of(date).cancel.find(c => c.start === cancelledStart) || {}).sid) || null;
+    const crit = { grade: !!(match && match.grade), subject: !!(match && match.subject) };
     const out = [];
     for(const st of state.students || []){
       if(busy.has(st.id) || !Cadence.onWeek(st, date)) continue;
+      if(gone && (crit.grade || crit.subject) && !Scheduler.sameKind(gone, st, crit)) continue;
       const dur = Number(st.lessonDuration) || 60;
       const lead = prev ? this._min(margin, prev, st, day, g0) : 0;
       const tail = next ? this._min(margin, st, next, day, g1) : 0;
@@ -116,7 +121,8 @@ const DayFill = {
       // Two days in a row for this client, counting the moved lesson.
       const near = [-1, 1].some(k => { const x = new Date(date + 'T12:00:00'); x.setDate(x.getDate() + k);
         const xi = this._iso(x); return !(from && from.date === xi) && this.lessonsOn(xi).some(sl => sl.studentId === st.id); });
-      out.push({ st, start: Scheduler.toTime(start), end: Scheduler.toTime(end), dur,
+      const alike = !!(gone && gone.grade && st.grade && gone.grade === st.grade && gone.subject && st.subject && gone.subject === st.subject);
+      out.push({ st, alike, start: Scheduler.toTime(start), end: Scheduler.toTime(end), dur,
         onTime: start === at, kmToday, from, extra: !from, near,
         price: Payments ? Payments.price(st) : 0,
         score: (start === at ? 0 : 1) * 10 + Math.max(0, kmToday + (from ? from.km : 0)) + (near ? 5 : 0) + (from && !from.edge && !from.alone ? 3 : 0) });
@@ -176,6 +182,7 @@ const DayFill = {
   pros(o){
     if(o.pair) return [tf('df_pair_fills', { n: o.pair.length })].concat(o.pair.flatMap(x => this.pros({ ...x, kmToday: 0 }).filter(t => !/^.*km.*σήμερα|today/.test(t))), o.kmToday < -0.2 ? [tf('df_km_less_today', { km: (-o.kmToday).toFixed(1) })] : []);
     const p = [];
+    if(o.alike) p.push(t('df_match_same'));
     if(o.onTime) p.push(t('df_on_time'));
     if(o.kmToday < -0.2) p.push(tf('df_km_less_today', { km: (-o.kmToday).toFixed(1) }));
     if(o.from && o.from.km < -0.2) p.push(tf('df_km_less_there', { km: (-o.from.km).toFixed(1), day: DAYS_FULL[o.from.day] || '' }));
@@ -206,13 +213,17 @@ const DayFill = {
   },
 
   openFill(date, start){
-    const r = this.options(date, start);
+    const m = this._match || (this._match = { grade: false, subject: false });
+    const r = this.options(date, start, m);
     document.getElementById('df-overlay')?.remove();
     const ov = document.createElement('div');
     ov.className = 'confirm-overlay open'; ov.id = 'df-overlay';
     const li = (arr, cls) => arr.map(x => `<div style="font-size:13px;color:${cls}">${esc(x)}</div>`).join('');
     ov.innerHTML = `<div class="confirm-box" style="max-width:480px;max-height:85vh;overflow-y:auto">
       <div class="confirm-title">${esc(tf('df_fill_title', { from: r.gap.start, to: r.gap.end }))}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px">
+        ${[['grade', t('match_grade')], ['subject', t('match_subject')]].map(([k, l]) => `<button class="chip ${m[k] ? 'chip-green' : 'chip-gray'}" style="border:none;cursor:pointer;min-height:36px" onclick="DayFill._match.${k}=!DayFill._match.${k};DayFill.openFill('${esc(date)}','${esc(start)}')">${m[k] ? '✓ ' : ''}${esc(l)}</button>`).join('')}
+      </div>
       <div class="confirm-text" style="margin-bottom:10px">${esc(r.options.length ? t('df_fill_hint') : t('df_fill_none'))}</div>
       ${r.options.map((o, i) => `<div class="card-sm" style="margin:0 0 10px">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">

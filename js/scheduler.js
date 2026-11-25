@@ -2641,10 +2641,24 @@ const Scheduler = {
   // How far apart two clients may live before a shared session stops being a
   // favour to either of them.
   PAIR_MAX_KM: 3,
-  pairViability(a, b, settings, coords){
+  // What has to match for two clients to share a session, as the person set
+  // it: the same class (grade), the same subject, how far apart at most.
+  // Unknown (left empty on either side) does not rule a pair out.
+  pairCriteria(settings){
+    const c = (settings && settings.pairCriteria) || {};
+    return { grade: c.grade !== false, subject: c.subject !== false, maxKm: Number(c.maxKm) > 0 ? Number(c.maxKm) : this.PAIR_MAX_KM };
+  },
+  sameKind(a, b, crit){
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    if(crit.grade && norm(a.grade) && norm(b.grade) && norm(a.grade) !== norm(b.grade)) return false;
+    if(crit.subject && norm(a.subject) && norm(b.subject) && norm(a.subject) !== norm(b.subject)) return false;
+    return true;
+  },
+  pairViability(a, b, settings, coords, crit){
     if(!a || !b || a.id === b.id) return null;
     if(a.lessonDuration !== b.lessonDuration || this.hasMixedDurations(a) || this.hasMixedDurations(b)) return null;
-    if((a.subject||'') !== (b.subject||'')) return null;
+    crit = crit || this.pairCriteria(settings);
+    if(!this.sameKind(a, b, crit)) return null;
 
     const dur = a.lessonDuration;
     const need = Math.min(a.lessonsPerWeek||1, b.lessonsPerWeek||1);
@@ -2663,7 +2677,7 @@ const Scheduler = {
     const ca = this.validCoord(coords[a.id]) ? coords[a.id] : null;
     const cb = this.validCoord(coords[b.id]) ? coords[b.id] : null;
     const km = (ca && cb) ? this.haversineKm(ca, cb) : null;
-    if(km != null && km > this.PAIR_MAX_KM) return null;
+    if(km != null && km > crit.maxKm) return null;
 
     return { a, b, dur, sessions: need,
       days: days.map(x=>x.day),
@@ -2683,14 +2697,14 @@ const Scheduler = {
       .sort((x,y) => (x.km??99)-(y.km??99) || y.sharedMinutes-x.sharedMinutes);
   },
 
-  suggestPairs(students, settings, coords, unplacedIds){
+  suggestPairs(students, settings, coords, unplacedIds, crit){
     const unplaced = new Set(unplacedIds||[]);
     const eligible = students.filter(s => !s.pairedWith && !(s.type==='group' && s.group));
     const out = [];
 
     for(let i=0;i<eligible.length;i++){
       for(let j=i+1;j<eligible.length;j++){
-        const m = this.pairViability(eligible[i], eligible[j], settings, coords);
+        const m = this.pairViability(eligible[i], eligible[j], settings, coords, crit);
         if(!m) continue;
         out.push({ ...m,
           helps: (unplaced.has(m.a.id)?1:0) + (unplaced.has(m.b.id)?1:0) });
