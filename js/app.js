@@ -6247,11 +6247,16 @@ const App = {
   // The pairs that could share a session, by the person's own criteria (same
   // class, same subject, how far apart), each ticked or not; nothing is made
   // until they press the button.
-  findPairSuggestions(){
+  findPairSuggestions(mode){
+    if(mode) this._pairMode = mode;
+    const groups = this._pairMode === 'groups';
     const crit = Scheduler.pairCriteria(state.settings);
     let pairs = [];
-    try{ pairs = Scheduler.suggestPairs(state.students, state.settings, state.coords, this.computeUnplacedLive().map(u=>u.student.id), crit); }
-    catch(e){ console.error('suggestPairs failed', e); }
+    try{
+      pairs = groups
+        ? Scheduler.suggestGroups(state.students, state.settings, state.coords, crit).map(g => ({ members: g.members, a: g.members[0], b: g.members[1], dur: g.dur, days: g.days, km: g.km }))
+        : Scheduler.suggestPairs(state.students, state.settings, state.coords, this.computeUnplacedLive().map(u=>u.student.id), crit).map(p => ({ ...p, members: [p.a, p.b] }));
+    }catch(e){ console.error('suggestPairs failed', e); }
     this._pairList = pairs;
     document.getElementById('pairs-overlay')?.remove();
     const ov = document.createElement('div');
@@ -6260,6 +6265,10 @@ const App = {
     const who = (s) => [s.grade ? gradeLabel(s.grade) : '', s.subject ? subjectText(s.subject) : ''].filter(Boolean).join(' · ');
     ov.innerHTML = `<div class="confirm-box" style="max-width:480px;max-height:85vh;overflow-y:auto">
       <div class="confirm-title">${esc(t('pairs_title'))}</div>
+      <div style="display:flex;gap:6px;margin:4px 0 8px">
+        ${chip(!groups, t('pairs_mode_pairs'), "App.findPairSuggestions('pairs')")}
+        ${chip(groups, t('pairs_mode_groups'), "App.findPairSuggestions('groups')")}
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px">
         ${chip(crit.grade, t('match_grade'), "App.setPairCrit('grade')")}
         ${chip(crit.subject, t('match_subject'), "App.setPairCrit('subject')")}
@@ -6269,12 +6278,12 @@ const App = {
       </div>
       ${pairs.length ? pairs.map((p, i) => `<label class="card-sm" style="margin:0 0 8px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;color:var(--text);font-size:14px;text-transform:none;letter-spacing:0">
         <input type="checkbox" id="pair-pick-${i}" checked style="margin-top:4px">
-        <span style="flex:1"><b>${esc(p.a.name || '')} + ${esc(p.b.name || '')}</b>
-          <br><span style="font-size:12px;color:var(--text3)">${esc([who(p.a) === who(p.b) ? who(p.a) : [who(p.a), who(p.b)].filter(Boolean).join(' / '), p.dur + t('unit_min'), tf('pair_days_count', { n: p.days.length }), p.km != null ? p.km.toFixed(1) + ' km' : ''].filter(Boolean).join(' · '))}</span></span>
+        <span style="flex:1"><b>${esc(p.members.map(m => m.name || '').join(' + '))}</b>
+          <br><span style="font-size:12px;color:var(--text3)">${esc([[...new Set(p.members.map(who))].filter(Boolean).join(' / '), p.dur + t('unit_min'), tf('pair_days_count', { n: p.days.length }), p.km != null ? p.km.toFixed(1) + ' km' : ''].filter(Boolean).join(' · '))}</span></span>
       </label>`).join('') : `<div class="confirm-text">${esc(tf('toast_no_pairs', { clients: getLabels().clients.toLowerCase() }))}</div>`}
       <div class="confirm-actions" style="margin-top:6px">
         <button class="btn btn-secondary" style="flex:1" onclick="document.getElementById('pairs-overlay').remove()">${esc(t('btn_cancel'))}</button>
-        ${pairs.length ? `<button class="btn btn-primary" style="flex:1" onclick="App.applyPickedPairs()">${esc(t('pairs_make'))}</button>` : ''}
+        ${pairs.length ? `<button class="btn btn-primary" style="flex:1" onclick="App.applyPickedPairs()">${esc(t(groups ? 'groups_make' : 'pairs_make'))}</button>` : ''}
       </div></div>`;
     document.body.appendChild(ov);
   },
@@ -6288,7 +6297,22 @@ const App = {
   applyPickedPairs(){
     const picked = (this._pairList || []).filter((p, i) => document.getElementById('pair-pick-' + i)?.checked);
     document.getElementById('pairs-overlay')?.remove();
-    if(picked.length) this.applyPairSuggestions(picked);
+    if(!picked.length) return;
+    if(this._pairMode !== 'groups'){ this.applyPairSuggestions(picked); return; }
+    // A group: the same group code on each member, as the client form sets it.
+    let made = 0;
+    for(const g of picked){
+      const ms = g.members.map(m => state.students.find(x => x.id === m.id)).filter(Boolean);
+      if(ms.length < 3 || ms.some(m => m.pairedWith || (m.type === 'group' && m.group))) continue;
+      const code = 'G' + Date.now().toString(36).slice(-4) + (made + 1);
+      for(const m of ms){ m.type = 'group'; m.group = code; }
+      made++;
+    }
+    if(!made) return;
+    Storage.saveStudents(state.students);
+    Toast.show(tf('toast_groups_created', { n: made }), 'success');
+    if(state.currentScreen === 'students') this.renderStudents();
+    this.runAndNotify();
   },
 
   // Create the pairs and recalculate. Everything the user set stays: each

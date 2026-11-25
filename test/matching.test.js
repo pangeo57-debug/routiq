@@ -39,3 +39,28 @@ test('a freed stretch can be offered only to the same class and subject', () => 
   assert.equal(names({ subject: true }), 'same');
   assert.ok(app.DayFill.options(date, '16:00', {}).options.find(o => o.st && o.st.id === 'same').alike, 'marked as alike');
 });
+
+test('groups of three or four: everyone fits with everyone, and they share time on enough days', () => {
+  const app = loadApp();
+  const S = app.Scheduler;
+  const mk = (id, o) => student(id, { lessonDuration: 60, lessonsPerWeek: 1, days: [1, 2], window: { start: '15:00', end: '20:00' }, grade: 'b_gym', subject: 'Μαθηματικά', ...o });
+  const sts = [mk('a'), mk('b'), mk('c'), mk('d'), mk('e'), mk('x', { grade: 'c_lyk' }), mk('y', { days: [3] })];
+  const coords = {}; sts.forEach((s, i) => { coords[s.id] = { lat: 38.25 + i * 0.001, lon: 21.73 }; });
+  const cfg = settings({ workDays: [1, 2, 3] });
+  const g = S.suggestGroups(sts, cfg, coords, { grade: true, subject: true, maxKm: 3 });
+  const ids = g.flatMap(x => x.members.map(m => m.id));
+  assert.ok(g.length >= 1 && g.every(x => x.members.length >= 3 && x.members.length <= 4));
+  assert.ok(!ids.includes('x'), 'another class is not in');
+  assert.ok(!ids.includes('y'), 'no shared day is not in');
+  assert.equal(new Set(ids).size, ids.length, 'nobody in two groups');
+});
+
+test('a group never mixes clients with a different number of sessions a week', () => {
+  const app = loadApp();
+  const S = app.Scheduler;
+  const mk = (id, n) => student(id, { lessonDuration: 60, lessonsPerWeek: n, days: [1, 2, 3], window: { start: '15:00', end: '20:00' }, grade: 'b_gym' });
+  const sts = [mk('a', 2), mk('b', 2), mk('c', 1), mk('d', 2)];
+  const coords = {}; sts.forEach((s, i) => { coords[s.id] = { lat: 38.25 + i * 0.001, lon: 21.73 }; });
+  const g = S.suggestGroups(sts, settings({ workDays: [1, 2, 3] }), coords, { grade: true, subject: true, maxKm: 3 });
+  assert.ok(g.length === 1 && !g[0].members.some(m => m.id === 'c'));
+});

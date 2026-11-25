@@ -2729,6 +2729,45 @@ const Scheduler = {
     return picked;
   },
 
+  // Groups of three or four who could share a session: everyone in it works
+  // with everyone else by the same criteria as a pair, with as many sessions
+  // a week as each other, and the whole group has
+  // a common stretch on enough days. Each client is in one proposal at most.
+  suggestGroups(students, settings, coords, crit, maxSize = 4){
+    crit = crit || this.pairCriteria(settings);
+    const el = students.filter(s => !s.pairedWith && !(s.type === 'group' && s.group) && !this.hasMixedDurations(s) && !s.fixedBlock);
+    const ok = new Map();
+    const can = (a, b) => { const k = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id;
+      if(!ok.has(k)) ok.set(k, (a.lessonsPerWeek || 1) === (b.lessonsPerWeek || 1) && !!this.pairViability(a, b, settings, coords, crit)); return ok.get(k); };
+    const daysFor = (g) => {
+      const dur = g[0].lessonDuration, need = Math.min(...g.map(s => s.lessonsPerWeek || 1));
+      const days = (settings.workDays || []).filter(d => this.commonWindows(g, d, settings).some(w => w[1] - w[0] >= dur));
+      return days.length >= need ? days : null;
+    };
+    const kmOf = (g) => { let m = 0; for(const a of g) for(const b of g){ const ca = coords[a.id], cb = coords[b.id];
+      if(a !== b && this.validCoord(ca) && this.validCoord(cb)) m = Math.max(m, this.haversineKm(ca, cb)); } return m; };
+    const found = [];
+    for(const seed of el){
+      let g = [seed];
+      const rest = el.filter(o => o !== seed && can(seed, o))
+        .sort((x, y) => (this.validCoord(coords[x.id]) && this.validCoord(coords[seed.id]) ? this.haversineKm(coords[x.id], coords[seed.id]) : 9) -
+                        (this.validCoord(coords[y.id]) && this.validCoord(coords[seed.id]) ? this.haversineKm(coords[y.id], coords[seed.id]) : 9));
+      for(const o of rest){
+        if(g.length >= maxSize) break;
+        if(!g.every(m => can(m, o))) continue;
+        if(daysFor(g.concat([o]))) g = g.concat([o]);
+      }
+      if(g.length >= 3){ const days = daysFor(g); found.push({ members: g, dur: g[0].lessonDuration, days, km: kmOf(g) }); }
+    }
+    found.sort((a, b) => b.members.length - a.members.length || a.km - b.km);
+    const taken = new Set(), picked = [];
+    for(const f of found){
+      if(f.members.some(m => taken.has(m.id))) continue;
+      f.members.forEach(m => taken.add(m.id)); picked.push(f);
+    }
+    return picked;
+  },
+
   diagnoseUnplaced(student, schedule, settings){
     const workDaysAvail = settings.workDays.filter(d => { const av=student.availability[d]; return av&&av.on; });
     if(workDaysAvail.length === 0) return t('diag_no_common_days');
