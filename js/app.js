@@ -3491,7 +3491,7 @@ const App = {
     // code order (_formatAddressOrdered) — saved as-is, not truncated to the
     // first 3 comma-parts like before, which would have silently dropped the
     // postal code off the end.
-    const typedIn = { 'ob-addr-suggest':'ob-addr', 'ob-work-suggest':'ob-work', 'set-home-suggest':'set-home', 'jb-addr-suggest':'jb-addr', 'bl-addr-suggest':'bl-addr' }[boxId] || 'st-addr';
+    const typedIn = { 'ob-addr-suggest':'ob-addr', 'ob-work-suggest':'ob-work', 'set-home-suggest':'set-home', 'set-work-suggest':'set-workplace', 'jb-addr-suggest':'jb-addr', 'bl-addr-suggest':'bl-addr' }[boxId] || 'st-addr';
     const typed = document.getElementById(typedIn)?.value || '';
     let short = this._keepTypedNumber(name.trim(), typed);
     if(res && res._src === 'google'){
@@ -3521,6 +3521,10 @@ const App = {
       // scroll position/keyboard focus aren't disturbed).
       this.commitHomeLocation(coord, short);
       Toast.show(t('toast_home_location_saved'), 'success');
+    } else if(boxId==='set-work-suggest'){
+      const inp = document.getElementById('set-workplace');
+      if(inp) inp.value = short;
+      this.commitWorkplace(coord, short);
     } else if(boxId==='bl-addr-suggest'){
       const inp = document.getElementById('bl-addr');
       if(inp) inp.value = short;
@@ -3568,6 +3572,7 @@ const App = {
     const fill = (text) => {
       if(input) input.value = text;
       if(inputId === 'set-home') this.commitHomeLocation(c, text);
+      else if(inputId === 'set-workplace') this.commitWorkplace(c, text);
       else if(inputId === 'jb-addr') this._jobAddrPendingCoord = c;
       else if(inputId === 'ob-addr') this._obCoord = c;
       else if(inputId === 'ob-work') this._obWorkCoord = c;
@@ -3732,6 +3737,7 @@ const App = {
     if(this._mapPickerTarget === 'ob-addr') this._obCoord = coord;
     else if(this._mapPickerTarget === 'ob-work') this._obWorkCoord = coord;
     else if(this._mapPickerTarget === 'set-home') this.commitHomeLocation(coord, short);
+    else if(this._mapPickerTarget === 'set-workplace') this.commitWorkplace(coord, short);
     else if(this._mapPickerTarget === 'jb-addr') this._jobAddrPendingCoord = coord;
     else { this._addrPendingCoord = coord; this.updateStudentLocationMapMarker(coord); }
     Toast.show(t('toast_location_picked'), 'success');
@@ -3976,6 +3982,17 @@ const App = {
     if(vals.length < 2) return null;
     const ok = vals.map(v => Math.round(Math.min(480, Math.max(15, v)) / 5) * 5);
     return new Set(ok).size > 1 ? ok.slice(0, 7) : null;
+  },
+
+  // A place picked for the workplace (suggestion, GPS or the map) is saved at
+  // once, with its point, as the home address is; clients there follow it.
+  commitWorkplace(coord, text){
+    state.settings.workplaceAddress = String(text || '').trim();
+    Storage.saveSettings(state.settings);
+    state.coords.workplace = { ...coord };
+    Storage.saveCoords(state.coords);
+    this.syncWorkplace(false);
+    Toast.show(t('workplace_saved'), 'success');
   },
 
   // Everyone marked "comes to my place" gets the workplace's address and
@@ -6977,7 +6994,14 @@ const App = {
         </div>
         <div class="form-group" style="margin:0">
           <label>${t('settings_workplace')}</label>
-          <input type="text" id="set-workplace" value="${esc(st.workplaceAddress||'')}" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off">
+          <div style="position:relative"><div style="display:flex;gap:6px">
+            <input type="text" id="set-workplace" value="${esc(st.workplaceAddress||'')}" placeholder="${esc(t('settings_workplace_ph'))}" autocomplete="off" style="flex:1"
+              oninput="App.onAddrInput(this.value,'set-work-suggest')" onkeydown="App.onAddrKey(event,'set-work-suggest')" onblur="setTimeout(()=>App.hideAddrSuggest('set-work-suggest'),200)">
+            <button type="button" class="btn-icon" title="${esc(t('gps_here'))}" onclick="App.hereNow('set-workplace')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg></button>
+            <button type="button" class="btn-icon" title="${t('form_pick_on_map')}" onclick="App.openMapPicker('set-workplace')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></button>
+          </div>
+          <div id="set-work-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div>
+          ${st.workplaceAddress ? `<div class="settings-sub" style="margin-top:4px">${state.coords.workplace ? ico('pin', 11) + ' ' + esc(t('workplace_located')) : esc(t('workplace_not_located'))}</div>` : ''}
           <div class="settings-sub" style="margin-top:4px">${t('settings_workplace_hint')}</div>
         </div>
       </div>
