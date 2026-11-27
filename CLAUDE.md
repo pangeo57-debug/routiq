@@ -65,6 +65,38 @@ the first placement (measured: same km, about a third less time).
 - Tried and removed: SISR operator (worse), genetic early stop on small weeks (no gain),
   "thorough" mode (same km, 3.5× time), more initial placements (same km, slower).
 
+## Next: moving to Cloudflare (agreed plan, in this order)
+1. Deploy `worker/` (keys as Worker secrets; the Cloudflare API token is in the
+   environment's network secrets for `api.cloudflare.com`). The HERE key that once
+   shipped in `routiq.html` is public in git history: use a new one, delete the old.
+2. Cloudflare Pages from the **private** repo, on a test `*.pages.dev` link first;
+   the owner checks it on the phone before anything changes on the live link.
+3. Before the GitHub Pages link goes away: a notice there — save a copy → open the
+   new link → load the copy. Data is stored per site address and does not move by
+   itself; installed apps must be added to the home screen again.
+4. Then GitHub Pages off and `routiq` private. Code already public stays copied;
+   HTML/JS sent to a browser is always readable — minify/obfuscate only slows copying.
+   Real protection of the algorithm = running it on the server (`compute/`), at the
+   cost of needing internet. Not decided yet.
+- Google Maps JS key is visible by design: restrict it to the site's domain(s) and to
+  Maps JavaScript + Places (New).
+
+## Business decisions so far (proposals, not built)
+- Plans: Free up to 10 clients; Basic €8.99/month (with VAT) up to 30 clients;
+  Pro €14.99/month unlimited; yearly = 2 months free. Limit by clients, not by runs
+  (a run costs us ~nothing; clients drive HERE cost and value). Stripe, no app stores.
+- Per paying user per month after VAT, Stripe and services: ~€6–7 (Basic), ~€10–11 (Pro).
+- Accountant: sole trader / freelancer at first; IKE once profit passes ~€50,000/year.
+- Simulations (3 years, many runs; inputs are guesses until the Beta measures them):
+  word of mouth + partnerships + content ≈ 30 paying in year 1, ~65–100 in year 3;
+  paid ads at the assumed costs buy users at about what they bring (no profit).
+  Ads pay only if one paying user costs < ~€50. ~1,000 paying needs ~1,000 sign-ups/month.
+- Marketing order: associations/tutoring centres and own content first, referrals later.
+  Claims must be honest: demo example −57% is a built example; real weeks measured
+  −12.5% against a hand-made plan and −25–35% against the first placement.
+- Beta goal: 20–50 real professionals; measure sign-ups, % who pay, monthly churn, and
+  which channel brought them; then re-run the simulation with those numbers.
+
 ## Open (needs the owner)
 - Cloudflare account + HERE/Google keys for the Worker. Before HERE goes live:
   cache road matrices and fetch only new rows, and use OSRM for km with HERE only for
